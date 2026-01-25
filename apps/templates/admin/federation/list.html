@@ -1,0 +1,181 @@
+{% extends "layouts/admin_base.html" %}
+
+{% block title %}User Federation - {{ realm.display_name or realm.name }}{% endblock %}
+
+{% block content %}
+<div class="pcoded-main-container">
+    <div class="pcoded-wrapper">
+        <div class="pcoded-content">
+            <div class="pcoded-inner-content">
+                <div class="main-body">
+                    <div class="page-wrapper">
+                        <!-- Page Header -->
+                        <div class="page-header">
+                            <div class="page-block">
+                                <div class="row align-items-center">
+                                    <div class="col-md-12">
+                                        <div class="page-header-title">
+                                            <h5 class="m-b-10">User Federation</h5>
+                                        </div>
+                                        <ul class="breadcrumb">
+                                            <li class="breadcrumb-item">
+                                                <a href="{{ url_for('admin.index') }}"><i class="feather icon-home"></i></a>
+                                            </li>
+                                            <li class="breadcrumb-item">
+                                                <a href="{{ url_for('admin.dashboard', realm_name=realm.name) }}">{{ realm.display_name or realm.name }}</a>
+                                            </li>
+                                            <li class="breadcrumb-item active">User Federation</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Main Content -->
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <div class="row align-items-center">
+                                            <div class="col-md-6">
+                                                <h5><i class="feather icon-link mr-2"></i>User Federation Providers</h5>
+                                            </div>
+                                            <div class="col-md-6 text-right">
+                                                <div class="dropdown d-inline-block">
+                                                    <button class="btn btn-primary dropdown-toggle" type="button" data-toggle="dropdown">
+                                                        <i class="feather icon-plus mr-1"></i> Add Provider
+                                                    </button>
+                                                    <div class="dropdown-menu dropdown-menu-right">
+                                                        {% if 'ldap' in available_types %}
+                                                        <a class="dropdown-item" href="{{ url_for('admin.federation_create', realm_name=realm.name, provider_type='ldap') }}">
+                                                            <i class="fas fa-sitemap mr-2"></i> LDAP / Active Directory
+                                                        </a>
+                                                        {% endif %}
+                                                        {% if 'mysql' in available_types %}
+                                                        <a class="dropdown-item" href="{{ url_for('admin.federation_create', realm_name=realm.name, provider_type='mysql') }}">
+                                                            <i class="fas fa-database mr-2" style="color: #00758f;"></i> MySQL / MariaDB
+                                                        </a>
+                                                        {% endif %}
+                                                        {% if 'postgresql' in available_types %}
+                                                        <a class="dropdown-item" href="{{ url_for('admin.federation_create', realm_name=realm.name, provider_type='postgresql') }}">
+                                                            <i class="fas fa-database mr-2" style="color: #336791;"></i> PostgreSQL
+                                                        </a>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="card-body">
+                                        {% if providers %}
+                                        <div class="table-responsive">
+                                            <table class="table table-hover">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Name</th>
+                                                        <th>Type</th>
+                                                        <th>Status</th>
+                                                        <th>Last Sync</th>
+                                                        <th>Priority</th>
+                                                        <th class="text-right">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for provider in providers %}
+                                                    <tr>
+                                                        <td>
+                                                            <a href="{{ url_for('admin.federation_edit', realm_name=realm.name, provider_id=provider.id) }}">
+                                                                <strong>{{ provider.display_name or provider.name }}</strong>
+                                                            </a>
+                                                            <br>
+                                                            <small class="text-muted">{{ provider.name }}</small>
+                                                        </td>
+                                                        <td>
+                                                            {% if provider.provider_type == 'ldap' %}
+                                                            <span class="badge badge-info">LDAP</span>
+                                                            {% elif provider.provider_type == 'mysql' %}
+                                                            <span class="badge badge-warning">MySQL</span>
+                                                            {% elif provider.provider_type == 'postgresql' %}
+                                                            <span class="badge badge-primary">PostgreSQL</span>
+                                                            {% else %}
+                                                            <span class="badge badge-secondary">{{ provider.provider_type }}</span>
+                                                            {% endif %}
+                                                        </td>
+                                                        <td>
+                                                            {% if provider.enabled %}
+                                                            <span class="badge badge-success">Enabled</span>
+                                                            {% else %}
+                                                            <span class="badge badge-danger">Disabled</span>
+                                                            {% endif %}
+                                                            {% if provider.last_sync_status == 'running' %}
+                                                            <span class="badge badge-info ml-1">Syncing...</span>
+                                                            {% elif provider.last_sync_status == 'failed' %}
+                                                            <span class="badge badge-danger ml-1">Sync Failed</span>
+                                                            {% endif %}
+                                                        </td>
+                                                        <td>
+                                                            {% if provider.last_sync %}
+                                                            {{ provider.last_sync.strftime('%Y-%m-%d %H:%M') }}
+                                                            {% else %}
+                                                            <span class="text-muted">Never</span>
+                                                            {% endif %}
+                                                        </td>
+                                                        <td>{{ provider.priority }}</td>
+                                                        <td class="text-right">
+                                                            <a href="{{ url_for('admin.federation_edit', realm_name=realm.name, provider_id=provider.id) }}" 
+                                                               class="btn btn-sm btn-outline-primary" title="Edit">
+                                                                <i class="feather icon-edit"></i>
+                                                            </a>
+                                                            <a href="{{ url_for('admin.federation_sync_status', realm_name=realm.name, provider_id=provider.id) }}" 
+                                                               class="btn btn-sm btn-outline-info" title="Sync Status">
+                                                                <i class="feather icon-refresh-cw"></i>
+                                                            </a>
+                                                        </td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        {% else %}
+                                        <div class="text-center text-muted py-5">
+                                            <i class="feather icon-link f-48 mb-3"></i>
+                                            <p class="mb-3">No user federation providers configured</p>
+                                            <p class="text-muted mb-4">
+                                                Add a provider to authenticate users from external sources like LDAP, MySQL, or PostgreSQL.
+                                            </p>
+                                            <div class="dropdown d-inline-block">
+                                                <button class="btn btn-primary dropdown-toggle" type="button" data-toggle="dropdown">
+                                                    <i class="feather icon-plus mr-1"></i> Add Provider
+                                                </button>
+                                                <div class="dropdown-menu">
+                                                    {% if 'ldap' in available_types %}
+                                                    <a class="dropdown-item" href="{{ url_for('admin.federation_create', realm_name=realm.name, provider_type='ldap') }}">
+                                                        <i class="fas fa-sitemap mr-2"></i> LDAP / Active Directory
+                                                    </a>
+                                                    {% endif %}
+                                                    {% if 'mysql' in available_types %}
+                                                    <a class="dropdown-item" href="{{ url_for('admin.federation_create', realm_name=realm.name, provider_type='mysql') }}">
+                                                        <i class="fas fa-database mr-2" style="color: #00758f;"></i> MySQL / MariaDB
+                                                    </a>
+                                                    {% endif %}
+                                                    {% if 'postgresql' in available_types %}
+                                                    <a class="dropdown-item" href="{{ url_for('admin.federation_create', realm_name=realm.name, provider_type='postgresql') }}">
+                                                        <i class="fas fa-database mr-2" style="color: #336791;"></i> PostgreSQL
+                                                    </a>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

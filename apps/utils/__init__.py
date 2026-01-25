@@ -14,6 +14,9 @@ from apps.utils.crypto import (
     generate_totp_secret,
     get_totp_uri,
     verify_totp,
+    create_jwt,
+    decode_jwt,
+    JWTError,
 )
 
 __all__ = [
@@ -27,4 +30,7 @@ __all__ = [
     'generate_totp_secret',
     'get_totp_uri',
     'verify_totp',
+    'create_jwt',
+    'decode_jwt',
+    'JWTError',
 ]

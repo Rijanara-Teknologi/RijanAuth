@@ -1,5 +1,73 @@
 # Change Log
 
+## [2.3.0] 2026-01-25 - User Federation & SSO Session Management
+
+### New Features
+
+- **User Federation System**: Comprehensive external identity source integration
+  - **LDAP/Active Directory Provider**: Full LDAP support with connection pooling
+  - **MySQL/MariaDB Provider**: Database federation with configurable column mappings
+  - **PostgreSQL Provider**: PostgreSQL support with JSONB attributes and array groups
+  - **Extensible Architecture**: Abstract base class for future provider implementations
+
+- **Federation Features**:
+  - Attribute mappers for custom field mapping
+  - Multiple password hash algorithm support (bcrypt, SHA256, SHA512, MD5)
+  - Full sync and changed sync capabilities
+  - APScheduler integration for scheduled background synchronization
+  - Credential encryption for sensitive configuration data
+
+- **SSO Session Management**: User sessions now tracked during OIDC flows
+  - `UserSession` created on OIDC authorization login
+  - `AuthenticatedClientSession` tracks client authentications
+  - Session state included in token responses
+  - Session refresh on token exchange and refresh
+
+- **Admin UI - User Federation**:
+  - Provider list with status, sync info, and priority
+  - Create forms for LDAP, MySQL, PostgreSQL providers
+  - Edit provider settings and configuration
+  - Attribute mapper management
+  - Sync status and history viewing
+  - Manual sync trigger (full/changed)
+  - Connection test functionality
+
+### New Files
+
+- `apps/models/federation.py` - Federation data models (Provider, Mapper, Link, SyncLog)
+- `apps/services/federation/` - Federation service package
+  - `base.py` - Abstract BaseFederationProvider class
+  - `ldap_provider.py` - LDAP/AD implementation
+  - `mysql_provider.py` - MySQL/MariaDB implementation
+  - `postgresql_provider.py` - PostgreSQL implementation
+  - `federation_service.py` - Central orchestration service
+  - `sync_service.py` - Synchronization and scheduling service
+- `apps/templates/admin/federation/` - Federation UI templates
+  - `list.html` - Provider listing
+  - `create_ldap.html`, `create_mysql.html`, `create_postgresql.html` - Create forms
+  - `edit.html` - Edit provider settings
+  - `mappers.html` - Attribute mapper management
+  - `sync_status.html` - Sync status and history
+
+### Updated Files
+
+- `apps/__init__.py` - Import federation models for table creation
+- `apps/models/__init__.py` - Export federation models
+- `apps/blueprints/oidc/routes.py` - SSO session creation and tracking
+- `apps/blueprints/admin/routes.py` - Federation admin routes
+- `apps/blueprints/admin/api.py` - Federation REST API endpoints
+- `apps/blueprints/auth/routes.py` - Federation auth integration
+- `apps/templates/includes/admin_sidebar.html` - User Federation menu item
+- `apps/utils/crypto.py` - Added encrypt_data/decrypt_data functions
+- `requirements.txt` - Added ldap3, pymysql, psycopg2-binary, APScheduler
+
+### Bug Fixes
+
+- **SSO Sessions Not Created**: Fixed OIDC authorization flow not creating user sessions
+- **Federation UI Icons**: Fixed missing database icons using Font Awesome
+
+---
+
 ## [2.2.0] 2026-01-25 - OpenID Connect Implementation & Admin UI Fixes
 
 ### New Features

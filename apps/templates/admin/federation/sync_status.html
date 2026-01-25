@@ -1,0 +1,220 @@
+{% extends "layouts/admin_base.html" %}
+
+{% block title %}Sync Status - {{ provider.display_name or provider.name }}{% endblock %}
+
+{% block content %}
+<div class="pcoded-main-container">
+    <div class="pcoded-wrapper">
+        <div class="pcoded-content">
+            <div class="pcoded-inner-content">
+                <div class="main-body">
+                    <div class="page-wrapper">
+                        <!-- Page Header -->
+                        <div class="page-header">
+                            <div class="page-block">
+                                <div class="row align-items-center">
+                                    <div class="col-md-12">
+                                        <div class="page-header-title">
+                                            <h5 class="m-b-10">{{ provider.display_name or provider.name }} - Sync Status</h5>
+                                        </div>
+                                        <ul class="breadcrumb">
+                                            <li class="breadcrumb-item">
+                                                <a href="{{ url_for('admin.index') }}"><i class="feather icon-home"></i></a>
+                                            </li>
+                                            <li class="breadcrumb-item">
+                                                <a href="{{ url_for('admin.federation_list', realm_name=realm.name) }}">User Federation</a>
+                                            </li>
+                                            <li class="breadcrumb-item">
+                                                <a href="{{ url_for('admin.federation_edit', realm_name=realm.name, provider_id=provider.id) }}">{{ provider.name }}</a>
+                                            </li>
+                                            <li class="breadcrumb-item active">Sync Status</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Content -->
+                        <div class="row">
+                            <div class="col-lg-8">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <ul class="nav nav-tabs card-header-tabs">
+                                            <li class="nav-item">
+                                                <a class="nav-link" href="{{ url_for('admin.federation_edit', realm_name=realm.name, provider_id=provider.id) }}">
+                                                    <i class="feather icon-settings mr-1"></i> Settings
+                                                </a>
+                                            </li>
+                                            <li class="nav-item">
+                                                <a class="nav-link" href="{{ url_for('admin.federation_mappers', realm_name=realm.name, provider_id=provider.id) }}">
+                                                    <i class="feather icon-list mr-1"></i> Mappers
+                                                </a>
+                                            </li>
+                                            <li class="nav-item">
+                                                <a class="nav-link active" data-toggle="tab" href="#sync">
+                                                    <i class="feather icon-refresh-cw mr-1"></i> Sync Status
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <div class="card-body">
+                                        <h6 class="mb-3">Recent Sync History</h6>
+                                        
+                                        {% if sync_status.recent_logs %}
+                                        <div class="table-responsive">
+                                            <table class="table table-hover">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Started</th>
+                                                        <th>Type</th>
+                                                        <th>Status</th>
+                                                        <th>Processed</th>
+                                                        <th>Created</th>
+                                                        <th>Updated</th>
+                                                        <th>Errors</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for log in sync_status.recent_logs %}
+                                                    <tr>
+                                                        <td>{{ log.started_at[:19] if log.started_at else '-' }}</td>
+                                                        <td>
+                                                            {% if log.sync_type == 'full' %}
+                                                            <span class="badge badge-primary">Full</span>
+                                                            {% elif log.sync_type == 'changed' %}
+                                                            <span class="badge badge-info">Changed</span>
+                                                            {% else %}
+                                                            <span class="badge badge-secondary">{{ log.sync_type }}</span>
+                                                            {% endif %}
+                                                        </td>
+                                                        <td>
+                                                            {% if log.status == 'success' %}
+                                                            <span class="badge badge-success">Success</span>
+                                                            {% elif log.status == 'failed' %}
+                                                            <span class="badge badge-danger">Failed</span>
+                                                            {% elif log.status == 'running' %}
+                                                            <span class="badge badge-info">Running</span>
+                                                            {% else %}
+                                                            <span class="badge badge-secondary">{{ log.status }}</span>
+                                                            {% endif %}
+                                                        </td>
+                                                        <td>{{ log.users_processed }}</td>
+                                                        <td class="text-success">{{ log.users_created }}</td>
+                                                        <td class="text-primary">{{ log.users_updated }}</td>
+                                                        <td class="text-danger">{{ log.errors_count }}</td>
+                                                    </tr>
+                                                    {% if log.error_message %}
+                                                    <tr class="table-danger">
+                                                        <td colspan="7">
+                                                            <small class="text-danger">{{ log.error_message }}</small>
+                                                        </td>
+                                                    </tr>
+                                                    {% endif %}
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        {% else %}
+                                        <div class="text-center text-muted py-4">
+                                            <i class="feather icon-refresh-cw f-40 mb-3"></i>
+                                            <p>No sync history available</p>
+                                            <p class="text-muted">Run a sync to see status here</p>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-lg-4">
+                                <!-- Quick Actions -->
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5><i class="feather icon-zap mr-2"></i>Sync Actions</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <form action="{{ url_for('admin.federation_edit', realm_name=realm.name, provider_id=provider.id) }}" 
+                                              method="POST" class="mb-2">
+                                            <input type="hidden" name="action" value="sync">
+                                            <button type="submit" class="btn btn-primary btn-block">
+                                                <i class="feather icon-refresh-cw mr-1"></i> Full Sync Now
+                                            </button>
+                                        </form>
+                                        <p class="text-muted small">
+                                            Synchronize all users from the external source
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <!-- Stats Card -->
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5><i class="feather icon-bar-chart-2 mr-2"></i>Statistics</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row text-center">
+                                            <div class="col-6">
+                                                <h3 class="mb-1">{{ linked_users }}</h3>
+                                                <p class="text-muted mb-0">Linked Users</p>
+                                            </div>
+                                            <div class="col-6">
+                                                <h3 class="mb-1">
+                                                    {% if sync_status.last_sync_status == 'success' %}
+                                                    <span class="text-success"><i class="feather icon-check-circle"></i></span>
+                                                    {% elif sync_status.last_sync_status == 'failed' %}
+                                                    <span class="text-danger"><i class="feather icon-x-circle"></i></span>
+                                                    {% elif sync_status.last_sync_status == 'running' %}
+                                                    <span class="text-info"><i class="feather icon-loader"></i></span>
+                                                    {% else %}
+                                                    <span class="text-muted">-</span>
+                                                    {% endif %}
+                                                </h3>
+                                                <p class="text-muted mb-0">Last Status</p>
+                                            </div>
+                                        </div>
+                                        <hr>
+                                        <div class="row">
+                                            <div class="col-12">
+                                                <p class="text-muted mb-1">Last Sync</p>
+                                                <p class="mb-2">
+                                                    {% if sync_status.last_sync %}
+                                                    {{ sync_status.last_sync[:19] }}
+                                                    {% else %}
+                                                    <span class="text-muted">Never</span>
+                                                    {% endif %}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-6">
+                                                <p class="text-muted mb-1">Full Sync Period</p>
+                                                <p>
+                                                    {% if sync_status.full_sync_period > 0 %}
+                                                    {{ sync_status.full_sync_period }}s
+                                                    {% else %}
+                                                    Disabled
+                                                    {% endif %}
+                                                </p>
+                                            </div>
+                                            <div class="col-6">
+                                                <p class="text-muted mb-1">Changed Sync Period</p>
+                                                <p>
+                                                    {% if sync_status.changed_sync_period > 0 %}
+                                                    {{ sync_status.changed_sync_period }}s
+                                                    {% else %}
+                                                    Disabled
+                                                    {% endif %}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,170 @@
+{% extends "layouts/admin_base.html" %}
+
+{% block title %}Mappers - {{ provider.display_name or provider.name }}{% endblock %}
+
+{% block content %}
+<div class="pcoded-main-container">
+    <div class="pcoded-wrapper">
+        <div class="pcoded-content">
+            <div class="pcoded-inner-content">
+                <div class="main-body">
+                    <div class="page-wrapper">
+                        <!-- Page Header -->
+                        <div class="page-header">
+                            <div class="page-block">
+                                <div class="row align-items-center">
+                                    <div class="col-md-12">
+                                        <div class="page-header-title">
+                                            <h5 class="m-b-10">{{ provider.display_name or provider.name }} - Mappers</h5>
+                                        </div>
+                                        <ul class="breadcrumb">
+                                            <li class="breadcrumb-item">
+                                                <a href="{{ url_for('admin.index') }}"><i class="feather icon-home"></i></a>
+                                            </li>
+                                            <li class="breadcrumb-item">
+                                                <a href="{{ url_for('admin.federation_list', realm_name=realm.name) }}">User Federation</a>
+                                            </li>
+                                            <li class="breadcrumb-item">
+                                                <a href="{{ url_for('admin.federation_edit', realm_name=realm.name, provider_id=provider.id) }}">{{ provider.name }}</a>
+                                            </li>
+                                            <li class="breadcrumb-item active">Mappers</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Content -->
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <ul class="nav nav-tabs card-header-tabs">
+                                            <li class="nav-item">
+                                                <a class="nav-link" href="{{ url_for('admin.federation_edit', realm_name=realm.name, provider_id=provider.id) }}">
+                                                    <i class="feather icon-settings mr-1"></i> Settings
+                                                </a>
+                                            </li>
+                                            <li class="nav-item">
+                                                <a class="nav-link active" data-toggle="tab" href="#mappers">
+                                                    <i class="feather icon-list mr-1"></i> Mappers ({{ mappers|length }})
+                                                </a>
+                                            </li>
+                                            <li class="nav-item">
+                                                <a class="nav-link" href="{{ url_for('admin.federation_sync_status', realm_name=realm.name, provider_id=provider.id) }}">
+                                                    <i class="feather icon-refresh-cw mr-1"></i> Sync Status
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center mb-3">
+                                            <h6 class="mb-0">Attribute Mappers</h6>
+                                            <button class="btn btn-primary btn-sm" data-toggle="modal" data-target="#createMapperModal">
+                                                <i class="feather icon-plus mr-1"></i> Add Mapper
+                                            </button>
+                                        </div>
+
+                                        {% if mappers %}
+                                        <div class="table-responsive">
+                                            <table class="table table-hover">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Name</th>
+                                                        <th>Type</th>
+                                                        <th>External Attribute</th>
+                                                        <th>Internal Attribute</th>
+                                                        <th class="text-right">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for mapper in mappers %}
+                                                    <tr>
+                                                        <td><strong>{{ mapper.name }}</strong></td>
+                                                        <td><code>{{ mapper.mapper_type }}</code></td>
+                                                        <td>{{ mapper.external_attribute or '-' }}</td>
+                                                        <td>{{ mapper.internal_attribute or '-' }}</td>
+                                                        <td class="text-right">
+                                                            <form method="POST" class="d-inline" 
+                                                                  onsubmit="return confirm('Delete this mapper?');">
+                                                                <input type="hidden" name="action" value="delete">
+                                                                <input type="hidden" name="mapper_id" value="{{ mapper.id }}">
+                                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
+                                                                    <i class="feather icon-trash-2"></i>
+                                                                </button>
+                                                            </form>
+                                                        </td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        {% else %}
+                                        <div class="text-center text-muted py-4">
+                                            <i class="feather icon-list f-40 mb-3"></i>
+                                            <p>No mappers configured</p>
+                                            <button class="btn btn-primary btn-sm" data-toggle="modal" data-target="#createMapperModal">
+                                                <i class="feather icon-plus mr-1"></i> Add Mapper
+                                            </button>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create Mapper Modal -->
+<div class="modal fade" id="createMapperModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Attribute Mapper</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <form method="POST">
+                <input type="hidden" name="action" value="create">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Mapper Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="name" required placeholder="e.g., phone-number">
+                    </div>
+                    <div class="form-group">
+                        <label>Mapper Type</label>
+                        <select class="form-control" name="mapper_type">
+                            {% if provider.provider_type == 'ldap' %}
+                            <option value="user-attribute-ldap-mapper">User Attribute (LDAP)</option>
+                            {% else %}
+                            <option value="user-attribute-db-mapper">User Attribute (Database)</option>
+                            {% endif %}
+                            <option value="hardcoded-attribute-mapper">Hardcoded Attribute</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>External Attribute</label>
+                        <input type="text" class="form-control" name="external_attribute" 
+                               placeholder="e.g., telephoneNumber or phone_number">
+                        <small class="text-muted">Attribute name in external source</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Internal Attribute</label>
+                        <input type="text" class="form-control" name="internal_attribute" 
+                               placeholder="e.g., phone">
+                        <small class="text-muted">Attribute name in RijanAuth</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Mapper</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,252 @@
+{% extends "layouts/admin_base.html" %}
+
+{% block title %}Add MySQL Provider - {{ realm.display_name or realm.name }}{% endblock %}
+
+{% block content %}
+<div class="pcoded-main-container">
+    <div class="pcoded-wrapper">
+        <div class="pcoded-content">
+            <div class="pcoded-inner-content">
+                <div class="main-body">
+                    <div class="page-wrapper">
+                        <!-- Page Header -->
+                        <div class="page-header">
+                            <div class="page-block">
+                                <div class="row align-items-center">
+                                    <div class="col-md-12">
+                                        <div class="page-header-title">
+                                            <h5 class="m-b-10">Add MySQL/MariaDB Provider</h5>
+                                        </div>
+                                        <ul class="breadcrumb">
+                                            <li class="breadcrumb-item">
+                                                <a href="{{ url_for('admin.index') }}"><i class="feather icon-home"></i></a>
+                                            </li>
+                                            <li class="breadcrumb-item">
+                                                <a href="{{ url_for('admin.federation_list', realm_name=realm.name) }}">User Federation</a>
+                                            </li>
+                                            <li class="breadcrumb-item active">Add MySQL</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Form -->
+                        <form method="POST">
+                            <div class="row">
+                                <div class="col-lg-8">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h5><i class="feather icon-database mr-2"></i>MySQL/MariaDB Settings</h5>
+                                        </div>
+                                        <div class="card-body">
+                                            <!-- General Settings -->
+                                            <h6 class="mb-3">General Settings</h6>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Provider Name <span class="text-danger">*</span></label>
+                                                        <input type="text" class="form-control" name="name" required placeholder="e.g., legacy-mysql">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Display Name</label>
+                                                        <input type="text" class="form-control" name="display_name" placeholder="e.g., Legacy User Database">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Priority</label>
+                                                <input type="number" class="form-control" name="priority" value="0" style="max-width: 120px;">
+                                            </div>
+
+                                            <hr>
+
+                                            <!-- Connection Settings -->
+                                            <h6 class="mb-3">Connection Settings</h6>
+                                            <div class="row">
+                                                <div class="col-md-8">
+                                                    <div class="form-group">
+                                                        <label>Host <span class="text-danger">*</span></label>
+                                                        <input type="text" class="form-control" name="host" value="localhost" required>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="form-group">
+                                                        <label>Port</label>
+                                                        <input type="number" class="form-control" name="port" value="3306">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Database Name <span class="text-danger">*</span></label>
+                                                <input type="text" class="form-control" name="database" required placeholder="users_db">
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Database Username</label>
+                                                        <input type="text" class="form-control" name="db_username" placeholder="db_user">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Database Password</label>
+                                                        <input type="password" class="form-control" name="db_password">
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <hr>
+
+                                            <!-- Table Settings -->
+                                            <h6 class="mb-3">Table & Column Mappings</h6>
+                                            <div class="form-group">
+                                                <label>User Table <span class="text-danger">*</span></label>
+                                                <input type="text" class="form-control" name="user_table" value="users" required>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>ID Column</label>
+                                                        <input type="text" class="form-control" name="id_column" value="id">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Username Column</label>
+                                                        <input type="text" class="form-control" name="username_column" value="username">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Email Column</label>
+                                                        <input type="text" class="form-control" name="email_column" value="email">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Password Column</label>
+                                                        <input type="text" class="form-control" name="password_column" value="password">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>First Name Column</label>
+                                                        <input type="text" class="form-control" name="first_name_column" placeholder="first_name (optional)">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Last Name Column</label>
+                                                        <input type="text" class="form-control" name="last_name_column" placeholder="last_name (optional)">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Enabled Column</label>
+                                                <input type="text" class="form-control" name="enabled_column" placeholder="enabled (optional)">
+                                            </div>
+
+                                            <hr>
+
+                                            <!-- Password Settings -->
+                                            <h6 class="mb-3">Password Settings</h6>
+                                            <div class="form-group">
+                                                <label>Password Hash Algorithm</label>
+                                                <select class="form-control" name="password_hash_algorithm">
+                                                    <option value="bcrypt">bcrypt</option>
+                                                    <option value="sha256">SHA-256</option>
+                                                    <option value="sha512">SHA-512</option>
+                                                    <option value="md5">MD5</option>
+                                                    <option value="plaintext">Plain Text (not recommended)</option>
+                                                </select>
+                                            </div>
+
+                                            <hr>
+
+                                            <!-- Sync Settings -->
+                                            <h6 class="mb-3">Synchronization Settings</h6>
+                                            <div class="row">
+                                                <div class="col-md-4">
+                                                    <div class="custom-control custom-switch mb-3">
+                                                        <input type="checkbox" class="custom-control-input" id="enabled" name="enabled" checked>
+                                                        <label class="custom-control-label" for="enabled">Enabled</label>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="custom-control custom-switch mb-3">
+                                                        <input type="checkbox" class="custom-control-input" id="import_enabled" name="import_enabled" checked>
+                                                        <label class="custom-control-label" for="import_enabled">Import Users</label>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="form-group">
+                                                        <label>Batch Size</label>
+                                                        <input type="number" class="form-control" name="batch_size" value="100">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Full Sync Period (seconds)</label>
+                                                        <input type="number" class="form-control" name="full_sync_period" value="-1">
+                                                        <small class="text-muted">-1 = disabled</small>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Changed Sync Period (seconds)</label>
+                                                        <input type="number" class="form-control" name="changed_sync_period" value="-1">
+                                                        <small class="text-muted">-1 = disabled</small>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="card-footer">
+                                            <button type="submit" class="btn btn-primary">
+                                                <i class="feather icon-save mr-1"></i> Save
+                                            </button>
+                                            <a href="{{ url_for('admin.federation_list', realm_name=realm.name) }}" class="btn btn-outline-secondary">
+                                                Cancel
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-lg-4">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h5><i class="feather icon-info mr-2"></i>Help</h5>
+                                        </div>
+                                        <div class="card-body">
+                                            <p><strong>MySQL/MariaDB Federation</strong></p>
+                                            <p class="text-muted">
+                                                Authenticate users from an existing MySQL or MariaDB database.
+                                                Map your table columns to RijanAuth user attributes.
+                                            </p>
+                                            <hr>
+                                            <p><strong>Password Hashing</strong></p>
+                                            <p class="text-muted">
+                                                Select the hash algorithm that matches your existing database.
+                                                bcrypt is recommended for new implementations.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

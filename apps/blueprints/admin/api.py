@@ -263,3 +263,289 @@ def api_list_groups(realm_name):
     
     groups = Group.get_top_level_groups(realm.id)
     return jsonify([g.to_dict(include_subgroups=True) for g in groups])
+
+
+# =============================================================================
+# User Federation API
+# =============================================================================
+
+@admin_bp.route('/api/<realm_name>/user-federation', methods=['GET'])
+@login_required
+def api_list_federation_providers(realm_name):
+    """List user federation providers"""
+    from apps.models.federation import UserFederationProvider
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    providers = UserFederationProvider.find_by_realm(realm.id)
+    return jsonify([p.to_dict() for p in providers])
+
+
+@admin_bp.route('/api/<realm_name>/user-federation', methods=['POST'])
+@login_required
+def api_create_federation_provider(realm_name):
+    """Create a new federation provider"""
+    from apps.services.federation import FederationService
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Invalid JSON'}), 400
+    
+    name = data.get('name')
+    provider_type = data.get('providerType')
+    config = data.get('config', {})
+    
+    if not name:
+        return jsonify({'error': 'Provider name is required'}), 400
+    if not provider_type:
+        return jsonify({'error': 'Provider type is required'}), 400
+    
+    available_types = FederationService.get_available_providers()
+    if provider_type not in available_types:
+        return jsonify({'error': f'Unknown provider type: {provider_type}'}), 400
+    
+    try:
+        provider = FederationService.create_provider(
+            realm_id=realm.id,
+            name=name,
+            provider_type=provider_type,
+            config=config,
+            display_name=data.get('displayName', name),
+            enabled=data.get('enabled', True),
+            priority=data.get('priority', 0),
+            import_enabled=data.get('importEnabled', True),
+            full_sync_period=data.get('fullSyncPeriod', -1),
+            changed_sync_period=data.get('changedSyncPeriod', -1),
+        )
+        return jsonify(provider.to_dict()), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@admin_bp.route('/api/<realm_name>/user-federation/<provider_id>', methods=['GET'])
+@login_required
+def api_get_federation_provider(realm_name, provider_id):
+    """Get federation provider details"""
+    from apps.models.federation import UserFederationProvider
+    from apps.services.federation import FederationService
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        return jsonify({'error': 'Provider not found'}), 404
+    
+    result = provider.to_dict(include_config=True)
+    
+    # Mask sensitive fields
+    provider_class = FederationService.get_provider_class(provider.provider_type)
+    if provider_class and 'config' in result:
+        for key in provider_class.SENSITIVE_CONFIG_KEYS:
+            if key in result['config']:
+                result['config'][key] = '********'
+    
+    return jsonify(result)
+
+
+@admin_bp.route('/api/<realm_name>/user-federation/<provider_id>', methods=['PUT'])
+@login_required
+def api_update_federation_provider(realm_name, provider_id):
+    """Update federation provider"""
+    from apps.models.federation import UserFederationProvider
+    from apps.services.federation import FederationService
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        return jsonify({'error': 'Provider not found'}), 404
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Invalid JSON'}), 400
+    
+    try:
+        updated = FederationService.update_provider(
+            provider_id=provider.id,
+            config=data.get('config'),
+            display_name=data.get('displayName'),
+            enabled=data.get('enabled'),
+            priority=data.get('priority'),
+            import_enabled=data.get('importEnabled'),
+            full_sync_period=data.get('fullSyncPeriod'),
+            changed_sync_period=data.get('changedSyncPeriod'),
+        )
+        return jsonify(updated.to_dict())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@admin_bp.route('/api/<realm_name>/user-federation/<provider_id>', methods=['DELETE'])
+@login_required
+def api_delete_federation_provider(realm_name, provider_id):
+    """Delete federation provider"""
+    from apps.models.federation import UserFederationProvider
+    from apps.services.federation import FederationService
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        return jsonify({'error': 'Provider not found'}), 404
+    
+    FederationService.delete_provider(provider.id)
+    return '', 204
+
+
+@admin_bp.route('/api/<realm_name>/user-federation/<provider_id>/test-connection', methods=['POST'])
+@login_required
+def api_test_federation_connection(realm_name, provider_id):
+    """Test federation provider connection"""
+    from apps.models.federation import UserFederationProvider
+    from apps.services.federation import FederationService
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        return jsonify({'error': 'Provider not found'}), 404
+    
+    result = FederationService.test_provider_connection(provider.id)
+    return jsonify(result)
+
+
+@admin_bp.route('/api/<realm_name>/user-federation/<provider_id>/sync', methods=['POST'])
+@login_required
+def api_sync_federation_users(realm_name, provider_id):
+    """Trigger federation user sync"""
+    from apps.models.federation import UserFederationProvider
+    from apps.services.federation import SyncService
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        return jsonify({'error': 'Provider not found'}), 404
+    
+    data = request.get_json() or {}
+    sync_type = data.get('type', 'full')
+    
+    if sync_type == 'changed':
+        result = SyncService.sync_changed_users(provider.id)
+    else:
+        result = SyncService.sync_all_users(provider.id)
+    
+    return jsonify(result)
+
+
+@admin_bp.route('/api/<realm_name>/user-federation/<provider_id>/sync-status', methods=['GET'])
+@login_required
+def api_get_federation_sync_status(realm_name, provider_id):
+    """Get federation sync status"""
+    from apps.models.federation import UserFederationProvider
+    from apps.services.federation import SyncService
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        return jsonify({'error': 'Provider not found'}), 404
+    
+    status = SyncService.get_sync_status(provider.id)
+    return jsonify(status)
+
+
+@admin_bp.route('/api/<realm_name>/user-federation/<provider_id>/mappers', methods=['GET'])
+@login_required
+def api_list_federation_mappers(realm_name, provider_id):
+    """List federation provider mappers"""
+    from apps.models.federation import UserFederationProvider, UserFederationMapper
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        return jsonify({'error': 'Provider not found'}), 404
+    
+    mappers = UserFederationMapper.find_by_provider(provider.id)
+    return jsonify([m.to_dict() for m in mappers])
+
+
+@admin_bp.route('/api/<realm_name>/user-federation/<provider_id>/mappers', methods=['POST'])
+@login_required
+def api_create_federation_mapper(realm_name, provider_id):
+    """Create federation mapper"""
+    from apps.models.federation import UserFederationProvider, UserFederationMapper
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        return jsonify({'error': 'Provider not found'}), 404
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Invalid JSON'}), 400
+    
+    name = data.get('name')
+    if not name:
+        return jsonify({'error': 'Mapper name is required'}), 400
+    
+    mapper = UserFederationMapper(
+        provider_id=provider.id,
+        name=name,
+        mapper_type=data.get('mapperType', 'user-attribute-ldap-mapper'),
+        internal_attribute=data.get('internalAttribute'),
+        external_attribute=data.get('externalAttribute'),
+        config=data.get('config', {})
+    )
+    db.session.add(mapper)
+    db.session.commit()
+    
+    return jsonify(mapper.to_dict()), 201
+
+
+@admin_bp.route('/api/<realm_name>/user-federation/<provider_id>/mappers/<mapper_id>', methods=['DELETE'])
+@login_required
+def api_delete_federation_mapper(realm_name, provider_id, mapper_id):
+    """Delete federation mapper"""
+    from apps.models.federation import UserFederationProvider, UserFederationMapper
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        return jsonify({'error': 'Provider not found'}), 404
+    
+    mapper = UserFederationMapper.query.get(mapper_id)
+    if not mapper or mapper.provider_id != provider.id:
+        return jsonify({'error': 'Mapper not found'}), 404
+    
+    db.session.delete(mapper)
+    db.session.commit()
+    
+    return '', 204

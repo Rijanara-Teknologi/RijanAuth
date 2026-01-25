@@ -1,0 +1,305 @@
+{% extends "layouts/admin_base.html" %}
+
+{% block title %}{{ provider.display_name or provider.name }} - User Federation{% endblock %}
+
+{% block content %}
+<div class="pcoded-main-container">
+    <div class="pcoded-wrapper">
+        <div class="pcoded-content">
+            <div class="pcoded-inner-content">
+                <div class="main-body">
+                    <div class="page-wrapper">
+                        <!-- Page Header -->
+                        <div class="page-header">
+                            <div class="page-block">
+                                <div class="row align-items-center">
+                                    <div class="col-md-12">
+                                        <div class="page-header-title">
+                                            <h5 class="m-b-10">{{ provider.display_name or provider.name }}</h5>
+                                        </div>
+                                        <ul class="breadcrumb">
+                                            <li class="breadcrumb-item">
+                                                <a href="{{ url_for('admin.index') }}"><i class="feather icon-home"></i></a>
+                                            </li>
+                                            <li class="breadcrumb-item">
+                                                <a href="{{ url_for('admin.federation_list', realm_name=realm.name) }}">User Federation</a>
+                                            </li>
+                                            <li class="breadcrumb-item active">{{ provider.name }}</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Content -->
+                        <div class="row">
+                            <div class="col-lg-8">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <ul class="nav nav-tabs card-header-tabs">
+                                            <li class="nav-item">
+                                                <a class="nav-link active" data-toggle="tab" href="#settings">
+                                                    <i class="feather icon-settings mr-1"></i> Settings
+                                                </a>
+                                            </li>
+                                            <li class="nav-item">
+                                                <a class="nav-link" href="{{ url_for('admin.federation_mappers', realm_name=realm.name, provider_id=provider.id) }}">
+                                                    <i class="feather icon-list mr-1"></i> Mappers ({{ mappers|length }})
+                                                </a>
+                                            </li>
+                                            <li class="nav-item">
+                                                <a class="nav-link" href="{{ url_for('admin.federation_sync_status', realm_name=realm.name, provider_id=provider.id) }}">
+                                                    <i class="feather icon-refresh-cw mr-1"></i> Sync Status
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <form method="POST">
+                                        <input type="hidden" name="action" value="save">
+                                        <div class="card-body">
+                                            <div class="tab-content">
+                                                <div class="tab-pane fade show active" id="settings">
+                                                    <!-- General Settings -->
+                                                    <h6 class="mb-3">General Settings</h6>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Provider Name</label>
+                                                                <input type="text" class="form-control" value="{{ provider.name }}" disabled>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Display Name</label>
+                                                                <input type="text" class="form-control" name="display_name" 
+                                                                       value="{{ provider.display_name or '' }}">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="row">
+                                                        <div class="col-md-4">
+                                                            <div class="custom-control custom-switch mb-3">
+                                                                <input type="checkbox" class="custom-control-input" id="enabled" 
+                                                                       name="enabled" {{ 'checked' if provider.enabled }}>
+                                                                <label class="custom-control-label" for="enabled">Enabled</label>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-4">
+                                                            <div class="custom-control custom-switch mb-3">
+                                                                <input type="checkbox" class="custom-control-input" id="import_enabled" 
+                                                                       name="import_enabled" {{ 'checked' if provider.import_enabled }}>
+                                                                <label class="custom-control-label" for="import_enabled">Import Users</label>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-4">
+                                                            <div class="form-group">
+                                                                <label>Priority</label>
+                                                                <input type="number" class="form-control" name="priority" 
+                                                                       value="{{ provider.priority }}">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <hr>
+
+                                                    <!-- Provider-specific config -->
+                                                    <h6 class="mb-3">Connection Settings</h6>
+                                                    {% if provider.provider_type == 'ldap' %}
+                                                    <div class="form-group">
+                                                        <label>Connection URL</label>
+                                                        <input type="text" class="form-control" name="connection_url" 
+                                                               value="{{ config.get('connection_url', '') }}">
+                                                    </div>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Bind DN</label>
+                                                                <input type="text" class="form-control" name="bind_dn" 
+                                                                       value="{{ config.get('bind_dn', '') }}">
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Bind Credential</label>
+                                                                <input type="password" class="form-control" name="bind_credential" 
+                                                                       placeholder="Leave empty to keep current">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-group">
+                                                        <label>Users DN</label>
+                                                        <input type="text" class="form-control" name="users_dn" 
+                                                               value="{{ config.get('users_dn', '') }}">
+                                                    </div>
+                                                    {% elif provider.provider_type in ['mysql', 'postgresql'] %}
+                                                    <div class="row">
+                                                        <div class="col-md-8">
+                                                            <div class="form-group">
+                                                                <label>Host</label>
+                                                                <input type="text" class="form-control" name="host" 
+                                                                       value="{{ config.get('host', 'localhost') }}">
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-4">
+                                                            <div class="form-group">
+                                                                <label>Port</label>
+                                                                <input type="number" class="form-control" name="port" 
+                                                                       value="{{ config.get('port', 3306 if provider.provider_type == 'mysql' else 5432) }}">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-group">
+                                                        <label>Database</label>
+                                                        <input type="text" class="form-control" name="database" 
+                                                               value="{{ config.get('database', '') }}">
+                                                    </div>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Database Username</label>
+                                                                <input type="text" class="form-control" name="db_username" 
+                                                                       value="{{ config.get('username', '') }}">
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Database Password</label>
+                                                                <input type="password" class="form-control" name="db_password" 
+                                                                       placeholder="Leave empty to keep current">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-group">
+                                                        <label>User Table</label>
+                                                        <input type="text" class="form-control" name="user_table" 
+                                                               value="{{ config.get('user_table', 'users') }}">
+                                                    </div>
+                                                    {% endif %}
+
+                                                    <hr>
+
+                                                    <!-- Sync Settings -->
+                                                    <h6 class="mb-3">Synchronization Settings</h6>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Full Sync Period (seconds)</label>
+                                                                <input type="number" class="form-control" name="full_sync_period" 
+                                                                       value="{{ provider.full_sync_period }}">
+                                                                <small class="text-muted">-1 = disabled</small>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Changed Sync Period (seconds)</label>
+                                                                <input type="number" class="form-control" name="changed_sync_period" 
+                                                                       value="{{ provider.changed_sync_period }}">
+                                                                <small class="text-muted">-1 = disabled</small>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="card-footer">
+                                            <button type="submit" class="btn btn-primary">
+                                                <i class="feather icon-save mr-1"></i> Save
+                                            </button>
+                                            <a href="{{ url_for('admin.federation_list', realm_name=realm.name) }}" 
+                                               class="btn btn-outline-secondary">Cancel</a>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <div class="col-lg-4">
+                                <!-- Actions Card -->
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5><i class="feather icon-zap mr-2"></i>Actions</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <form method="POST" class="mb-2">
+                                            <input type="hidden" name="action" value="test">
+                                            <button type="submit" class="btn btn-info btn-block">
+                                                <i class="feather icon-check-circle mr-1"></i> Test Connection
+                                            </button>
+                                        </form>
+                                        <form method="POST" class="mb-2">
+                                            <input type="hidden" name="action" value="sync">
+                                            <button type="submit" class="btn btn-primary btn-block">
+                                                <i class="feather icon-refresh-cw mr-1"></i> Sync All Users
+                                            </button>
+                                        </form>
+                                        <hr>
+                                        <form method="POST" onsubmit="return confirm('Are you sure you want to delete this provider?');">
+                                            <input type="hidden" name="action" value="delete">
+                                            <button type="submit" class="btn btn-outline-danger btn-block">
+                                                <i class="feather icon-trash-2 mr-1"></i> Delete Provider
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+
+                                <!-- Status Card -->
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5><i class="feather icon-activity mr-2"></i>Status</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-6">
+                                                <p class="text-muted mb-1">Type</p>
+                                                <p>
+                                                    {% if provider.provider_type == 'ldap' %}
+                                                    <span class="badge badge-info">LDAP</span>
+                                                    {% elif provider.provider_type == 'mysql' %}
+                                                    <span class="badge badge-warning">MySQL</span>
+                                                    {% elif provider.provider_type == 'postgresql' %}
+                                                    <span class="badge badge-primary">PostgreSQL</span>
+                                                    {% endif %}
+                                                </p>
+                                            </div>
+                                            <div class="col-6">
+                                                <p class="text-muted mb-1">Linked Users</p>
+                                                <p><strong>{{ linked_users }}</strong></p>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-6">
+                                                <p class="text-muted mb-1">Last Sync</p>
+                                                <p>
+                                                    {% if provider.last_sync %}
+                                                    {{ provider.last_sync.strftime('%Y-%m-%d %H:%M') }}
+                                                    {% else %}
+                                                    <span class="text-muted">Never</span>
+                                                    {% endif %}
+                                                </p>
+                                            </div>
+                                            <div class="col-6">
+                                                <p class="text-muted mb-1">Sync Status</p>
+                                                <p>
+                                                    {% if provider.last_sync_status == 'success' %}
+                                                    <span class="badge badge-success">Success</span>
+                                                    {% elif provider.last_sync_status == 'failed' %}
+                                                    <span class="badge badge-danger">Failed</span>
+                                                    {% elif provider.last_sync_status == 'running' %}
+                                                    <span class="badge badge-info">Running</span>
+                                                    {% else %}
+                                                    <span class="text-muted">-</span>
+                                                    {% endif %}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

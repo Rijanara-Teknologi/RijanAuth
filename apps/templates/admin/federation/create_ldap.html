@@ -1,0 +1,285 @@
+{% extends "layouts/admin_base.html" %}
+
+{% block title %}Add LDAP Provider - {{ realm.display_name or realm.name }}{% endblock %}
+
+{% block content %}
+<div class="pcoded-main-container">
+    <div class="pcoded-wrapper">
+        <div class="pcoded-content">
+            <div class="pcoded-inner-content">
+                <div class="main-body">
+                    <div class="page-wrapper">
+                        <!-- Page Header -->
+                        <div class="page-header">
+                            <div class="page-block">
+                                <div class="row align-items-center">
+                                    <div class="col-md-12">
+                                        <div class="page-header-title">
+                                            <h5 class="m-b-10">Add LDAP Provider</h5>
+                                        </div>
+                                        <ul class="breadcrumb">
+                                            <li class="breadcrumb-item">
+                                                <a href="{{ url_for('admin.index') }}"><i class="feather icon-home"></i></a>
+                                            </li>
+                                            <li class="breadcrumb-item">
+                                                <a href="{{ url_for('admin.dashboard', realm_name=realm.name) }}">{{ realm.display_name or realm.name }}</a>
+                                            </li>
+                                            <li class="breadcrumb-item">
+                                                <a href="{{ url_for('admin.federation_list', realm_name=realm.name) }}">User Federation</a>
+                                            </li>
+                                            <li class="breadcrumb-item active">Add LDAP</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Form -->
+                        <form method="POST">
+                            <div class="row">
+                                <div class="col-lg-8">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h5><i class="feather icon-server mr-2"></i>LDAP / Active Directory Settings</h5>
+                                        </div>
+                                        <div class="card-body">
+                                            <!-- General Settings -->
+                                            <h6 class="mb-3">General Settings</h6>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Provider Name <span class="text-danger">*</span></label>
+                                                        <input type="text" class="form-control" name="name" required 
+                                                               placeholder="e.g., corporate-ldap">
+                                                        <small class="text-muted">Unique identifier for this provider</small>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Display Name</label>
+                                                        <input type="text" class="form-control" name="display_name" 
+                                                               placeholder="e.g., Corporate LDAP">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Priority</label>
+                                                        <input type="number" class="form-control" name="priority" value="0">
+                                                        <small class="text-muted">Lower = higher priority (checked first)</small>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Vendor</label>
+                                                        <select class="form-control" name="vendor">
+                                                            <option value="other">Other</option>
+                                                            <option value="ad">Active Directory</option>
+                                                            <option value="rhds">Red Hat Directory Server</option>
+                                                            <option value="tivoli">Tivoli</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <hr>
+
+                                            <!-- Connection Settings -->
+                                            <h6 class="mb-3">Connection Settings</h6>
+                                            <div class="form-group">
+                                                <label>Connection URL <span class="text-danger">*</span></label>
+                                                <input type="text" class="form-control" name="connection_url" required
+                                                       placeholder="ldap://localhost:389 or ldaps://localhost:636">
+                                                <small class="text-muted">LDAP server URL</small>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Bind DN</label>
+                                                        <input type="text" class="form-control" name="bind_dn"
+                                                               placeholder="cn=admin,dc=example,dc=com">
+                                                        <small class="text-muted">DN for binding (leave empty for anonymous)</small>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Bind Credential</label>
+                                                        <input type="password" class="form-control" name="bind_credential"
+                                                               placeholder="Password">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-4">
+                                                    <div class="custom-control custom-switch mb-3">
+                                                        <input type="checkbox" class="custom-control-input" id="use_ssl" name="use_ssl">
+                                                        <label class="custom-control-label" for="use_ssl">Enable SSL</label>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="custom-control custom-switch mb-3">
+                                                        <input type="checkbox" class="custom-control-input" id="use_starttls" name="use_starttls">
+                                                        <label class="custom-control-label" for="use_starttls">Enable StartTLS</label>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="form-group">
+                                                        <label>Connection Timeout</label>
+                                                        <input type="number" class="form-control" name="connection_timeout" value="30">
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <hr>
+
+                                            <!-- Search Settings -->
+                                            <h6 class="mb-3">User Search Settings</h6>
+                                            <div class="form-group">
+                                                <label>Users DN <span class="text-danger">*</span></label>
+                                                <input type="text" class="form-control" name="users_dn" required
+                                                       placeholder="ou=users,dc=example,dc=com">
+                                                <small class="text-muted">Base DN for user searches</small>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Search Scope</label>
+                                                        <select class="form-control" name="search_scope">
+                                                            <option value="subtree">Subtree (all levels)</option>
+                                                            <option value="one">One Level</option>
+                                                            <option value="base">Base Object</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>User Object Classes</label>
+                                                        <input type="text" class="form-control" name="user_object_classes"
+                                                               value="inetOrgPerson,organizationalPerson">
+                                                        <small class="text-muted">Comma-separated list</small>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <hr>
+
+                                            <!-- Attribute Mappings -->
+                                            <h6 class="mb-3">Attribute Mappings</h6>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Username Attribute</label>
+                                                        <input type="text" class="form-control" name="username_ldap_attribute" value="uid">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Email Attribute</label>
+                                                        <input type="text" class="form-control" name="email_ldap_attribute" value="mail">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>First Name Attribute</label>
+                                                        <input type="text" class="form-control" name="first_name_ldap_attribute" value="givenName">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Last Name Attribute</label>
+                                                        <input type="text" class="form-control" name="last_name_ldap_attribute" value="sn">
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <hr>
+
+                                            <!-- Sync Settings -->
+                                            <h6 class="mb-3">Synchronization Settings</h6>
+                                            <div class="row">
+                                                <div class="col-md-4">
+                                                    <div class="custom-control custom-switch mb-3">
+                                                        <input type="checkbox" class="custom-control-input" id="enabled" name="enabled" checked>
+                                                        <label class="custom-control-label" for="enabled">Enabled</label>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="custom-control custom-switch mb-3">
+                                                        <input type="checkbox" class="custom-control-input" id="import_enabled" name="import_enabled" checked>
+                                                        <label class="custom-control-label" for="import_enabled">Import Users</label>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="form-group">
+                                                        <label>Batch Size</label>
+                                                        <input type="number" class="form-control" name="batch_size" value="100">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Full Sync Period (seconds)</label>
+                                                        <input type="number" class="form-control" name="full_sync_period" value="-1">
+                                                        <small class="text-muted">-1 = disabled</small>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Changed Sync Period (seconds)</label>
+                                                        <input type="number" class="form-control" name="changed_sync_period" value="-1">
+                                                        <small class="text-muted">-1 = disabled</small>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="card-footer">
+                                            <button type="submit" class="btn btn-primary">
+                                                <i class="feather icon-save mr-1"></i> Save
+                                            </button>
+                                            <a href="{{ url_for('admin.federation_list', realm_name=realm.name) }}" class="btn btn-outline-secondary">
+                                                Cancel
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-lg-4">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h5><i class="feather icon-info mr-2"></i>Help</h5>
+                                        </div>
+                                        <div class="card-body">
+                                            <p><strong>LDAP Federation</strong></p>
+                                            <p class="text-muted">
+                                                Configure RijanAuth to authenticate users against an LDAP or Active Directory server.
+                                                Users will be imported on their first login.
+                                            </p>
+                                            <hr>
+                                            <p><strong>Connection URL</strong></p>
+                                            <p class="text-muted">
+                                                Use <code>ldap://</code> for unencrypted or <code>ldaps://</code> for SSL.
+                                                Default ports: 389 (LDAP), 636 (LDAPS).
+                                            </p>
+                                            <hr>
+                                            <p><strong>Active Directory</strong></p>
+                                            <p class="text-muted">
+                                                For AD, use <code>sAMAccountName</code> as username attribute and
+                                                <code>userPrincipalName</code> or <code>mail</code> for email.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

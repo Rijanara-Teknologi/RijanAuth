@@ -39,6 +39,16 @@ def register_blueprints(app):
         from flask import redirect, url_for
         return redirect(url_for('admin.index'))
     
+    # Health check endpoint at root level
+    @app.route('/api/health', methods=['GET'])
+    def api_health():
+        from flask import jsonify
+        return jsonify({
+            'status': 'ok',
+            'version': '2.2.0',
+            'service': 'RijanAuth'
+        })
+    
     # 3. OIDC Blueprint (OpenID Connect Protocol)
     from apps.blueprints.oidc import oidc_bp
     app.register_blueprint(oidc_bp)
@@ -60,6 +70,7 @@ def configure_database(app):
         from apps.models.identity_provider import IdentityProvider, IdentityProviderMapper, FederatedIdentity
         from apps.models.authentication import AuthenticationFlow, AuthenticationExecution, AuthenticatorConfig, RequiredAction
         from apps.models.event import Event, AdminEvent
+        from apps.models.federation import UserFederationProvider, UserFederationMapper, UserFederationLink, FederationSyncLog
         
         try:
             db.create_all()

@@ -75,6 +75,14 @@
                     <label>Configure</label>
                 </li>
 
+                <li data-username="federation" class="nav-item {% if segment == 'federation' %} active {% endif %}">
+                    <a href="{{ url_for('admin.federation_list', realm_name=realm.name if realm else 'master') }}"
+                        class="nav-link">
+                        <span class="pcoded-micon"><i class="feather icon-link"></i></span>
+                        <span class="pcoded-mtext">User Federation</span>
+                    </a>
+                </li>
+
                 <li data-username="realm settings"
                     class="nav-item {% if segment == 'realm-settings' %} active {% endif %}">
                     <a href="{{ url_for('admin.realm_settings', realm_name=realm.name if realm else 'master') }}"

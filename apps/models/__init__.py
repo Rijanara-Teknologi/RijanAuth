@@ -13,6 +13,9 @@ from apps.models.session import UserSession, AuthenticatedClientSession
 from apps.models.identity_provider import IdentityProvider, IdentityProviderMapper, FederatedIdentity
 from apps.models.authentication import AuthenticationFlow, AuthenticationExecution, RequiredAction
 from apps.models.event import Event, AdminEvent
+from apps.models.federation import (
+    UserFederationProvider, UserFederationMapper, UserFederationLink, FederationSyncLog
+)
 
 __all__ = [
     # Realm
@@ -33,4 +36,6 @@ __all__ = [
     'AuthenticationFlow', 'AuthenticationExecution', 'RequiredAction',
     # Event
     'Event', 'AdminEvent',
+    # User Federation
+    'UserFederationProvider', 'UserFederationMapper', 'UserFederationLink', 'FederationSyncLog',
 ]

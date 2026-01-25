@@ -39,53 +39,88 @@ def login():
         # Authenticate against Master Realm for Admin Console
         master_realm = Realm.find_by_name('master')
         user = None
+        authenticated = False
         
         if master_realm:
+            # Try local user first
             user = User.find_by_username(master_realm.id, username)
             if not user:
                 user = User.find_by_email(master_realm.id, username)
-        
-        if user:
-            current_app.logger.debug("USER FOUND IN DATABASE", extra={
-                'user_id': user.id,
-                'username': user.username,
-                'enabled': user.enabled,
-                'email_verified': user.email_verified
-            })
             
-            # Verify password
-            password_valid = user.verify_password(password)
-            current_app.logger.debug("PASSWORD VERIFICATION", extra={
-                'result': 'SUCCESS' if password_valid else 'FAILURE',
-                'user_id': user.id
-            })
-            
-            if password_valid:
-                if not user.enabled:
-                     current_app.logger.warning("USER DISABLED", extra={'user_id': user.id})
-                     return render_template('auth/login.html', msg='Account is disabled')
-
-                # Log pre-login state
-                # Note: relations might be partial if lazy loading
-                current_app.logger.debug("PRE-LOGIN USER STATE", extra={
+            if user:
+                current_app.logger.debug("USER FOUND IN DATABASE", extra={
                     'user_id': user.id,
-                    'realm': user.realm.name if user.realm else 'None'
+                    'username': user.username,
+                    'enabled': user.enabled,
+                    'email_verified': user.email_verified
                 })
                 
-                # Login user with remember=True for persistent session
-                login_success = login_user(user, remember=True)
-                
-                if login_success:
-                    next_url = request.args.get('next')
-                    if not next_url or not next_url.startswith('/'):
-                        next_url = url_for('admin.index')
-                        
-                    current_app.logger.info("LOGIN SUCCESSFUL", extra={
-                        'user_id': user.id,
-                        'username': user.username,
-                        'redirect_url': next_url
+                # Check if federated user (no local password)
+                if user.federation_link:
+                    # Federated user - authenticate against federation provider
+                    try:
+                        from apps.services.federation import FederationService
+                        fed_user = FederationService.authenticate_federated(
+                            master_realm.id, username, password
+                        )
+                        if fed_user and fed_user.id == user.id:
+                            authenticated = True
+                            current_app.logger.debug("FEDERATED AUTH SUCCESS", extra={
+                                'user_id': user.id
+                            })
+                    except Exception as e:
+                        current_app.logger.error(f"Federation auth error: {str(e)}")
+                else:
+                    # Local user - verify password
+                    password_valid = user.verify_password(password)
+                    current_app.logger.debug("PASSWORD VERIFICATION", extra={
+                        'result': 'SUCCESS' if password_valid else 'FAILURE',
+                        'user_id': user.id
                     })
-                    return redirect(next_url)
+                    authenticated = password_valid
+            
+            # If local auth failed, try federation providers
+            if not authenticated:
+                try:
+                    from apps.services.federation import FederationService
+                    fed_user = FederationService.authenticate_federated(
+                        master_realm.id, username, password
+                    )
+                    if fed_user:
+                        user = fed_user
+                        authenticated = True
+                        current_app.logger.info("FEDERATED AUTH SUCCESS (new user)", extra={
+                            'user_id': user.id,
+                            'username': user.username
+                        })
+                except Exception as e:
+                    current_app.logger.error(f"Federation auth error: {str(e)}")
+        
+        if authenticated and user:
+            if not user.enabled:
+                current_app.logger.warning("USER DISABLED", extra={'user_id': user.id})
+                return render_template('auth/login.html', msg='Account is disabled')
+
+            # Log pre-login state
+            current_app.logger.debug("PRE-LOGIN USER STATE", extra={
+                'user_id': user.id,
+                'realm': user.realm.name if user.realm else 'None'
+            })
+            
+            # Login user with remember=True for persistent session
+            login_success = login_user(user, remember=True)
+            
+            if login_success:
+                next_url = request.args.get('next')
+                if not next_url or not next_url.startswith('/'):
+                    next_url = url_for('admin.index')
+                    
+                current_app.logger.info("LOGIN SUCCESSFUL", extra={
+                    'user_id': user.id,
+                    'username': user.username,
+                    'redirect_url': next_url
+                })
+                return redirect(next_url)
         
         # Log failed login attempt
         current_app.logger.warning("FAILED LOGIN ATTEMPT", extra={

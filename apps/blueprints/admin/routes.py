@@ -513,3 +513,345 @@ def sessions_list(realm_name):
         sessions=sessions,
         segment='sessions'
     )
+
+
+# =============================================================================
+# User Federation
+# =============================================================================
+
+@admin_bp.route('/<realm_name>/user-federation')
+@login_required
+def federation_list(realm_name):
+    """List user federation providers"""
+    from apps.models.federation import UserFederationProvider
+    from apps.services.federation import FederationService
+    
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    providers = UserFederationProvider.find_by_realm(realm.id)
+    available_types = FederationService.get_available_providers()
+    
+    realms = Realm.query.all()
+    return render_template(
+        'admin/federation/list.html',
+        realm=realm,
+        realms=realms,
+        providers=providers,
+        available_types=available_types,
+        segment='federation'
+    )
+
+
+@admin_bp.route('/<realm_name>/user-federation/create/<provider_type>', methods=['GET', 'POST'])
+@login_required
+def federation_create(realm_name, provider_type):
+    """Create a new federation provider"""
+    from apps.models.federation import UserFederationProvider
+    from apps.services.federation import FederationService
+    
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    # Check provider type is valid
+    available_types = FederationService.get_available_providers()
+    if provider_type not in available_types:
+        flash(f'Unknown provider type: {provider_type}', 'error')
+        return redirect(url_for('admin.federation_list', realm_name=realm_name))
+    
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        display_name = request.form.get('display_name', '').strip()
+        
+        if not name:
+            flash('Provider name is required', 'error')
+        elif UserFederationProvider.find_by_name(realm.id, name):
+            flash(f'Provider "{name}" already exists', 'error')
+        else:
+            # Build config from form
+            config = _build_provider_config(provider_type, request.form)
+            
+            try:
+                provider = FederationService.create_provider(
+                    realm_id=realm.id,
+                    name=name,
+                    provider_type=provider_type,
+                    config=config,
+                    display_name=display_name or name,
+                    enabled=request.form.get('enabled') == 'on',
+                    priority=int(request.form.get('priority', 0)),
+                    import_enabled=request.form.get('import_enabled') == 'on',
+                    full_sync_period=int(request.form.get('full_sync_period', -1)),
+                    changed_sync_period=int(request.form.get('changed_sync_period', -1)),
+                )
+                flash(f'Provider "{name}" created successfully', 'success')
+                return redirect(url_for('admin.federation_edit', realm_name=realm_name, provider_id=provider.id))
+            except Exception as e:
+                flash(f'Error creating provider: {str(e)}', 'error')
+    
+    # Get provider config schema
+    provider_class = FederationService.get_provider_class(provider_type)
+    config_schema = provider_class.get_config_schema() if provider_class else {}
+    
+    realms = Realm.query.all()
+    return render_template(
+        f'admin/federation/create_{provider_type}.html',
+        realm=realm,
+        realms=realms,
+        provider_type=provider_type,
+        config_schema=config_schema,
+        segment='federation'
+    )
+
+
+@admin_bp.route('/<realm_name>/user-federation/<provider_id>', methods=['GET', 'POST'])
+@login_required
+def federation_edit(realm_name, provider_id):
+    """Edit federation provider"""
+    from apps.models.federation import UserFederationProvider, UserFederationMapper, UserFederationLink
+    from apps.services.federation import FederationService
+    
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        flash('Provider not found', 'error')
+        return redirect(url_for('admin.federation_list', realm_name=realm_name))
+    
+    if request.method == 'POST':
+        action = request.form.get('action', 'save')
+        
+        if action == 'save':
+            # Update provider settings
+            display_name = request.form.get('display_name', '').strip()
+            config = _build_provider_config(provider.provider_type, request.form)
+            
+            try:
+                FederationService.update_provider(
+                    provider_id=provider.id,
+                    config=config,
+                    display_name=display_name or provider.name,
+                    enabled=request.form.get('enabled') == 'on',
+                    priority=int(request.form.get('priority', 0)),
+                    import_enabled=request.form.get('import_enabled') == 'on',
+                    full_sync_period=int(request.form.get('full_sync_period', -1)),
+                    changed_sync_period=int(request.form.get('changed_sync_period', -1)),
+                )
+                flash('Provider updated successfully', 'success')
+            except Exception as e:
+                flash(f'Error updating provider: {str(e)}', 'error')
+        
+        elif action == 'test':
+            # Test connection
+            result = FederationService.test_provider_connection(provider.id)
+            if result['success']:
+                flash(f'Connection successful: {result["message"]}', 'success')
+            else:
+                flash(f'Connection failed: {result["message"]}', 'error')
+        
+        elif action == 'sync':
+            # Trigger manual sync
+            from apps.services.federation import SyncService
+            result = SyncService.sync_all_users(provider.id)
+            if result['success']:
+                stats = result['stats']
+                flash(f'Sync completed: {stats["users_processed"]} processed, '
+                      f'{stats["users_created"]} created, {stats["users_updated"]} updated', 'success')
+            else:
+                flash(f'Sync failed: {result.get("error", "Unknown error")}', 'error')
+        
+        elif action == 'delete':
+            FederationService.delete_provider(provider.id)
+            flash('Provider deleted', 'success')
+            return redirect(url_for('admin.federation_list', realm_name=realm_name))
+        
+        return redirect(url_for('admin.federation_edit', realm_name=realm_name, provider_id=provider.id))
+    
+    # Get mappers and linked users count
+    mappers = provider.mappers.all()
+    linked_users = UserFederationLink.query.filter_by(provider_id=provider.id).count()
+    
+    # Decrypt config for display (mask sensitive fields)
+    display_config = FederationService._decrypt_config(provider.config, provider.provider_type)
+    provider_class = FederationService.get_provider_class(provider.provider_type)
+    if provider_class:
+        for key in provider_class.SENSITIVE_CONFIG_KEYS:
+            if key in display_config:
+                display_config[key] = '********'
+    
+    realms = Realm.query.all()
+    return render_template(
+        'admin/federation/edit.html',
+        realm=realm,
+        realms=realms,
+        provider=provider,
+        mappers=mappers,
+        linked_users=linked_users,
+        config=display_config,
+        segment='federation'
+    )
+
+
+@admin_bp.route('/<realm_name>/user-federation/<provider_id>/mappers', methods=['GET', 'POST'])
+@login_required
+def federation_mappers(realm_name, provider_id):
+    """Manage federation provider mappers"""
+    from apps.models.federation import UserFederationProvider, UserFederationMapper
+    from apps import db
+    
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        flash('Provider not found', 'error')
+        return redirect(url_for('admin.federation_list', realm_name=realm_name))
+    
+    if request.method == 'POST':
+        action = request.form.get('action')
+        
+        if action == 'create':
+            name = request.form.get('name', '').strip()
+            mapper_type = request.form.get('mapper_type', '')
+            internal_attribute = request.form.get('internal_attribute', '').strip()
+            external_attribute = request.form.get('external_attribute', '').strip()
+            
+            if not name:
+                flash('Mapper name is required', 'error')
+            else:
+                mapper = UserFederationMapper(
+                    provider_id=provider.id,
+                    name=name,
+                    mapper_type=mapper_type,
+                    internal_attribute=internal_attribute,
+                    external_attribute=external_attribute,
+                    config={}
+                )
+                db.session.add(mapper)
+                db.session.commit()
+                flash(f'Mapper "{name}" created', 'success')
+        
+        elif action == 'delete':
+            mapper_id = request.form.get('mapper_id')
+            mapper = UserFederationMapper.query.get(mapper_id)
+            if mapper and mapper.provider_id == provider.id:
+                db.session.delete(mapper)
+                db.session.commit()
+                flash('Mapper deleted', 'success')
+        
+        return redirect(url_for('admin.federation_mappers', realm_name=realm_name, provider_id=provider.id))
+    
+    mappers = provider.mappers.all()
+    
+    realms = Realm.query.all()
+    return render_template(
+        'admin/federation/mappers.html',
+        realm=realm,
+        realms=realms,
+        provider=provider,
+        mappers=mappers,
+        segment='federation'
+    )
+
+
+@admin_bp.route('/<realm_name>/user-federation/<provider_id>/sync-status')
+@login_required
+def federation_sync_status(realm_name, provider_id):
+    """View federation sync status and logs"""
+    from apps.models.federation import UserFederationProvider, FederationSyncLog
+    from apps.services.federation import SyncService
+    
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        flash('Provider not found', 'error')
+        return redirect(url_for('admin.federation_list', realm_name=realm_name))
+    
+    sync_status = SyncService.get_sync_status(provider_id)
+    linked_users = SyncService.get_linked_users_count(provider_id)
+    
+    realms = Realm.query.all()
+    return render_template(
+        'admin/federation/sync_status.html',
+        realm=realm,
+        realms=realms,
+        provider=provider,
+        sync_status=sync_status,
+        linked_users=linked_users,
+        segment='federation'
+    )
+
+
+def _build_provider_config(provider_type, form):
+    """Build provider config from form data"""
+    config = {}
+    
+    if provider_type == 'ldap':
+        config = {
+            'connection_url': form.get('connection_url', ''),
+            'bind_dn': form.get('bind_dn', ''),
+            'bind_credential': form.get('bind_credential', ''),
+            'use_ssl': form.get('use_ssl') == 'on',
+            'use_starttls': form.get('use_starttls') == 'on',
+            'users_dn': form.get('users_dn', ''),
+            'username_ldap_attribute': form.get('username_ldap_attribute', 'uid'),
+            'email_ldap_attribute': form.get('email_ldap_attribute', 'mail'),
+            'first_name_ldap_attribute': form.get('first_name_ldap_attribute', 'givenName'),
+            'last_name_ldap_attribute': form.get('last_name_ldap_attribute', 'sn'),
+            'search_scope': form.get('search_scope', 'subtree'),
+            'user_object_classes': [c.strip() for c in form.get('user_object_classes', 'inetOrgPerson').split(',')],
+            'connection_timeout': int(form.get('connection_timeout', 30)),
+            'batch_size': int(form.get('batch_size', 100)),
+            'vendor': form.get('vendor', 'other'),
+        }
+    
+    elif provider_type == 'mysql':
+        config = {
+            'host': form.get('host', 'localhost'),
+            'port': int(form.get('port', 3306)),
+            'database': form.get('database', ''),
+            'username': form.get('db_username', ''),
+            'password': form.get('db_password', ''),
+            'user_table': form.get('user_table', 'users'),
+            'id_column': form.get('id_column', 'id'),
+            'username_column': form.get('username_column', 'username'),
+            'email_column': form.get('email_column', 'email'),
+            'password_column': form.get('password_column', 'password'),
+            'first_name_column': form.get('first_name_column', ''),
+            'last_name_column': form.get('last_name_column', ''),
+            'enabled_column': form.get('enabled_column', ''),
+            'password_hash_algorithm': form.get('password_hash_algorithm', 'bcrypt'),
+            'batch_size': int(form.get('batch_size', 100)),
+        }
+    
+    elif provider_type == 'postgresql':
+        config = {
+            'host': form.get('host', 'localhost'),
+            'port': int(form.get('port', 5432)),
+            'database': form.get('database', ''),
+            'username': form.get('db_username', ''),
+            'password': form.get('db_password', ''),
+            'schema': form.get('schema', 'public'),
+            'user_table': form.get('user_table', 'users'),
+            'id_column': form.get('id_column', 'id'),
+            'username_column': form.get('username_column', 'username'),
+            'email_column': form.get('email_column', 'email'),
+            'password_column': form.get('password_column', 'password'),
+            'first_name_column': form.get('first_name_column', ''),
+            'last_name_column': form.get('last_name_column', ''),
+            'enabled_column': form.get('enabled_column', ''),
+            'attributes_column': form.get('attributes_column', ''),
+            'password_hash_algorithm': form.get('password_hash_algorithm', 'bcrypt'),
+            'sslmode': form.get('sslmode', 'prefer'),
+            'batch_size': int(form.get('batch_size', 100)),
+        }
+    
+    return config

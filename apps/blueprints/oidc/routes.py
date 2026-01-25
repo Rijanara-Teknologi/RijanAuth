@@ -20,7 +20,7 @@ from apps.blueprints.oidc import oidc_bp
 from apps.models.realm import Realm
 from apps.models.user import User
 from apps.models.client import Client
-from apps.models.session import AuthorizationCode, RefreshToken
+from apps.models.session import AuthorizationCode, RefreshToken, UserSession, AuthenticatedClientSession
 from apps.utils.crypto import generate_token, create_jwt, decode_jwt
 from apps import db
 
@@ -208,14 +208,22 @@ def _generate_auth_response(realm, client, user, redirect_uri, response_type,
     if state:
         params['state'] = state
     
+    # Create or retrieve user session (SSO session)
+    user_session = _get_or_create_user_session(realm, user)
+    
+    # Create authenticated client session to track this client
+    _create_authenticated_client_session(user_session, client, redirect_uri)
+    
     if 'code' in response_type:
         # Generate authorization code
         code = generate_token(32)
         
         auth_code = AuthorizationCode(
             code=code,
+            realm_id=realm.id,
             client_id=client.id,
             user_id=user.id,
+            user_session_id=user_session.id,  # Link to user session
             redirect_uri=redirect_uri,
             scope=scope,
             nonce=nonce,
@@ -245,6 +253,71 @@ def _generate_auth_response(realm, client, user, redirect_uri, response_type,
     redirect_url = f"{redirect_uri}{separator}{urlencode(params)}"
     
     return redirect(redirect_url)
+
+
+def _get_or_create_user_session(realm, user):
+    """Get existing active user session or create a new one"""
+    # Check for existing active session
+    existing_sessions = UserSession.find_active_sessions(realm.id, user.id)
+    
+    if existing_sessions:
+        # Use the most recent active session
+        user_session = existing_sessions[0]
+        user_session.last_session_refresh = datetime.utcnow()
+        db.session.commit()
+        return user_session
+    
+    # Create new user session
+    user_session = UserSession(
+        realm_id=realm.id,
+        user_id=user.id,
+        login_username=user.username,
+        ip_address=request.remote_addr,
+        auth_method='password',
+        remember_me=False,
+        state='ACTIVE',
+        started=datetime.utcnow(),
+        last_session_refresh=datetime.utcnow()
+    )
+    db.session.add(user_session)
+    db.session.commit()
+    
+    current_app.logger.info(f"Created SSO session for user {user.username}", extra={
+        'user_id': user.id,
+        'session_id': user_session.id,
+        'realm_id': realm.id
+    })
+    
+    return user_session
+
+
+def _create_authenticated_client_session(user_session, client, redirect_uri):
+    """Create or update authenticated client session"""
+    # Check if client session already exists
+    existing = AuthenticatedClientSession.query.filter_by(
+        user_session_id=user_session.id,
+        client_id=client.id
+    ).first()
+    
+    if existing:
+        # Update timestamp
+        existing.timestamp = datetime.utcnow()
+        existing.redirect_uri = redirect_uri
+        db.session.commit()
+        return existing
+    
+    # Create new authenticated client session
+    client_session = AuthenticatedClientSession(
+        user_session_id=user_session.id,
+        client_id=client.id,
+        redirect_uri=redirect_uri,
+        action='AUTHENTICATE',
+        timestamp=datetime.utcnow()
+    )
+    db.session.add(client_session)
+    db.session.commit()
+    
+    return client_session
 
 
 # =============================================================================
@@ -364,10 +437,18 @@ def _handle_authorization_code_grant(realm):
     if not user:
         return jsonify({'error': 'invalid_grant', 'error_description': 'User not found'}), 400
     
+    # Refresh the user session if exists
+    user_session_id = auth_code.user_session_id
+    if user_session_id:
+        user_session = UserSession.query.get(user_session_id)
+        if user_session and user_session.state == 'ACTIVE':
+            user_session.last_session_refresh = datetime.utcnow()
+            db.session.commit()
+    
     # Generate tokens
     scope = auth_code.scope or 'openid'
     access_token = _generate_access_token(realm, client, user, scope)
-    refresh_token = _generate_refresh_token(realm, client, user, scope)
+    refresh_token = _generate_refresh_token(realm, client, user, scope, user_session_id)
     
     response_data = {
         'access_token': access_token,
@@ -377,6 +458,10 @@ def _handle_authorization_code_grant(realm):
         'refresh_expires_in': realm.sso_session_idle_timeout,
         'scope': scope
     }
+    
+    # Add session state for session management
+    if user_session_id:
+        response_data['session_state'] = user_session_id
     
     # Add ID token for openid scope
     if 'openid' in scope:
@@ -412,10 +497,18 @@ def _handle_refresh_token_grant(realm):
     if not user or not user.enabled:
         return jsonify({'error': 'invalid_grant', 'error_description': 'User not found or disabled'}), 400
     
+    # Refresh the user session if exists
+    user_session_id = refresh_token.user_session_id
+    if user_session_id:
+        user_session = UserSession.query.get(user_session_id)
+        if user_session and user_session.state == 'ACTIVE':
+            user_session.last_session_refresh = datetime.utcnow()
+            db.session.commit()
+    
     # Generate new tokens
     scope = refresh_token.scope or 'openid'
     new_access_token = _generate_access_token(realm, client, user, scope)
-    new_refresh_token = _generate_refresh_token(realm, client, user, scope)
+    new_refresh_token = _generate_refresh_token(realm, client, user, scope, user_session_id)
     
     # Revoke old refresh token (optional - can be configurable)
     if realm.revoke_refresh_token:
@@ -453,20 +546,54 @@ def _handle_password_grant(realm):
     if not client.direct_access_grants_enabled:
         return jsonify({'error': 'unauthorized_client', 'error_description': 'Direct access grants not allowed'}), 400
     
-    # Authenticate user
+    # Authenticate user - try local first
     user = User.find_by_username(realm.id, username)
     if not user:
         user = User.find_by_email(realm.id, username)
     
-    if not user or not user.verify_password(password):
+    user_authenticated = False
+    
+    if user:
+        # Check if federated user
+        if user.federation_link:
+            # Try federation authentication
+            try:
+                from apps.services.federation import FederationService
+                fed_user = FederationService.authenticate_federated(realm.id, username, password)
+                if fed_user and fed_user.id == user.id:
+                    user_authenticated = True
+            except Exception as e:
+                current_app.logger.error(f"Federation auth error in OIDC: {str(e)}")
+        else:
+            # Local user - verify password
+            user_authenticated = user.verify_password(password)
+    
+    # If local auth failed, try federation providers (may create new user)
+    if not user_authenticated:
+        try:
+            from apps.services.federation import FederationService
+            fed_user = FederationService.authenticate_federated(realm.id, username, password)
+            if fed_user:
+                user = fed_user
+                user_authenticated = True
+        except Exception as e:
+            current_app.logger.error(f"Federation auth error in OIDC: {str(e)}")
+    
+    if not user_authenticated or not user:
         return jsonify({'error': 'invalid_grant', 'error_description': 'Invalid username or password'}), 400
     
     if not user.enabled:
         return jsonify({'error': 'invalid_grant', 'error_description': 'User account is disabled'}), 400
     
+    # Create user session for password grant
+    user_session = _get_or_create_user_session(realm, user)
+    
+    # Create authenticated client session
+    _create_authenticated_client_session(user_session, client, None)
+    
     # Generate tokens
     access_token = _generate_access_token(realm, client, user, scope)
-    refresh_token = _generate_refresh_token(realm, client, user, scope)
+    refresh_token = _generate_refresh_token(realm, client, user, scope, user_session.id)
     
     response_data = {
         'access_token': access_token,
@@ -474,7 +601,8 @@ def _handle_password_grant(realm):
         'expires_in': realm.access_token_lifespan,
         'refresh_token': refresh_token,
         'refresh_expires_in': realm.sso_session_idle_timeout,
-        'scope': scope
+        'scope': scope,
+        'session_state': user_session.id
     }
     
     if 'openid' in scope:
@@ -540,14 +668,16 @@ def _generate_access_token(realm, client, user, scope):
     return create_jwt(payload, current_app.config.get('SECRET_KEY', 'secret'))
 
 
-def _generate_refresh_token(realm, client, user, scope):
+def _generate_refresh_token(realm, client, user, scope, user_session_id=None):
     """Generate and store refresh token"""
     token_value = generate_token(64)
     
     refresh_token = RefreshToken(
         token=token_value,
+        realm_id=realm.id,
         client_id=client.id,
         user_id=user.id,
+        user_session_id=user_session_id,
         scope=scope,
         expires_at=datetime.utcnow() + timedelta(seconds=realm.sso_session_idle_timeout)
     )
