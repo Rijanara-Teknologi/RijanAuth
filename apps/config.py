@@ -22,6 +22,7 @@ class Config(object):
     SESSION_COOKIE_HTTPONLY = True
     REMEMBER_COOKIE_HTTPONLY = True
     REMEMBER_COOKIE_DURATION = 3600
+    SESSION_COOKIE_SAMESITE = 'Lax'
 
     # Logging Configuration
     LOGGING = {
@@ -36,6 +37,8 @@ class Config(object):
     }
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ECHO = True
+    SQLALCHEMY_RECORD_QUERIES = True
 
     DB_ENGINE   = os.getenv('DB_ENGINE'   , None)
     DB_USERNAME = os.getenv('DB_USERNAME' , None)

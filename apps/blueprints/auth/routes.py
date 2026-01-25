@@ -11,51 +11,103 @@ from apps.models.realm import Realm
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
-    current_app.logger.debug(f"Login route accessed. Method: {request.method}")
+    from flask import session
+    current_app.logger.info("LOGIN ATTEMPT STARTED", extra={
+        'route': request.path,
+        'method': request.method,
+        'client_ip': request.remote_addr,
+        'user_agent': request.user_agent.string
+    })
+    
     if current_user.is_authenticated:
+        current_app.logger.debug("USER ALREADY AUTHENTICATED", extra={
+            'user_id': getattr(current_user, 'id', 'UNKNOWN'),
+            'username': getattr(current_user, 'username', 'UNKNOWN'),
+            'realm': getattr(current_user, 'realm_id', 'N/A')
+        })
         return redirect(url_for('admin.index'))
-
+    
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
         
-        if not username or not password:
-            return render_template('auth/login.html', msg='Username and Password are required')
-
-        try:
-            # Authenticate against Master Realm for Admin Console
-            master_realm = Realm.find_by_name('master')
-            user = None
+        current_app.logger.debug("PROCESSING CREDENTIALS", extra={
+            'username': username,
+            'password_provided': bool(password)
+        })
+        
+        # Authenticate against Master Realm for Admin Console
+        master_realm = Realm.find_by_name('master')
+        user = None
+        
+        if master_realm:
+            user = User.find_by_username(master_realm.id, username)
+            if not user:
+                user = User.find_by_email(master_realm.id, username)
+        
+        if user:
+            current_app.logger.debug("USER FOUND IN DATABASE", extra={
+                'user_id': user.id,
+                'username': user.username,
+                'enabled': user.enabled,
+                'email_verified': user.email_verified
+            })
             
-            if master_realm:
-                user = User.find_by_username(master_realm.id, username)
-                print(f"DEBUG: Login attempt for '{username}'. Found user: {user}")
-                if not user:
-                    user = User.find_by_email(master_realm.id, username)
-                    print(f"DEBUG: Checking email. Found: {user}")
+            # Log credential verification result
+            password_valid = user.verify_password(password)
+            current_app.logger.debug("PASSWORD VERIFICATION RESULT", extra={
+                'result': 'SUCCESS' if password_valid else 'FAILURE',
+                'user_id': user.id
+            })
             
-            if user and user.verify_password(password):
+            if password_valid:
                 if not user.enabled:
-                    print("DEBUG: User disabled")
-                    return render_template('auth/login.html', msg='Account is disabled')
-                    
-                login_user(user)
-                print(f"DEBUG: Valid credentials. Logged in user: {user.id}")
-                
-                # Handle 'next' redirect
-                next_page = request.args.get('next')
-                if next_page and next_page.startswith('/'):
-                    return redirect(next_page)
-                
-                return redirect(url_for('admin.index'))
-            
-            print("DEBUG: Invalid credentials or password verify failed")
-            return render_template('auth/login.html', msg='Invalid credentials')
-            
-        except Exception as e:
-            print(f"Login error: {e}")
-            return render_template('auth/login.html', msg='An internal error occurred')
+                     current_app.logger.warning("USER DISABLED", extra={'user_id': user.id})
+                     return render_template('auth/login.html', msg='Account is disabled')
 
+                # Log pre-login state
+                # Note: relations might be partial if lazy loading
+                current_app.logger.debug("PRE-LOGIN USER STATE", extra={
+                    'user_id': user.id,
+                    'realm': user.realm.name if user.realm else 'None'
+                })
+                
+                # Attempt login
+                login_success = login_user(user)
+                current_app.logger.info("LOGIN RESULT", extra={
+                    'success': login_success,
+                    'user_id': user.id,
+                    'session_id': session.get('_id', 'NOT SET')
+                })
+                
+                if login_success:
+                    # Log session details after successful login
+                    current_app.logger.debug("SESSION STATE AFTER LOGIN", extra={
+                        # 'session_data': dict(session), # Careful with sensitive data
+                        'current_user_id': getattr(current_user, 'id', 'NOT SET'),
+                        'current_user_authenticated': current_user.is_authenticated
+                    })
+                    
+                    next_url = request.args.get('next')
+                    if not next_url or not next_url.startswith('/'):
+                        next_url = url_for('admin.index')
+                        
+                    current_app.logger.info("REDIRECTING AFTER SUCCESSFUL LOGIN", extra={
+                        'redirect_url': next_url
+                    })
+                    return redirect(next_url)
+        
+        # Log failed login attempt
+        current_app.logger.warning("FAILED LOGIN ATTEMPT", extra={
+            'username': username,
+            'user_exists': bool(user),
+            'ip_address': request.remote_addr
+        })
+        return render_template('auth/login.html', msg='Invalid credentials')
+    
+    current_app.logger.debug("RENDERING LOGIN PAGE", extra={
+        'next_param': request.args.get('next', 'NOT SET')
+    })
     return render_template('auth/login.html')
 
 

@@ -17,17 +17,18 @@ auth_bp = Blueprint(
 # Move user loaders here
 @login_manager.user_loader
 def user_loader(id):
-    print(f"DEBUG_V2: user_loader called with id={id}", flush=True)
+    from flask import current_app
+    current_app.logger.debug(f"USER LOADER INVOKED: id={id}")
     from apps.models.user import User
     try:
         user = User.find_by_id(id)
         if user:
-            print(f"DEBUG_V2: user_loader found user: {user.username}", flush=True)
+            current_app.logger.debug(f"USER LOADED SUCCESSFULLY: {user.username}")
         else:
-            print(f"DEBUG_V2: user_loader returned None for id={id}", flush=True)
+            current_app.logger.warning(f"USER NOT FOUND: id={id}")
         return user
     except Exception as e:
-        print(f"ERROR in user_loader: {e}", flush=True)
+        current_app.logger.error(f"USER LOADER EXCEPTION: {e}", extra={'stack': True})
         return None
 
 @login_manager.request_loader

@@ -20,8 +20,15 @@ class LoggingMiddleware:
         g.request_id = str(uuid.uuid4())
         g.start_time = time.time()
         
-        # Log request start (Debug level)
-        current_app.logger.debug(f"Request started: {request.method} {request.path}")
+        from flask import session
+        
+        # Log request start (Debug level) with Session Info
+        current_app.logger.debug(f"Request started: {request.method} {request.path}", extra={
+             'session_id': session.get('_id', 'NEW_OR_NONE'),
+             'session_keys': list(session.keys()),
+             'remote_addr': request.remote_addr,
+             'user_agent': request.user_agent.string
+        })
 
     def after_request(self, response):
         if hasattr(g, 'start_time'):
