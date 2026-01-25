@@ -33,6 +33,29 @@
 - Updated `apps/__init__.py` to register admin blueprint
 - Added `find_by_id()` method to User model
 
+## [2.1.1] 2026-01-25 - RijanAuth Phase 2.1.1: Database Seeding & Bug Fixes
+### New Features
+
+- **Automated Database Seeding**: Automatic initialization mechanism (`apps/seeders/`)
+  - **Master Realm**: Auto-created with Keycloak defaults
+  - **Auth Flows**: Browser, Registration, Direct Grant, Clients flows
+  - **Admin User**: Secure admin user creation with password reset requirement
+  - **System Events**: Audit logging configuration
+
+### Bug Fixes
+
+- **Login Authentication**: Fixed login logic to authenticate against RijanAuth `User` model instead of legacy `Users` table
+- **Admin Access**: Fixed 403 Forbidden error on admin pages by correcting `unauthorized_handler` redirect
+- **User Loading**: Updated Flask-Login `user_loader` to support new `User` model UUIDs
+- **Password Verification**: Added bcrypt verification support to `User` model
+
+### New Files
+
+- `apps/seeders/` - Seeder implementation files
+- `docs/initial_setup.md` - Setup and seeding documentation
+- `SEEDING.md` - Developer guide for seeders
+- `reset_admin.py` - Utility to reset admin password
+
 ---
 
 ## [2.0.0] 2026-01-25 - RijanAuth Phase 1: Foundation

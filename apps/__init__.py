@@ -19,6 +19,7 @@ def register_extensions(app):
     """Register Flask extensions"""
     db.init_app(app)
     login_manager.init_app(app)
+    login_manager.login_view = 'authentication_blueprint.login'
 
 
 def register_blueprints(app):
@@ -85,26 +86,36 @@ def configure_database(app):
 
 
 def _initialize_master_realm():
-    """Initialize the master realm if it doesn't exist"""
+    """Initialize the database using the seeder system"""
     try:
-        from apps.models.realm import Realm
-        from apps.services.realm_service import RealmService
+        from apps.seeders import needs_seeding, run_initial_seed
+        from apps.seeders.admin_user_seeder import InitialSetupToken
         
-        master = Realm.query.filter_by(name='master').first()
-        if master is None:
-            print('> Initializing master realm...')
-            RealmService.create_realm(
-                name='master',
-                display_name='Master Realm',
-                registration_allowed=False,
-                reset_password_allowed=True,
-                verify_email=False,
-                login_with_email_allowed=True,
-                brute_force_protected=True
-            )
-            print('> Master realm created successfully')
+        # Create setup tokens table if not exists
+        InitialSetupToken.__table__.create(db.engine, checkfirst=True)
+        
+        if needs_seeding():
+            print('> First run detected - running initial database seeding...')
+            admin_info = run_initial_seed()
+            
+            if admin_info and admin_info.get('password'):
+                print('')
+                print('=' * 60)
+                print('  INITIAL ADMIN CREDENTIALS')
+                print('=' * 60)
+                print(f"  Username: {admin_info['user'].username}")
+                print(f"  Password: {admin_info['password']}")
+                print(f"  Expires:  {admin_info['expires_at']}")
+                print('=' * 60)
+                print('  ⚠️  SAVE THESE NOW - They will not be shown again!')
+                print('=' * 60)
+                print('')
+        else:
+            print('> Database already seeded')
     except Exception as e:
-        print(f'> Warning: Could not initialize master realm: {e}')
+        print(f'> Warning: Could not run database seeding: {e}')
+        import traceback
+        traceback.print_exc()
 
 
 def configure_realm_middleware(app):

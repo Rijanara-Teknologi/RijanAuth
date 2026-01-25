@@ -46,6 +46,7 @@ class Realm(BaseModel):
     quick_login_check_milli_seconds = Column(Integer, default=1000)
     max_delta_time_seconds = Column(Integer, default=43200)  # 12 hours
     failure_factor = Column(Integer, default=30)
+    max_login_failures = Column(Integer, default=30)  # Alias for failure_factor
     max_temporary_lockouts = Column(Integer, default=0)
     
     # Token Settings
@@ -123,6 +124,14 @@ class Realm(BaseModel):
     
     # Password Policy
     password_policy = Column(Text, nullable=True)
+    
+    # Authentication Flow References
+    browser_flow_id = Column(String(36), nullable=True)
+    registration_flow_id = Column(String(36), nullable=True)
+    direct_grant_flow_id = Column(String(36), nullable=True)
+    reset_credentials_flow_id = Column(String(36), nullable=True)
+    client_authentication_flow_id = Column(String(36), nullable=True)
+    docker_authentication_flow_id = Column(String(36), nullable=True)
     
     # Default Roles
     default_role_id = Column(String(36), nullable=True)

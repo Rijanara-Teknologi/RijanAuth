@@ -7,11 +7,12 @@ User accounts with Keycloak-compatible attributes and credentials
 from datetime import datetime
 from sqlalchemy import Column, String, Boolean, Integer, Text, DateTime, LargeBinary, JSON
 from sqlalchemy.orm import relationship
+from flask_login import UserMixin
 from apps.models.base import RealmScopedModel, generate_uuid
 from apps import db
 
 
-class User(RealmScopedModel):
+class User(RealmScopedModel, UserMixin):
     """
     User - An authenticated user within a realm.
     Mirrors Keycloak's user model with all standard attributes.
@@ -120,6 +121,17 @@ class User(RealmScopedModel):
             query = query.filter(Role.client_id.is_(None), Role.name == role_name)
         return query.first() is not None
     
+    def verify_password(self, password):
+        """Verify password against user credentials"""
+        from apps.utils.crypto import verify_password as verify_hash
+        cred = self.get_password_credential()
+        if not cred or not cred.secret_data:
+            return False
+            
+        # If legacy hash, handle it (future proofing)
+        # For now, we only use bcrypt
+        return verify_hash(password, cred.secret_data)
+        
     def to_dict(self, include_attributes=False):
         """Serialize user to dictionary"""
         data = {

@@ -76,13 +76,28 @@ class Users(db.Model, UserMixin):
 
 @login_manager.user_loader
 def user_loader(id):
-    return Users.query.filter_by(id=id).first()
+    try:
+        from apps.models.user import User
+        return User.query.get(id)
+    except:
+        return None
 
 @login_manager.request_loader
 def request_loader(request):
     username = request.form.get('username')
-    user = Users.query.filter_by(username=username).first()
-    return user if user else None
+    try:
+        from apps.models.user import User
+        from apps.models.realm import Realm
+        
+        # Assumption: request loader only used for master realm admin
+        # In future, we should parse realm from URL or header
+        master = Realm.get_master_realm()
+        if master:
+            user = User.find_by_username(master.id, username)
+            return user
+    except:
+        pass
+    return None
 
 class OAuth(OAuthConsumerMixin, db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("legacy_users.id", ondelete="cascade"), nullable=False)

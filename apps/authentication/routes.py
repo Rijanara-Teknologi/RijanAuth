@@ -39,27 +39,32 @@ def login():
     if 'login' in request.form:
 
         # read form data
-        user_id  = request.form['username'] # we can have here username OR email
+        user_id  = request.form['username']
         password = request.form['password']
 
-        # Locate user
-        user = Users.find_by_username(user_id)
+        # Locate user in Master Realm
+        try:
+            from apps.models.user import User
+            from apps.models.realm import Realm
+            
+            master_realm = Realm.find_by_name('master')
+            user = None
+            
+            if master_realm:
+                # Try username
+                user = User.find_by_username(master_realm.id, user_id)
+                
+                # Try email
+                if not user:
+                    user = User.find_by_email(master_realm.id, user_id)
+            
+            if user and user.verify_password(password):
+                login_user(user)
+                return redirect(url_for('authentication_blueprint.route_default'))
 
-        # if user not found
-        if not user:
-
-            user = Users.find_by_email(user_id)
-
-            if not user:
-                return render_template( 'accounts/login.html',
-                                        msg='Unknown User or Email',
-                                        form=login_form)
-
-        # Check the password
-        if verify_pass(password, user.password):
-
-            login_user(user)
-            return redirect(url_for('authentication_blueprint.route_default'))
+        except Exception as e:
+            print(f"Login error: {e}")
+            pass
 
         # Something (user or pass) is not ok
         return render_template('accounts/login.html',
@@ -120,9 +125,9 @@ def logout():
 
 # Errors
 
-@login_manager.unauthorized_handler
-def unauthorized_handler():
-    return render_template('home/page-403.html'), 403
+# @login_manager.unauthorized_handler
+# def unauthorized_handler():
+#     return render_template('home/page-403.html'), 403
 
 
 @blueprint.errorhandler(403)
