@@ -1,5 +1,65 @@
 # Change Log
 
+## [2.4.0] 2026-01-25 - Custom JWT Claims & Protocol Mappers
+
+### New Features
+
+- **Protocol Mapper System**: Complete JWT token customization mirroring Keycloak's mapper functionality
+  - **User Attribute Mapper**: Maps user attributes to token claims
+  - **Hardcoded Claim Mapper**: Adds fixed values to tokens
+  - **Realm Role Mapper**: Maps realm roles to token claims
+  - **Client Role Mapper**: Maps client roles to token claims
+  - **Group Membership Mapper**: Maps user groups to token claims
+  - **Audience Mapper**: Adds additional audiences to tokens
+  - **Full Name Mapper**: Combines first/last name
+  - **Address Mapper**: Maps address attributes
+
+- **Client Scopes**: Reusable sets of protocol mappers
+  - Default scopes: openid, profile, email, roles, groups, address, phone, offline_access
+  - Client scope assignment to clients
+  - Inherited mappers from assigned scopes
+
+- **Token Customization Features**:
+  - Per-token-type configuration (access, ID, userinfo)
+  - Priority ordering for mappers
+  - Nested claim support (dot notation)
+  - JSON type conversion (String, int, boolean, JSON)
+  - Multivalued claim support
+  - Protected claim validation (prevents overriding iss, sub, aud, exp, etc.)
+
+- **Admin UI**:
+  - Client mappers management page (Clients > [client] > Mappers tab)
+  - Client scopes list and detail pages
+  - Mapper creation/edit forms with type-specific fields
+  - Inherited mappers display from assigned scopes
+
+- **REST API**:
+  - `GET/POST /api/{realm}/clients/{client}/protocol-mappers` - List/create client mappers
+  - `GET/PUT/DELETE /api/{realm}/clients/{client}/protocol-mappers/{id}` - Mapper CRUD
+  - `GET /api/{realm}/client-scopes` - List client scopes
+  - `GET/POST /api/{realm}/client-scopes/{id}/protocol-mappers` - Scope mapper management
+  - `GET /api/{realm}/clients/{client}/token-preview` - Preview token with mappers
+
+### New Files
+
+- `apps/services/mapper_service.py` - MapperService for token claim processing
+- `apps/seeders/client_scopes_seeder.py` - Default client scopes with mappers
+- `apps/templates/admin/clients/mappers.html` - Client mappers list page
+- `apps/templates/admin/clients/mapper_form.html` - Mapper create/edit form
+- `apps/templates/admin/client_scopes/list.html` - Client scopes list
+- `apps/templates/admin/client_scopes/detail.html` - Client scope detail with mappers
+
+### Updated Files
+
+- `apps/models/client.py` - Enhanced ProtocolMapper model with priority, validation
+- `apps/blueprints/oidc/routes.py` - Token generation uses MapperService
+- `apps/blueprints/admin/routes.py` - Client mapper and scope routes
+- `apps/blueprints/admin/api.py` - Protocol mapper API endpoints
+- `apps/templates/includes/admin_sidebar.html` - Added Client Scopes menu
+- `apps/seeders/__init__.py` - Includes client scopes seeding
+
+---
+
 ## [2.3.0] 2026-01-25 - User Federation & SSO Session Management
 
 ### New Features

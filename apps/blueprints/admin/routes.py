@@ -855,3 +855,356 @@ def _build_provider_config(provider_type, form):
         }
     
     return config
+
+
+# =============================================================================
+# Client Protocol Mappers
+# =============================================================================
+
+@admin_bp.route('/<realm_name>/clients/<client_id>/mappers')
+@login_required
+def client_mappers(realm_name, client_id):
+    """List protocol mappers for a client"""
+    from apps.models.client import ProtocolMapper, ClientScope, ClientScopeMapping
+    
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    client = Client.query.get(client_id)
+    if not client or client.realm_id != realm.id:
+        flash('Client not found', 'error')
+        return redirect(url_for('admin.clients_list', realm_name=realm_name))
+    
+    # Get client's own mappers
+    client_mappers = ProtocolMapper.find_by_client(client_id)
+    
+    # Get inherited mappers from default scopes
+    inherited_mappers = []
+    scope_mappings = ClientScopeMapping.query.filter_by(client_id=client_id, default_scope=True).all()
+    for mapping in scope_mappings:
+        scope = ClientScope.query.get(mapping.scope_id)
+        if scope:
+            scope_mappers = ProtocolMapper.find_by_client_scope(scope.id)
+            for mapper in scope_mappers:
+                inherited_mappers.append({
+                    'mapper': mapper,
+                    'scope': scope
+                })
+    
+    # Mapper types for dropdown
+    mapper_types = ProtocolMapper.MAPPER_TYPES
+    
+    return render_template(
+        'admin/clients/mappers.html',
+        realm=realm,
+        client=client,
+        mappers=client_mappers,
+        inherited_mappers=inherited_mappers,
+        mapper_types=mapper_types,
+        segment='clients'
+    )
+
+
+@admin_bp.route('/<realm_name>/clients/<client_id>/mappers/add', methods=['GET', 'POST'])
+@login_required
+def client_mapper_add(realm_name, client_id):
+    """Add a new protocol mapper to a client"""
+    from apps.models.client import ProtocolMapper
+    from apps import db
+    
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    client = Client.query.get(client_id)
+    if not client or client.realm_id != realm.id:
+        flash('Client not found', 'error')
+        return redirect(url_for('admin.clients_list', realm_name=realm_name))
+    
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        mapper_type = request.form.get('mapper_type', '')
+        
+        if not name:
+            flash('Mapper name is required', 'error')
+            return redirect(url_for('admin.client_mapper_add', realm_name=realm_name, client_id=client_id))
+        
+        # Build config based on mapper type
+        config = _build_mapper_config(mapper_type, request.form)
+        
+        # Validate config
+        from apps.services.mapper_service import MapperService
+        errors = MapperService.validate_mapper_config(mapper_type, config)
+        if errors:
+            for error in errors:
+                flash(error, 'error')
+            return redirect(url_for('admin.client_mapper_add', realm_name=realm_name, client_id=client_id))
+        
+        # Create mapper
+        mapper = ProtocolMapper(
+            name=name,
+            protocol='openid-connect',
+            protocol_mapper=mapper_type,
+            client_id=client_id,
+            config=config,
+            priority=int(request.form.get('priority', 0))
+        )
+        db.session.add(mapper)
+        db.session.commit()
+        
+        flash(f'Mapper "{name}" created successfully', 'success')
+        return redirect(url_for('admin.client_mappers', realm_name=realm_name, client_id=client_id))
+    
+    # GET - show form
+    mapper_type = request.args.get('type', 'oidc-usermodel-attribute-mapper')
+    mapper_types = ProtocolMapper.MAPPER_TYPES
+    
+    return render_template(
+        'admin/clients/mapper_form.html',
+        realm=realm,
+        client=client,
+        mapper=None,
+        mapper_type=mapper_type,
+        mapper_types=mapper_types,
+        segment='clients'
+    )
+
+
+@admin_bp.route('/<realm_name>/clients/<client_id>/mappers/<mapper_id>/edit', methods=['GET', 'POST'])
+@login_required
+def client_mapper_edit(realm_name, client_id, mapper_id):
+    """Edit a protocol mapper"""
+    from apps.models.client import ProtocolMapper
+    from apps import db
+    
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    client = Client.query.get(client_id)
+    if not client or client.realm_id != realm.id:
+        flash('Client not found', 'error')
+        return redirect(url_for('admin.clients_list', realm_name=realm_name))
+    
+    mapper = ProtocolMapper.query.get(mapper_id)
+    if not mapper or mapper.client_id != client_id:
+        flash('Mapper not found', 'error')
+        return redirect(url_for('admin.client_mappers', realm_name=realm_name, client_id=client_id))
+    
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        
+        if not name:
+            flash('Mapper name is required', 'error')
+            return redirect(url_for('admin.client_mapper_edit', realm_name=realm_name, client_id=client_id, mapper_id=mapper_id))
+        
+        # Build config
+        config = _build_mapper_config(mapper.protocol_mapper, request.form)
+        
+        # Validate
+        from apps.services.mapper_service import MapperService
+        errors = MapperService.validate_mapper_config(mapper.protocol_mapper, config)
+        if errors:
+            for error in errors:
+                flash(error, 'error')
+            return redirect(url_for('admin.client_mapper_edit', realm_name=realm_name, client_id=client_id, mapper_id=mapper_id))
+        
+        # Update mapper
+        mapper.name = name
+        mapper.config = config
+        mapper.priority = int(request.form.get('priority', 0))
+        db.session.commit()
+        
+        flash(f'Mapper "{name}" updated successfully', 'success')
+        return redirect(url_for('admin.client_mappers', realm_name=realm_name, client_id=client_id))
+    
+    # GET - show form
+    mapper_types = ProtocolMapper.MAPPER_TYPES
+    
+    return render_template(
+        'admin/clients/mapper_form.html',
+        realm=realm,
+        client=client,
+        mapper=mapper,
+        mapper_type=mapper.protocol_mapper,
+        mapper_types=mapper_types,
+        segment='clients'
+    )
+
+
+@admin_bp.route('/<realm_name>/clients/<client_id>/mappers/<mapper_id>/delete', methods=['POST'])
+@login_required
+def client_mapper_delete(realm_name, client_id, mapper_id):
+    """Delete a protocol mapper"""
+    from apps.models.client import ProtocolMapper
+    from apps import db
+    
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    client = Client.query.get(client_id)
+    if not client or client.realm_id != realm.id:
+        flash('Client not found', 'error')
+        return redirect(url_for('admin.clients_list', realm_name=realm_name))
+    
+    mapper = ProtocolMapper.query.get(mapper_id)
+    if not mapper or mapper.client_id != client_id:
+        flash('Mapper not found', 'error')
+        return redirect(url_for('admin.client_mappers', realm_name=realm_name, client_id=client_id))
+    
+    mapper_name = mapper.name
+    db.session.delete(mapper)
+    db.session.commit()
+    
+    flash(f'Mapper "{mapper_name}" deleted successfully', 'success')
+    return redirect(url_for('admin.client_mappers', realm_name=realm_name, client_id=client_id))
+
+
+# =============================================================================
+# Client Scopes
+# =============================================================================
+
+@admin_bp.route('/<realm_name>/client-scopes')
+@login_required
+def client_scopes_list(realm_name):
+    """List client scopes for a realm"""
+    from apps.models.client import ClientScope
+    
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    scopes = ClientScope.query.filter_by(realm_id=realm.id).order_by(ClientScope.name).all()
+    
+    return render_template(
+        'admin/client_scopes/list.html',
+        realm=realm,
+        scopes=scopes,
+        segment='client-scopes'
+    )
+
+
+@admin_bp.route('/<realm_name>/client-scopes/<scope_id>')
+@login_required
+def client_scope_detail(realm_name, scope_id):
+    """View client scope details and mappers"""
+    from apps.models.client import ClientScope, ProtocolMapper
+    
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    scope = ClientScope.query.get(scope_id)
+    if not scope or scope.realm_id != realm.id:
+        flash('Client scope not found', 'error')
+        return redirect(url_for('admin.client_scopes_list', realm_name=realm_name))
+    
+    mappers = ProtocolMapper.find_by_client_scope(scope_id)
+    mapper_types = ProtocolMapper.MAPPER_TYPES
+    
+    return render_template(
+        'admin/client_scopes/detail.html',
+        realm=realm,
+        scope=scope,
+        mappers=mappers,
+        mapper_types=mapper_types,
+        segment='client-scopes'
+    )
+
+
+@admin_bp.route('/<realm_name>/client-scopes/<scope_id>/mappers/add', methods=['GET', 'POST'])
+@login_required
+def client_scope_mapper_add(realm_name, scope_id):
+    """Add a mapper to a client scope"""
+    from apps.models.client import ClientScope, ProtocolMapper
+    from apps import db
+    
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    scope = ClientScope.query.get(scope_id)
+    if not scope or scope.realm_id != realm.id:
+        flash('Client scope not found', 'error')
+        return redirect(url_for('admin.client_scopes_list', realm_name=realm_name))
+    
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        mapper_type = request.form.get('mapper_type', '')
+        
+        if not name:
+            flash('Mapper name is required', 'error')
+            return redirect(url_for('admin.client_scope_mapper_add', realm_name=realm_name, scope_id=scope_id))
+        
+        config = _build_mapper_config(mapper_type, request.form)
+        
+        mapper = ProtocolMapper(
+            name=name,
+            protocol='openid-connect',
+            protocol_mapper=mapper_type,
+            client_scope_id=scope_id,
+            config=config,
+            priority=int(request.form.get('priority', 0))
+        )
+        db.session.add(mapper)
+        db.session.commit()
+        
+        flash(f'Mapper "{name}" created successfully', 'success')
+        return redirect(url_for('admin.client_scope_detail', realm_name=realm_name, scope_id=scope_id))
+    
+    mapper_type = request.args.get('type', 'oidc-usermodel-attribute-mapper')
+    mapper_types = ProtocolMapper.MAPPER_TYPES
+    
+    return render_template(
+        'admin/client_scopes/mapper_form.html',
+        realm=realm,
+        scope=scope,
+        mapper=None,
+        mapper_type=mapper_type,
+        mapper_types=mapper_types,
+        segment='client-scopes'
+    )
+
+
+def _build_mapper_config(mapper_type: str, form) -> dict:
+    """Build mapper configuration from form data"""
+    config = {
+        'claim.name': form.get('claim_name', ''),
+        'access.token.claim': 'true' if form.get('access_token_claim') else 'false',
+        'id.token.claim': 'true' if form.get('id_token_claim') else 'false',
+        'userinfo.token.claim': 'true' if form.get('userinfo_token_claim') else 'false',
+        'jsonType.label': form.get('json_type', 'String'),
+    }
+    
+    if mapper_type == 'oidc-usermodel-attribute-mapper':
+        config['user.attribute'] = form.get('user_attribute', '')
+        config['multivalued'] = 'true' if form.get('multivalued') else 'false'
+        config['aggregate.attrs'] = 'true' if form.get('aggregate_attrs') else 'false'
+    
+    elif mapper_type == 'oidc-hardcoded-claim-mapper':
+        config['claim.value'] = form.get('claim_value', '')
+    
+    elif mapper_type in ('oidc-usermodel-realm-role-mapper', 'oidc-usermodel-client-role-mapper'):
+        config['multivalued'] = 'true' if form.get('multivalued', True) else 'false'
+        config['role.prefix'] = form.get('role_prefix', '')
+        if mapper_type == 'oidc-usermodel-client-role-mapper':
+            config['client.id'] = form.get('target_client_id', '')
+    
+    elif mapper_type == 'oidc-group-membership-mapper':
+        config['full.path'] = 'true' if form.get('full_path', True) else 'false'
+    
+    elif mapper_type == 'oidc-audience-mapper':
+        config['included.client.audience'] = form.get('included_client_audience', '')
+        config['included.custom.audience'] = form.get('included_custom_audience', '')
+        config['add.to.access.token'] = 'true' if form.get('add_to_access_token', True) else 'false'
+        config['add.to.id.token'] = 'true' if form.get('add_to_id_token') else 'false'
+    
+    elif mapper_type == 'oidc-full-name-mapper':
+        pass  # Uses default claim.name
+    
+    elif mapper_type == 'oidc-address-mapper':
+        pass  # Uses default claim.name
+    
+    return config

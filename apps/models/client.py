@@ -233,6 +233,15 @@ class ProtocolMapper(db.Model):
     """
     Protocol Mapper - Defines how claims are added to tokens.
     Can be attached to a client or client scope.
+    
+    Mapper Types:
+    - oidc-usermodel-attribute-mapper: Maps user attributes to token claims
+    - oidc-hardcoded-claim-mapper: Adds hardcoded values to tokens
+    - oidc-usermodel-realm-role-mapper: Maps realm roles to token claims
+    - oidc-usermodel-client-role-mapper: Maps client roles to token claims
+    - oidc-group-membership-mapper: Maps group memberships to token claims
+    - oidc-audience-mapper: Adds audience claims
+    - oidc-full-name-mapper: Maps full name to token
     """
     __tablename__ = 'protocol_mappers'
     
@@ -250,14 +259,76 @@ class ProtocolMapper(db.Model):
     client_scope_id = Column(String(36), db.ForeignKey('client_scopes.id', ondelete='CASCADE'), nullable=True, index=True)
     
     # Configuration (JSON object)
+    # Common config keys:
+    # - claim.name: Name of the claim in the token
+    # - claim.value: Hardcoded value (for hardcoded mapper)
+    # - user.attribute: User attribute to map (for attribute mapper)
+    # - access.token.claim: "true"/"false" - include in access token
+    # - id.token.claim: "true"/"false" - include in ID token
+    # - userinfo.token.claim: "true"/"false" - include in userinfo response
+    # - jsonType.label: Data type (String, int, boolean, JSON)
+    # - multivalued: "true"/"false" - is this a multi-valued claim
     config = Column(JSON, default=dict)
+    
+    # Priority for ordering (lower = processed first)
+    priority = Column(Integer, default=0, nullable=False)
+    
+    # Consent text (shown when consent is required)
+    consent_text = Column(String(255), nullable=True)
     
     # Relationships
     client = relationship('Client', back_populates='protocol_mappers')
     client_scope = relationship('ClientScope', back_populates='protocol_mappers')
     
+    # Protected claims that cannot be overridden
+    PROTECTED_CLAIMS = {'iss', 'sub', 'aud', 'exp', 'iat', 'jti', 'auth_time', 'nonce', 'acr', 'azp', 'typ'}
+    
+    # Valid mapper types
+    MAPPER_TYPES = {
+        'oidc-usermodel-attribute-mapper': 'User Attribute',
+        'oidc-hardcoded-claim-mapper': 'Hardcoded Claim',
+        'oidc-usermodel-realm-role-mapper': 'User Realm Role',
+        'oidc-usermodel-client-role-mapper': 'User Client Role',
+        'oidc-group-membership-mapper': 'Group Membership',
+        'oidc-audience-mapper': 'Audience',
+        'oidc-full-name-mapper': 'Full Name',
+        'oidc-address-mapper': 'Address',
+    }
+    
     def __repr__(self):
-        return f'<ProtocolMapper {self.name}>'
+        return f'<ProtocolMapper {self.name} ({self.protocol_mapper})>'
+    
+    @classmethod
+    def find_by_client(cls, client_id):
+        """Get all mappers for a client"""
+        return cls.query.filter_by(client_id=client_id).order_by(cls.priority).all()
+    
+    @classmethod
+    def find_by_client_scope(cls, client_scope_id):
+        """Get all mappers for a client scope"""
+        return cls.query.filter_by(client_scope_id=client_scope_id).order_by(cls.priority).all()
+    
+    def applies_to_token_type(self, token_type: str) -> bool:
+        """Check if this mapper should apply to the given token type"""
+        config = self.config or {}
+        
+        if token_type == 'access':
+            return config.get('access.token.claim', 'true') == 'true'
+        elif token_type == 'id':
+            return config.get('id.token.claim', 'true') == 'true'
+        elif token_type == 'userinfo':
+            return config.get('userinfo.token.claim', 'true') == 'true'
+        
+        return True
+    
+    def get_claim_name(self) -> str:
+        """Get the claim name from config"""
+        return self.config.get('claim.name', '')
+    
+    def is_claim_protected(self) -> bool:
+        """Check if this mapper tries to override a protected claim"""
+        claim_name = self.get_claim_name()
+        return claim_name in self.PROTECTED_CLAIMS
     
     def to_dict(self):
         return {
@@ -265,6 +336,11 @@ class ProtocolMapper(db.Model):
             'name': self.name,
             'protocol': self.protocol,
             'protocolMapper': self.protocol_mapper,
+            'protocolMapperLabel': self.MAPPER_TYPES.get(self.protocol_mapper, self.protocol_mapper),
             'consentRequired': False,
+            'consentText': self.consent_text,
             'config': self.config or {},
+            'priority': self.priority,
+            'clientId': self.client_id,
+            'clientScopeId': self.client_scope_id,
         }

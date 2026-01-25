@@ -75,6 +75,14 @@
                     <label>Configure</label>
                 </li>
 
+                <li data-username="client-scopes" class="nav-item {% if segment == 'client-scopes' %} active {% endif %}">
+                    <a href="{{ url_for('admin.client_scopes_list', realm_name=realm.name if realm else 'master') }}"
+                        class="nav-link">
+                        <span class="pcoded-micon"><i class="feather icon-layers"></i></span>
+                        <span class="pcoded-mtext">Client Scopes</span>
+                    </a>
+                </li>
+
                 <li data-username="federation" class="nav-item {% if segment == 'federation' %} active {% endif %}">
                     <a href="{{ url_for('admin.federation_list', realm_name=realm.name if realm else 'master') }}"
                         class="nav-link">

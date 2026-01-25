@@ -245,7 +245,7 @@ def _generate_auth_response(realm, client, user, redirect_uri, response_type,
     
     if 'id_token' in response_type:
         # Generate ID token
-        id_token = _generate_id_token(realm, client, user, nonce)
+        id_token = _generate_id_token(realm, client, user, nonce, scope)
         params['id_token'] = id_token
     
     # Build redirect URL
@@ -465,7 +465,7 @@ def _handle_authorization_code_grant(realm):
     
     # Add ID token for openid scope
     if 'openid' in scope:
-        response_data['id_token'] = _generate_id_token(realm, client, user, auth_code.nonce)
+        response_data['id_token'] = _generate_id_token(realm, client, user, auth_code.nonce, scope)
     
     return jsonify(response_data)
 
@@ -524,7 +524,7 @@ def _handle_refresh_token_grant(realm):
     }
     
     if 'openid' in scope:
-        response_data['id_token'] = _generate_id_token(realm, client, user, None)
+        response_data['id_token'] = _generate_id_token(realm, client, user, None, scope)
     
     return jsonify(response_data)
 
@@ -606,7 +606,7 @@ def _handle_password_grant(realm):
     }
     
     if 'openid' in scope:
-        response_data['id_token'] = _generate_id_token(realm, client, user, None)
+        response_data['id_token'] = _generate_id_token(realm, client, user, None, scope)
     
     return jsonify(response_data)
 
@@ -641,11 +641,15 @@ def _handle_client_credentials_grant(realm):
 # =============================================================================
 
 def _generate_access_token(realm, client, user, scope):
-    """Generate JWT access token"""
+    """Generate JWT access token with protocol mapper processing"""
+    from apps.services.mapper_service import MapperService
+    
     base_url = request.url_root.rstrip('/')
     issuer = f"{base_url}/auth/realms/{realm.name}"
     
     now = datetime.utcnow()
+    
+    # Build base token with protected claims
     payload = {
         'exp': now + timedelta(seconds=realm.access_token_lifespan),
         'iat': now,
@@ -657,13 +661,20 @@ def _generate_access_token(realm, client, user, scope):
         'typ': 'Bearer',
         'azp': client.client_id,
         'scope': scope,
-        'preferred_username': user.username,
-        'email': user.email,
-        'email_verified': user.email_verified,
-        'name': f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username,
-        'given_name': user.first_name,
-        'family_name': user.last_name
     }
+    
+    # Apply protocol mappers to add custom claims
+    try:
+        payload = MapperService.apply_mappers(payload, user, client, 'access', scope)
+    except Exception as e:
+        current_app.logger.error(f"Error applying mappers to access token: {str(e)}")
+        # Fallback to basic claims if mapper fails
+        payload['preferred_username'] = user.username
+        payload['email'] = user.email
+        payload['email_verified'] = user.email_verified
+        payload['name'] = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username
+        payload['given_name'] = user.first_name
+        payload['family_name'] = user.last_name
     
     return create_jwt(payload, current_app.config.get('SECRET_KEY', 'secret'))
 
@@ -687,12 +698,16 @@ def _generate_refresh_token(realm, client, user, scope, user_session_id=None):
     return token_value
 
 
-def _generate_id_token(realm, client, user, nonce):
-    """Generate OIDC ID Token"""
+def _generate_id_token(realm, client, user, nonce, scope='openid'):
+    """Generate OIDC ID Token with protocol mapper processing"""
+    from apps.services.mapper_service import MapperService
+    
     base_url = request.url_root.rstrip('/')
     issuer = f"{base_url}/auth/realms/{realm.name}"
     
     now = datetime.utcnow()
+    
+    # Build base token with protected claims
     payload = {
         'exp': now + timedelta(seconds=realm.access_token_lifespan),
         'iat': now,
@@ -703,16 +718,23 @@ def _generate_id_token(realm, client, user, nonce):
         'sub': user.id,
         'typ': 'ID',
         'azp': client.client_id,
-        'preferred_username': user.username,
-        'email': user.email,
-        'email_verified': user.email_verified,
-        'name': f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username,
-        'given_name': user.first_name,
-        'family_name': user.last_name
     }
     
     if nonce:
         payload['nonce'] = nonce
+    
+    # Apply protocol mappers to add custom claims
+    try:
+        payload = MapperService.apply_mappers(payload, user, client, 'id', scope)
+    except Exception as e:
+        current_app.logger.error(f"Error applying mappers to ID token: {str(e)}")
+        # Fallback to basic claims if mapper fails
+        payload['preferred_username'] = user.username
+        payload['email'] = user.email
+        payload['email_verified'] = user.email_verified
+        payload['name'] = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username
+        payload['given_name'] = user.first_name
+        payload['family_name'] = user.last_name
     
     return create_jwt(payload, current_app.config.get('SECRET_KEY', 'secret'))
 

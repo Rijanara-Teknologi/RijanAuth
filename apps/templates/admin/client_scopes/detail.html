@@ -1,0 +1,133 @@
+{% extends "layouts/admin_base.html" %}
+
+{% block title %}{{ scope.name }} - Client Scope{% endblock %}
+
+{% block content %}
+<div class="pcoded-main-container">
+    <div class="pcoded-wrapper">
+        <div class="pcoded-content">
+            <div class="pcoded-inner-content">
+                <div class="main-body">
+                    <div class="page-wrapper">
+                        <!-- Page Header -->
+                        <div class="page-header">
+                            <div class="page-block">
+                                <div class="row align-items-center">
+                                    <div class="col-md-12">
+                                        <div class="page-header-title">
+                                            <h5 class="m-b-10">{{ scope.name }}</h5>
+                                        </div>
+                                        <ul class="breadcrumb">
+                                            <li class="breadcrumb-item">
+                                                <a href="{{ url_for('admin.index') }}"><i class="feather icon-home"></i></a>
+                                            </li>
+                                            <li class="breadcrumb-item">
+                                                <a href="{{ url_for('admin.client_scopes_list', realm_name=realm.name) }}">Client Scopes</a>
+                                            </li>
+                                            <li class="breadcrumb-item active">{{ scope.name }}</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <!-- Scope Info -->
+                            <div class="col-lg-4">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5><i class="feather icon-info mr-2"></i>Scope Details</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <dl>
+                                            <dt>Name</dt>
+                                            <dd><code>{{ scope.name }}</code></dd>
+                                            
+                                            <dt>Description</dt>
+                                            <dd>{{ scope.description or '-' }}</dd>
+                                            
+                                            <dt>Protocol</dt>
+                                            <dd><span class="badge badge-info">{{ scope.protocol }}</span></dd>
+                                        </dl>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Mappers -->
+                            <div class="col-lg-8">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <div class="row align-items-center">
+                                            <div class="col-md-6">
+                                                <h5><i class="feather icon-code mr-2"></i>Protocol Mappers</h5>
+                                            </div>
+                                            <div class="col-md-6 text-right">
+                                                <div class="dropdown d-inline-block">
+                                                    <button class="btn btn-primary btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
+                                                        <i class="feather icon-plus mr-1"></i> Add Mapper
+                                                    </button>
+                                                    <div class="dropdown-menu dropdown-menu-right">
+                                                        {% for type_key, type_label in mapper_types.items() %}
+                                                        <a class="dropdown-item" href="{{ url_for('admin.client_scope_mapper_add', realm_name=realm.name, scope_id=scope.id, type=type_key) }}">
+                                                            {{ type_label }}
+                                                        </a>
+                                                        {% endfor %}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="card-body">
+                                        {% if mappers %}
+                                        <div class="table-responsive">
+                                            <table class="table table-hover">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Name</th>
+                                                        <th>Type</th>
+                                                        <th>Claim Name</th>
+                                                        <th>Token Types</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for mapper in mappers %}
+                                                    <tr>
+                                                        <td><strong>{{ mapper.name }}</strong></td>
+                                                        <td>
+                                                            <span class="badge badge-info">{{ mapper_types.get(mapper.protocol_mapper, mapper.protocol_mapper) }}</span>
+                                                        </td>
+                                                        <td><code>{{ mapper.config.get('claim.name', '-') }}</code></td>
+                                                        <td>
+                                                            {% if mapper.config.get('access.token.claim') == 'true' %}
+                                                            <span class="badge badge-success badge-sm">Access</span>
+                                                            {% endif %}
+                                                            {% if mapper.config.get('id.token.claim') == 'true' %}
+                                                            <span class="badge badge-primary badge-sm">ID</span>
+                                                            {% endif %}
+                                                            {% if mapper.config.get('userinfo.token.claim') == 'true' %}
+                                                            <span class="badge badge-secondary badge-sm">UserInfo</span>
+                                                            {% endif %}
+                                                        </td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        {% else %}
+                                        <div class="text-center text-muted py-4">
+                                            <i class="feather icon-code f-48 mb-3"></i>
+                                            <p>No mappers configured for this scope</p>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

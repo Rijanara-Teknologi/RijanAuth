@@ -549,3 +549,295 @@ def api_delete_federation_mapper(realm_name, provider_id, mapper_id):
     db.session.commit()
     
     return '', 204
+
+
+# =============================================================================
+# Protocol Mappers API
+# =============================================================================
+
+@admin_bp.route('/api/<realm_name>/clients/<client_id>/protocol-mappers', methods=['GET'])
+@login_required
+def api_list_client_mappers(realm_name, client_id):
+    """List protocol mappers for a client"""
+    from apps.models.client import ProtocolMapper
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    client = Client.query.get(client_id)
+    if not client or client.realm_id != realm.id:
+        return jsonify({'error': 'Client not found'}), 404
+    
+    mappers = ProtocolMapper.find_by_client(client_id)
+    return jsonify([m.to_dict() for m in mappers])
+
+
+@admin_bp.route('/api/<realm_name>/clients/<client_id>/protocol-mappers', methods=['POST'])
+@login_required
+def api_create_client_mapper(realm_name, client_id):
+    """Create a protocol mapper for a client"""
+    from apps.models.client import ProtocolMapper
+    from apps.services.mapper_service import MapperService
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    client = Client.query.get(client_id)
+    if not client or client.realm_id != realm.id:
+        return jsonify({'error': 'Client not found'}), 404
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Invalid JSON'}), 400
+    
+    name = data.get('name')
+    mapper_type = data.get('protocolMapper')
+    config = data.get('config', {})
+    
+    if not name:
+        return jsonify({'error': 'Mapper name is required'}), 400
+    if not mapper_type:
+        return jsonify({'error': 'protocolMapper type is required'}), 400
+    
+    # Validate config
+    errors = MapperService.validate_mapper_config(mapper_type, config)
+    if errors:
+        return jsonify({'error': 'Invalid configuration', 'details': errors}), 400
+    
+    mapper = ProtocolMapper(
+        name=name,
+        protocol=data.get('protocol', 'openid-connect'),
+        protocol_mapper=mapper_type,
+        client_id=client_id,
+        config=config,
+        priority=data.get('priority', 0)
+    )
+    db.session.add(mapper)
+    db.session.commit()
+    
+    return jsonify(mapper.to_dict()), 201
+
+
+@admin_bp.route('/api/<realm_name>/clients/<client_id>/protocol-mappers/<mapper_id>', methods=['GET'])
+@login_required
+def api_get_client_mapper(realm_name, client_id, mapper_id):
+    """Get a specific protocol mapper"""
+    from apps.models.client import ProtocolMapper
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    client = Client.query.get(client_id)
+    if not client or client.realm_id != realm.id:
+        return jsonify({'error': 'Client not found'}), 404
+    
+    mapper = ProtocolMapper.query.get(mapper_id)
+    if not mapper or mapper.client_id != client_id:
+        return jsonify({'error': 'Mapper not found'}), 404
+    
+    return jsonify(mapper.to_dict())
+
+
+@admin_bp.route('/api/<realm_name>/clients/<client_id>/protocol-mappers/<mapper_id>', methods=['PUT'])
+@login_required
+def api_update_client_mapper(realm_name, client_id, mapper_id):
+    """Update a protocol mapper"""
+    from apps.models.client import ProtocolMapper
+    from apps.services.mapper_service import MapperService
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    client = Client.query.get(client_id)
+    if not client or client.realm_id != realm.id:
+        return jsonify({'error': 'Client not found'}), 404
+    
+    mapper = ProtocolMapper.query.get(mapper_id)
+    if not mapper or mapper.client_id != client_id:
+        return jsonify({'error': 'Mapper not found'}), 404
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Invalid JSON'}), 400
+    
+    # Validate config if provided
+    if 'config' in data:
+        errors = MapperService.validate_mapper_config(mapper.protocol_mapper, data['config'])
+        if errors:
+            return jsonify({'error': 'Invalid configuration', 'details': errors}), 400
+        mapper.config = data['config']
+    
+    if 'name' in data:
+        mapper.name = data['name']
+    if 'priority' in data:
+        mapper.priority = data['priority']
+    
+    db.session.commit()
+    return jsonify(mapper.to_dict())
+
+
+@admin_bp.route('/api/<realm_name>/clients/<client_id>/protocol-mappers/<mapper_id>', methods=['DELETE'])
+@login_required
+def api_delete_client_mapper(realm_name, client_id, mapper_id):
+    """Delete a protocol mapper"""
+    from apps.models.client import ProtocolMapper
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    client = Client.query.get(client_id)
+    if not client or client.realm_id != realm.id:
+        return jsonify({'error': 'Client not found'}), 404
+    
+    mapper = ProtocolMapper.query.get(mapper_id)
+    if not mapper or mapper.client_id != client_id:
+        return jsonify({'error': 'Mapper not found'}), 404
+    
+    db.session.delete(mapper)
+    db.session.commit()
+    
+    return '', 204
+
+
+# =============================================================================
+# Client Scopes API
+# =============================================================================
+
+@admin_bp.route('/api/<realm_name>/client-scopes', methods=['GET'])
+@login_required
+def api_list_client_scopes(realm_name):
+    """List client scopes for a realm"""
+    from apps.models.client import ClientScope
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    scopes = ClientScope.query.filter_by(realm_id=realm.id).order_by(ClientScope.name).all()
+    return jsonify([s.to_dict() for s in scopes])
+
+
+@admin_bp.route('/api/<realm_name>/client-scopes/<scope_id>', methods=['GET'])
+@login_required
+def api_get_client_scope(realm_name, scope_id):
+    """Get client scope details"""
+    from apps.models.client import ClientScope
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    scope = ClientScope.query.get(scope_id)
+    if not scope or scope.realm_id != realm.id:
+        return jsonify({'error': 'Client scope not found'}), 404
+    
+    return jsonify(scope.to_dict())
+
+
+@admin_bp.route('/api/<realm_name>/client-scopes/<scope_id>/protocol-mappers', methods=['GET'])
+@login_required
+def api_list_scope_mappers(realm_name, scope_id):
+    """List protocol mappers for a client scope"""
+    from apps.models.client import ClientScope, ProtocolMapper
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    scope = ClientScope.query.get(scope_id)
+    if not scope or scope.realm_id != realm.id:
+        return jsonify({'error': 'Client scope not found'}), 404
+    
+    mappers = ProtocolMapper.find_by_client_scope(scope_id)
+    return jsonify([m.to_dict() for m in mappers])
+
+
+@admin_bp.route('/api/<realm_name>/client-scopes/<scope_id>/protocol-mappers', methods=['POST'])
+@login_required
+def api_create_scope_mapper(realm_name, scope_id):
+    """Create a protocol mapper for a client scope"""
+    from apps.models.client import ClientScope, ProtocolMapper
+    from apps.services.mapper_service import MapperService
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    scope = ClientScope.query.get(scope_id)
+    if not scope or scope.realm_id != realm.id:
+        return jsonify({'error': 'Client scope not found'}), 404
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Invalid JSON'}), 400
+    
+    name = data.get('name')
+    mapper_type = data.get('protocolMapper')
+    config = data.get('config', {})
+    
+    if not name:
+        return jsonify({'error': 'Mapper name is required'}), 400
+    if not mapper_type:
+        return jsonify({'error': 'protocolMapper type is required'}), 400
+    
+    # Validate config
+    errors = MapperService.validate_mapper_config(mapper_type, config)
+    if errors:
+        return jsonify({'error': 'Invalid configuration', 'details': errors}), 400
+    
+    mapper = ProtocolMapper(
+        name=name,
+        protocol=data.get('protocol', 'openid-connect'),
+        protocol_mapper=mapper_type,
+        client_scope_id=scope_id,
+        config=config,
+        priority=data.get('priority', 0)
+    )
+    db.session.add(mapper)
+    db.session.commit()
+    
+    return jsonify(mapper.to_dict()), 201
+
+
+# =============================================================================
+# Token Preview API
+# =============================================================================
+
+@admin_bp.route('/api/<realm_name>/clients/<client_id>/token-preview', methods=['GET'])
+@login_required
+def api_token_preview(realm_name, client_id):
+    """Generate a preview of what tokens would look like with current mappers"""
+    from apps.services.mapper_service import MapperService
+    from flask_login import current_user
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    client = Client.query.get(client_id)
+    if not client or client.realm_id != realm.id:
+        return jsonify({'error': 'Client not found'}), 404
+    
+    # Use current user or specified user for preview
+    user_id = request.args.get('user_id', current_user.id)
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    token_type = request.args.get('token_type', 'access')
+    scopes = request.args.get('scope', 'openid profile email')
+    
+    try:
+        preview = MapperService.preview_token(client, user, token_type, scopes)
+        return jsonify({
+            'tokenType': token_type,
+            'scope': scopes,
+            'preview': preview
+        })
+    except Exception as e:
+        return jsonify({'error': f'Error generating preview: {str(e)}'}), 500

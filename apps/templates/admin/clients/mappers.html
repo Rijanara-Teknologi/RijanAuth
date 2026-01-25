@@ -1,0 +1,207 @@
+{% extends "layouts/admin_base.html" %}
+
+{% block title %}Protocol Mappers - {{ client.name or client.client_id }}{% endblock %}
+
+{% block content %}
+<div class="pcoded-main-container">
+    <div class="pcoded-wrapper">
+        <div class="pcoded-content">
+            <div class="pcoded-inner-content">
+                <div class="main-body">
+                    <div class="page-wrapper">
+                        <!-- Page Header -->
+                        <div class="page-header">
+                            <div class="page-block">
+                                <div class="row align-items-center">
+                                    <div class="col-md-12">
+                                        <div class="page-header-title">
+                                            <h5 class="m-b-10">Protocol Mappers</h5>
+                                        </div>
+                                        <ul class="breadcrumb">
+                                            <li class="breadcrumb-item">
+                                                <a href="{{ url_for('admin.index') }}"><i class="feather icon-home"></i></a>
+                                            </li>
+                                            <li class="breadcrumb-item">
+                                                <a href="{{ url_for('admin.clients_list', realm_name=realm.name) }}">Clients</a>
+                                            </li>
+                                            <li class="breadcrumb-item">
+                                                <a href="{{ url_for('admin.client_detail', realm_name=realm.name, client_id=client.id) }}">{{ client.client_id }}</a>
+                                            </li>
+                                            <li class="breadcrumb-item active">Mappers</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Client Navigation Tabs -->
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <ul class="nav nav-tabs mb-3">
+                                    <li class="nav-item">
+                                        <a class="nav-link" href="{{ url_for('admin.client_detail', realm_name=realm.name, client_id=client.id) }}">
+                                            <i class="feather icon-settings mr-1"></i> Settings
+                                        </a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link active" href="{{ url_for('admin.client_mappers', realm_name=realm.name, client_id=client.id) }}">
+                                            <i class="feather icon-code mr-1"></i> Mappers
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- Main Content -->
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <!-- Client Mappers -->
+                                <div class="card">
+                                    <div class="card-header">
+                                        <div class="row align-items-center">
+                                            <div class="col-md-6">
+                                                <h5><i class="feather icon-code mr-2"></i>Client Mappers</h5>
+                                                <small class="text-muted">Mappers defined specifically for this client</small>
+                                            </div>
+                                            <div class="col-md-6 text-right">
+                                                <div class="dropdown d-inline-block">
+                                                    <button class="btn btn-primary dropdown-toggle" type="button" data-toggle="dropdown">
+                                                        <i class="feather icon-plus mr-1"></i> Add Mapper
+                                                    </button>
+                                                    <div class="dropdown-menu dropdown-menu-right">
+                                                        {% for type_key, type_label in mapper_types.items() %}
+                                                        <a class="dropdown-item" href="{{ url_for('admin.client_mapper_add', realm_name=realm.name, client_id=client.id, type=type_key) }}">
+                                                            {{ type_label }}
+                                                        </a>
+                                                        {% endfor %}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="card-body">
+                                        {% if mappers %}
+                                        <div class="table-responsive">
+                                            <table class="table table-hover">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Name</th>
+                                                        <th>Type</th>
+                                                        <th>Claim Name</th>
+                                                        <th>Token Types</th>
+                                                        <th>Priority</th>
+                                                        <th class="text-right">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for mapper in mappers %}
+                                                    <tr>
+                                                        <td>
+                                                            <a href="{{ url_for('admin.client_mapper_edit', realm_name=realm.name, client_id=client.id, mapper_id=mapper.id) }}">
+                                                                <strong>{{ mapper.name }}</strong>
+                                                            </a>
+                                                        </td>
+                                                        <td>
+                                                            <span class="badge badge-info">{{ mapper_types.get(mapper.protocol_mapper, mapper.protocol_mapper) }}</span>
+                                                        </td>
+                                                        <td><code>{{ mapper.config.get('claim.name', '-') }}</code></td>
+                                                        <td>
+                                                            {% if mapper.config.get('access.token.claim') == 'true' %}
+                                                            <span class="badge badge-success badge-sm">Access</span>
+                                                            {% endif %}
+                                                            {% if mapper.config.get('id.token.claim') == 'true' %}
+                                                            <span class="badge badge-primary badge-sm">ID</span>
+                                                            {% endif %}
+                                                            {% if mapper.config.get('userinfo.token.claim') == 'true' %}
+                                                            <span class="badge badge-secondary badge-sm">UserInfo</span>
+                                                            {% endif %}
+                                                        </td>
+                                                        <td>{{ mapper.priority }}</td>
+                                                        <td class="text-right">
+                                                            <a href="{{ url_for('admin.client_mapper_edit', realm_name=realm.name, client_id=client.id, mapper_id=mapper.id) }}" 
+                                                               class="btn btn-sm btn-outline-primary" title="Edit">
+                                                                <i class="feather icon-edit"></i>
+                                                            </a>
+                                                            <form action="{{ url_for('admin.client_mapper_delete', realm_name=realm.name, client_id=client.id, mapper_id=mapper.id) }}" 
+                                                                  method="POST" class="d-inline" onsubmit="return confirm('Delete this mapper?');">
+                                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
+                                                                    <i class="feather icon-trash-2"></i>
+                                                                </button>
+                                                            </form>
+                                                        </td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        {% else %}
+                                        <div class="text-center text-muted py-4">
+                                            <i class="feather icon-code f-48 mb-3"></i>
+                                            <p>No client-specific mappers configured</p>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+
+                                <!-- Inherited Mappers from Scopes -->
+                                {% if inherited_mappers %}
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5><i class="feather icon-layers mr-2"></i>Inherited Mappers</h5>
+                                        <small class="text-muted">Mappers inherited from assigned client scopes</small>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="table-responsive">
+                                            <table class="table table-hover">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Name</th>
+                                                        <th>Type</th>
+                                                        <th>Claim Name</th>
+                                                        <th>From Scope</th>
+                                                        <th>Token Types</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for item in inherited_mappers %}
+                                                    <tr class="table-light">
+                                                        <td>{{ item.mapper.name }}</td>
+                                                        <td>
+                                                            <span class="badge badge-secondary">{{ mapper_types.get(item.mapper.protocol_mapper, item.mapper.protocol_mapper) }}</span>
+                                                        </td>
+                                                        <td><code>{{ item.mapper.config.get('claim.name', '-') }}</code></td>
+                                                        <td>
+                                                            <a href="{{ url_for('admin.client_scope_detail', realm_name=realm.name, scope_id=item.scope.id) }}">
+                                                                <span class="badge badge-info">{{ item.scope.name }}</span>
+                                                            </a>
+                                                        </td>
+                                                        <td>
+                                                            {% if item.mapper.config.get('access.token.claim') == 'true' %}
+                                                            <span class="badge badge-success badge-sm">Access</span>
+                                                            {% endif %}
+                                                            {% if item.mapper.config.get('id.token.claim') == 'true' %}
+                                                            <span class="badge badge-primary badge-sm">ID</span>
+                                                            {% endif %}
+                                                            {% if item.mapper.config.get('userinfo.token.claim') == 'true' %}
+                                                            <span class="badge badge-secondary badge-sm">UserInfo</span>
+                                                            {% endif %}
+                                                        </td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
+
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

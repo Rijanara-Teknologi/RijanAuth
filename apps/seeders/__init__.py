@@ -34,15 +34,19 @@ def run_initial_seed():
     from apps.seeders.auth_flows_seeder import seed_authentication_flows
     seed_authentication_flows(realm)
     
-    # 3. Create default clients
+    # 3. Create default client scopes with protocol mappers
+    from apps.seeders.client_scopes_seeder import seed_client_scopes
+    seed_client_scopes(realm.id)
+    
+    # 4. Create default clients
     from apps.seeders.default_clients_seeder import seed_default_clients
     seed_default_clients(realm)
     
-    # 4. Create admin user (requires realm and flows)
+    # 5. Create admin user (requires realm and flows)
     from apps.seeders.admin_user_seeder import seed_admin_user
     admin_info = seed_admin_user(realm)
     
-    # 5. Configure system events
+    # 6. Configure system events
     from apps.seeders.system_events_seeder import seed_system_events
     seed_system_events(realm)
     
