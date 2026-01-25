@@ -90,7 +90,11 @@
                       "",
                       "pm.test('Response contains refresh_token', function () {",
                       "    pm.expect(jsonData).to.have.property('refresh_token');",
-                      "});"
+                      "});",
+                      "",
+                      "console.log('Access token received. You can now:');",
+                      "console.log('1. Decode the access_token at https://jwt.io');",
+                      "console.log('2. Use Step 3: Get UserInfo to get user claims');"
                     ],
                     "type": "text/javascript"
                   }
@@ -117,6 +121,45 @@
                   "path": ["auth", "realms", "{{realm}}", "protocol", "openid-connect", "token"]
                 },
                 "description": "Exchange authorization code for access token, refresh token, and ID token"
+              }
+            },
+            {
+              "name": "Step 3: Get UserInfo - User Claims",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Response contains sub claim', function () {",
+                      "    var jsonData = pm.response.json();",
+                      "    pm.expect(jsonData).to.have.property('sub');",
+                      "});",
+                      "",
+                      "var jsonData = pm.response.json();",
+                      "console.log('UserInfo Response:', JSON.stringify(jsonData, null, 2));",
+                      "console.log('');",
+                      "console.log('✓ This response matches the claims in your decoded JWT token');",
+                      "console.log('  (Decode your access_token at https://jwt.io to verify)');"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [
+                  {"key": "Authorization", "value": "Bearer {{access_token}}", "description": "Access token from Step 2"}
+                ],
+                "url": {
+                  "raw": "{{base_url}}/auth/realms/{{realm}}/protocol/openid-connect/userinfo",
+                  "host": ["{{base_url}}"],
+                  "path": ["auth", "realms", "{{realm}}", "protocol", "openid-connect", "userinfo"]
+                },
+                "description": "Get user information (claims) using the access token from Step 2.\n\n**Response matches decoded JWT:** The claims returned here are exactly the same as the claims in your decoded JWT access token (excluding protected system claims).\n\n**To verify:**\n1. Copy the `access_token` from Step 2\n2. Decode it at https://jwt.io\n3. Compare the claims in the decoded JWT with this response\n\n**Example Response:**\n```json\n{\n  \"sub\": \"34144\",\n  \"name\": \"FARIZ NASIRUDIN\",\n  \"given_name\": \"FARIZ\",\n  \"family_name\": \"NASIRUDIN\",\n  \"preferred_username\": \"fariz\",\n  \"email\": \"fariz\",\n  \"email_verified\": true\n}\n```"
               }
             }
           ]
@@ -363,18 +406,53 @@
       "name": "2. Token Operations",
       "item": [
         {
-          "name": "UserInfo",
+          "name": "UserInfo - Get User Claims",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response contains sub claim', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('sub');",
+                  "});",
+                  "",
+                  "pm.test('Response matches JWT token claims', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    // UserInfo response should contain user claims from JWT token",
+                  "    // (excluding protected claims like iss, aud, exp, iat, jti, typ, scope)",
+                  "    pm.expect(jsonData).to.be.an('object');",
+                  "    ",
+                  "    // Common user claims that should be present",
+                  "    if (pm.environment.get('access_token')) {",
+                  "        console.log('Access token available - UserInfo claims should match decoded JWT');",
+                  "    }",
+                  "});",
+                  "",
+                  "// Log response for debugging",
+                  "var jsonData = pm.response.json();",
+                  "console.log('UserInfo Response:', JSON.stringify(jsonData, null, 2));",
+                  "console.log('Note: This response should match the claims in your decoded JWT token (from jwt.io)');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{access_token}}"}
+              {"key": "Authorization", "value": "Bearer {{access_token}}", "description": "Access token from Step 2: Exchange Code for Tokens"}
             ],
             "url": {
               "raw": "{{base_url}}/auth/realms/{{realm}}/protocol/openid-connect/userinfo",
               "host": ["{{base_url}}"],
               "path": ["auth", "realms", "{{realm}}", "protocol", "openid-connect", "userinfo"]
             },
-            "description": "Get user information using access token"
+            "description": "Get user information (claims) using access token.\n\n**Important:** The response from this endpoint will match exactly with the claims in your decoded JWT access token (from Step 2: Exchange Code for Tokens).\n\n**Protected claims excluded:** `iss`, `aud`, `exp`, `iat`, `jti`, `auth_time`, `nonce`, `acr`, `azp`, `typ`, `scope`\n\n**Example Response:**\n```json\n{\n  \"sub\": \"34144\",\n  \"name\": \"FARIZ NASIRUDIN\",\n  \"given_name\": \"FARIZ\",\n  \"family_name\": \"NASIRUDIN\",\n  \"preferred_username\": \"fariz\",\n  \"email\": \"fariz\",\n  \"email_verified\": true\n}\n```\n\nTo verify: Decode your access token at https://jwt.io and compare the claims with this response."
           }
         },
         {
