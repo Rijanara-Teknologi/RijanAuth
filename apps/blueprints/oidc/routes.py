@@ -769,7 +769,8 @@ def _generate_client_access_token(realm, client, scope):
 def userinfo(realm_name):
     """
     OIDC UserInfo Endpoint
-    Returns claims about the authenticated user
+    Returns claims about the authenticated user.
+    Response must match the claims in the decoded JWT access token (excluding protected claims).
     """
     realm = Realm.find_by_name(realm_name)
     if not realm:
@@ -784,26 +785,51 @@ def userinfo(realm_name):
     
     # Decode and validate token
     try:
-        payload = decode_jwt(access_token, current_app.config.get('SECRET_KEY', 'secret'))
+        token_payload = decode_jwt(access_token, current_app.config.get('SECRET_KEY', 'secret'))
     except Exception as e:
         return jsonify({'error': 'invalid_token', 'error_description': str(e)}), 401
     
-    # Get user
-    user_id = payload.get('sub')
+    # Validate token expiration
+    exp = token_payload.get('exp')
+    if exp:
+        if datetime.utcnow().timestamp() > exp:
+            return jsonify({'error': 'invalid_token', 'error_description': 'Token expired'}), 401
+    
+    # Validate realm
+    iss = token_payload.get('iss', '')
+    if realm_name not in iss:
+        return jsonify({'error': 'invalid_token', 'error_description': 'Token realm mismatch'}), 401
+    
+    # Get user to verify token is valid
+    user_id = token_payload.get('sub')
     user = User.find_by_id(user_id)
     if not user:
         return jsonify({'error': 'invalid_token', 'error_description': 'User not found'}), 401
     
-    # Build userinfo response
-    userinfo_data = {
-        'sub': user.id,
-        'preferred_username': user.username,
-        'email': user.email,
-        'email_verified': user.email_verified,
-        'name': f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username,
-        'given_name': user.first_name,
-        'family_name': user.last_name
+    # Filter out protected/system claims that shouldn't be in userinfo response
+    # These are the same claims that appear when you decode the JWT on jwt.io
+    protected_claims = {
+        'iss',      # Issuer
+        'aud',      # Audience
+        'exp',      # Expiration time
+        'iat',      # Issued at
+        'jti',      # JWT ID
+        'auth_time', # Authentication time
+        'nonce',    # Nonce
+        'acr',      # Authentication context class reference
+        'azp',      # Authorized party
+        'typ',      # Token type
+        'scope'     # Scope
     }
+    
+    # Extract user claims from token payload (these match what's in the decoded JWT)
+    userinfo_data = {}
+    for key, value in token_payload.items():
+        if key not in protected_claims and value is not None:
+            userinfo_data[key] = value
+    
+    # Ensure 'sub' is always present (required by OIDC spec)
+    userinfo_data['sub'] = user.id
     
     return jsonify(userinfo_data)
 

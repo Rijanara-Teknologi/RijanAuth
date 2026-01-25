@@ -21,6 +21,12 @@
   - Delete roles with confirmation (protected system roles cannot be deleted)
   - System roles (`default-roles-*`, `offline_access`, `uma_authorization`) are protected
 
+- **OIDC UserInfo Endpoint Enhancement**:
+  - Updated `/auth/realms/{realm}/protocol/openid-connect/userinfo` endpoint
+  - Response now matches exactly with claims in decoded JWT access token
+  - Returns all user claims from JWT (excluding protected system claims like `iss`, `aud`, `exp`, `iat`, etc.)
+  - Ensures consistency between JWT token claims and UserInfo API response
+
 ### Bug Fixes
 
 - Fixed missing `mapper_form.html` template for client scopes
