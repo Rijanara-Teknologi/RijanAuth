@@ -20,6 +20,9 @@ function setTheme(theme) {
 //This is a helper function to set the icon.
 //We will pass in the index of our array.
 function setIndicator(theme) {
+    // Check if themeIndicator exists before accessing classList
+    if (!themeIndicator) return;
+    
     //We remove all possible classes.
     themeIndicator.classList.remove(indicators[0])
     themeIndicator.classList.remove(indicators[1])
@@ -45,28 +48,30 @@ if (currentTheme === null) {
     localStorage.setItem("theme", themeStates[0])
     setIndicator(0)
     setPage(0)
-    themeSwitch.checked = true;
+    if (themeSwitch) themeSwitch.checked = true;
 }
 if (currentTheme === themeStates[0]) {
     setIndicator(0)
     setPage(0)
-    themeSwitch.checked = true;
+    if (themeSwitch) themeSwitch.checked = true;
 }
 if (currentTheme === themeStates[1]) {
     setIndicator(1)
     setPage(1)
-    themeSwitch.checked = false;
+    if (themeSwitch) themeSwitch.checked = false;
 }
 
 //We handle our user interaction here.
-themeSwitch.addEventListener('change', function () {
-    if (this.checked) {
-        setTheme(0)
-        setIndicator(0)
-        setPage(0)
-    } else {
-        setTheme(1)
-        setIndicator(1)
-        setPage(1)
-    }
-});
+if (themeSwitch) {
+    themeSwitch.addEventListener('change', function () {
+        if (this.checked) {
+            setTheme(0)
+            setIndicator(0)
+            setPage(0)
+        } else {
+            setTheme(1)
+            setIndicator(1)
+            setPage(1)
+        }
+    });
+}

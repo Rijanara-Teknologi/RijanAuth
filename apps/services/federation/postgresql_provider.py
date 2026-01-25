@@ -97,6 +97,18 @@ class PostgreSQLFederationProvider(BaseFederationProvider):
         
         # Additional columns (comma-separated)
         'attribute_columns': '',
+        
+        # Role mapping settings
+        'role_sync_enabled': False,  # Enable role synchronization
+        'role_source': 'column',  # 'column' (in user table), 'table' (separate table), or 'jsonb' (JSONB field)
+        'role_column': 'roles',  # Column name if role_source is 'column' or 'jsonb'
+        'role_jsonb_path': 'roles',  # JSON path if role_source is 'jsonb' (e.g., 'data.roles')
+        'role_table': '',  # Separate table for roles
+        'role_user_id_column': 'user_id',  # User ID column in role table
+        'role_name_column': 'role_name',  # Role name column in role table
+        'role_delimiter': ',',  # Delimiter for string-based roles in column
+        'create_missing_roles': False,  # Auto-create unmapped roles
+        'default_role_if_empty': '',  # Default role if no roles found
     }
     
     REQUIRED_CONFIG_KEYS = ['host', 'database', 'user_table']
@@ -215,6 +227,14 @@ class PostgreSQLFederationProvider(BaseFederationProvider):
         if attr_cols:
             columns.extend([c.strip() for c in attr_cols.split(',') if c.strip()])
         
+        # Role column if role_source is 'column' or 'jsonb'
+        if self.config.get('role_sync_enabled', False):
+            role_source = self.config.get('role_source', 'column')
+            if role_source in ['column', 'jsonb']:
+                role_col = self.config.get('role_column', 'roles')
+                if role_col and role_col not in columns:
+                    columns.append(role_col)
+        
         return [c for c in columns if c]
     
     def _build_base_query(self) -> str:
@@ -227,7 +247,7 @@ class PostgreSQLFederationProvider(BaseFederationProvider):
         
         return f"SELECT {', '.join(quoted_cols)} FROM {table}"
     
-    def _parse_row(self, row: Dict) -> Dict[str, Any]:
+    def _parse_row(self, row: Dict, include_roles: bool = True) -> Dict[str, Any]:
         """Parse database row to user dict"""
         id_col = self.config.get('id_column', 'id')
         username_col = self.config.get('username_column', 'username')
@@ -281,8 +301,15 @@ class PostgreSQLFederationProvider(BaseFederationProvider):
                 if groups_val.startswith('{') and groups_val.endswith('}'):
                     groups = [g.strip() for g in groups_val[1:-1].split(',') if g.strip()]
         
+        external_id = str(row.get(id_col, ''))
+        
+        # Get roles if enabled
+        roles = []
+        if include_roles and self.config.get('role_sync_enabled', False):
+            roles = self._get_user_roles(external_id, row, attributes)
+        
         return {
-            'external_id': str(row.get(id_col, '')),
+            'external_id': external_id,
             'username': row.get(username_col, ''),
             'email': row.get(email_col, ''),
             'first_name': row.get(first_name_col, '') if first_name_col else '',
@@ -290,9 +317,134 @@ class PostgreSQLFederationProvider(BaseFederationProvider):
             'enabled': enabled,
             'attributes': attributes,
             'groups': groups,
+            'roles': roles,
             '_password_hash': row.get(self.config.get('password_column', 'password'), ''),
             '_salt': row.get(self.config.get('salt_column', ''), '') if self.config.get('salt_column') else '',
         }
+    
+    def _get_user_roles(self, external_id: str, row: Dict = None, attributes: Dict = None) -> List[str]:
+        """Get roles for a user from PostgreSQL database"""
+        role_source = self.config.get('role_source', 'column')
+        
+        if role_source == 'column':
+            return self._get_roles_from_column(row)
+        elif role_source == 'table':
+            return self._get_roles_from_table(external_id)
+        elif role_source == 'jsonb':
+            return self._get_roles_from_jsonb(row, attributes)
+        
+        return []
+    
+    def _get_roles_from_column(self, row: Dict) -> List[str]:
+        """Get roles from a column in the user table"""
+        if not row:
+            return []
+        
+        role_column = self.config.get('role_column', 'roles')
+        role_data = row.get(role_column)
+        
+        if not role_data:
+            return []
+        
+        # Handle PostgreSQL array type
+        if isinstance(role_data, list):
+            return [str(r).strip() for r in role_data if str(r).strip()]
+        
+        # Handle string with PostgreSQL array format {val1,val2}
+        if isinstance(role_data, str):
+            if role_data.startswith('{') and role_data.endswith('}'):
+                return [r.strip() for r in role_data[1:-1].split(',') if r.strip()]
+            
+            # Handle delimiter-separated string
+            delimiter = self.config.get('role_delimiter', ',')
+            return [r.strip() for r in role_data.split(delimiter) if r.strip()]
+        
+        return []
+    
+    def _get_roles_from_table(self, external_id: str) -> List[str]:
+        """Get roles from a separate role table"""
+        role_table = self.config.get('role_table', '')
+        if not role_table:
+            return []
+        
+        self._ensure_connected()
+        
+        schema = self.config.get('schema', 'public')
+        user_id_col = self.config.get('role_user_id_column', 'user_id')
+        role_name_col = self.config.get('role_name_column', 'role_name')
+        
+        query = f'SELECT "{role_name_col}" FROM "{schema}"."{role_table}" WHERE "{user_id_col}" = %s'
+        
+        try:
+            with self._connection.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute(query, (external_id,))
+                rows = cursor.fetchall()
+                return [row[role_name_col] for row in rows if row.get(role_name_col)]
+        except psycopg2.Error as e:
+            logger.error(f"Failed to fetch roles from table: {e}")
+            return []
+    
+    def _get_roles_from_jsonb(self, row: Dict, attributes: Dict = None) -> List[str]:
+        """Get roles from a JSONB field using JSON path"""
+        jsonb_path = self.config.get('role_jsonb_path', 'roles')
+        
+        # Try from attributes first (already parsed JSONB)
+        if attributes:
+            data = attributes
+        elif row:
+            role_column = self.config.get('role_column', 'roles')
+            data = row.get(role_column, {})
+            if isinstance(data, str):
+                try:
+                    data = json.loads(data)
+                except json.JSONDecodeError:
+                    return []
+        else:
+            return []
+        
+        if not data:
+            return []
+        
+        # Navigate the JSON path
+        keys = jsonb_path.strip('.').split('.')
+        current = data
+        for key in keys:
+            if isinstance(current, dict) and key in current:
+                current = current[key]
+            elif isinstance(current, list):
+                try:
+                    idx = int(key)
+                    current = current[idx]
+                except (ValueError, IndexError):
+                    return []
+            else:
+                return []
+        
+        # Extract roles from the target data
+        if isinstance(current, list):
+            return [str(r).strip() for r in current if str(r).strip()]
+        elif isinstance(current, str):
+            delimiter = self.config.get('role_delimiter', ',')
+            return [r.strip() for r in current.split(delimiter) if r.strip()]
+        
+        return []
+    
+    def get_user_roles_by_id(self, external_id: str) -> List[str]:
+        """Get roles for a user by external ID (public method)"""
+        if not self.config.get('role_sync_enabled', False):
+            return []
+        
+        role_source = self.config.get('role_source', 'column')
+        
+        if role_source == 'table':
+            return self._get_roles_from_table(external_id)
+        else:
+            # Need to fetch the user row first
+            user = self.get_user_by_id(external_id)
+            if user:
+                return user.get('roles', [])
+        
+        return []
     
     # ==================== User Lookup ====================
     

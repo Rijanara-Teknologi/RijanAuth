@@ -197,6 +197,68 @@
 
                                             <hr>
 
+                                            <!-- Role/Group Mapping Settings -->
+                                            <h6 class="mb-3">Role/Group Mapping Settings</h6>
+                                            <div class="custom-control custom-switch mb-3">
+                                                <input type="checkbox" class="custom-control-input" id="role_sync_enabled" name="role_sync_enabled">
+                                                <label class="custom-control-label" for="role_sync_enabled">Enable Role Synchronization</label>
+                                            </div>
+                                            <div id="role_settings" style="display: none;">
+                                                <div class="form-group">
+                                                    <label>Role Source</label>
+                                                    <select class="form-control" name="role_source" id="role_source">
+                                                        <option value="memberOf">memberOf Attribute</option>
+                                                        <option value="group">Group Search</option>
+                                                    </select>
+                                                    <small class="text-muted">Where to get group memberships from</small>
+                                                </div>
+                                                
+                                                <div id="memberof_settings">
+                                                    <div class="form-group">
+                                                        <label>Role/Group Attribute</label>
+                                                        <input type="text" class="form-control" name="role_attribute" value="memberOf">
+                                                        <small class="text-muted">LDAP attribute containing group DNs</small>
+                                                    </div>
+                                                    <div class="custom-control custom-switch mb-3">
+                                                        <input type="checkbox" class="custom-control-input" id="extract_cn_from_dn" name="extract_cn_from_dn" checked>
+                                                        <label class="custom-control-label" for="extract_cn_from_dn">Extract CN from DN</label>
+                                                        <small class="text-muted d-block">Convert "cn=admin,ou=groups,..." to "admin"</small>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div id="group_search_settings" style="display: none;">
+                                                    <div class="form-group">
+                                                        <label>Groups DN</label>
+                                                        <input type="text" class="form-control" name="groups_dn" placeholder="ou=groups,dc=example,dc=com">
+                                                    </div>
+                                                    <div class="form-group">
+                                                        <label>Group Object Classes</label>
+                                                        <input type="text" class="form-control" name="group_object_classes" value="groupOfNames,groupOfUniqueNames">
+                                                    </div>
+                                                    <div class="form-group">
+                                                        <label>Group Name Attribute</label>
+                                                        <input type="text" class="form-control" name="group_name_ldap_attribute" value="cn">
+                                                    </div>
+                                                </div>
+                                                
+                                                <div class="row">
+                                                    <div class="col-md-6">
+                                                        <div class="custom-control custom-switch mb-3">
+                                                            <input type="checkbox" class="custom-control-input" id="create_missing_roles" name="create_missing_roles">
+                                                            <label class="custom-control-label" for="create_missing_roles">Auto-create missing roles</label>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <div class="form-group">
+                                                            <label>Default Role if Empty</label>
+                                                            <input type="text" class="form-control" name="default_role_if_empty" placeholder="user">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <hr>
+
                                             <!-- Sync Settings -->
                                             <h6 class="mb-3">Synchronization Settings</h6>
                                             <div class="row">
@@ -282,4 +344,20 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Toggle role settings visibility
+    document.getElementById('role_sync_enabled').addEventListener('change', function() {
+        document.getElementById('role_settings').style.display = this.checked ? 'block' : 'none';
+    });
+    
+    // Toggle role source settings
+    document.getElementById('role_source').addEventListener('change', function() {
+        const isGroupSearch = this.value === 'group';
+        document.getElementById('memberof_settings').style.display = isGroupSearch ? 'none' : 'block';
+        document.getElementById('group_search_settings').style.display = isGroupSearch ? 'block' : 'none';
+    });
+</script>
 {% endblock %}

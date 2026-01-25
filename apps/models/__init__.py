@@ -14,7 +14,8 @@ from apps.models.identity_provider import IdentityProvider, IdentityProviderMapp
 from apps.models.authentication import AuthenticationFlow, AuthenticationExecution, RequiredAction
 from apps.models.event import Event, AdminEvent
 from apps.models.federation import (
-    UserFederationProvider, UserFederationMapper, UserFederationLink, FederationSyncLog
+    UserFederationProvider, UserFederationMapper, UserFederationLink, FederationSyncLog,
+    FederationRoleMapping, FederationRoleFormatConfig, FederatedRoleSync
 )
 
 __all__ = [
@@ -38,4 +39,5 @@ __all__ = [
     'Event', 'AdminEvent',
     # User Federation
     'UserFederationProvider', 'UserFederationMapper', 'UserFederationLink', 'FederationSyncLog',
+    'FederationRoleMapping', 'FederationRoleFormatConfig', 'FederatedRoleSync',
 ]

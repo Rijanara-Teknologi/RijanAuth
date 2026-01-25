@@ -415,6 +415,73 @@ def roles_list(realm_name):
     )
 
 
+@admin_bp.route('/<realm_name>/roles/<role_id>/edit', methods=['POST'])
+@login_required
+def role_edit(realm_name, role_id):
+    """Edit a realm role"""
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    role = Role.query.filter_by(id=role_id, realm_id=realm.id).first()
+    if not role:
+        flash('Role not found', 'error')
+        return redirect(url_for('admin.roles_list', realm_name=realm_name))
+    
+    # Check if it's a protected system role
+    protected_roles = ['default-roles-' + realm.name, 'offline_access', 'uma_authorization']
+    if role.name in protected_roles:
+        flash(f'Cannot edit protected role "{role.name}"', 'error')
+        return redirect(url_for('admin.roles_list', realm_name=realm_name))
+    
+    name = request.form.get('name', '').strip()
+    description = request.form.get('description', '').strip()
+    
+    if not name:
+        flash('Role name is required', 'error')
+        return redirect(url_for('admin.roles_list', realm_name=realm_name))
+    
+    # Check if name already exists (if changed)
+    if name != role.name:
+        existing = Role.find_realm_role(realm.id, name)
+        if existing:
+            flash(f'Role "{name}" already exists', 'error')
+            return redirect(url_for('admin.roles_list', realm_name=realm_name))
+    
+    role.name = name
+    role.description = description or None
+    role.save()
+    
+    flash(f'Role "{name}" updated successfully', 'success')
+    return redirect(url_for('admin.roles_list', realm_name=realm_name))
+
+
+@admin_bp.route('/<realm_name>/roles/<role_id>/delete', methods=['POST'])
+@login_required
+def role_delete(realm_name, role_id):
+    """Delete a realm role"""
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    role = Role.query.filter_by(id=role_id, realm_id=realm.id).first()
+    if not role:
+        flash('Role not found', 'error')
+        return redirect(url_for('admin.roles_list', realm_name=realm_name))
+    
+    # Check if it's a protected system role
+    protected_roles = ['default-roles-' + realm.name, 'offline_access', 'uma_authorization']
+    if role.name in protected_roles:
+        flash(f'Cannot delete protected role "{role.name}"', 'error')
+        return redirect(url_for('admin.roles_list', realm_name=realm_name))
+    
+    role_name = role.name
+    role.delete()
+    
+    flash(f'Role "{role_name}" deleted successfully', 'success')
+    return redirect(url_for('admin.roles_list', realm_name=realm_name))
+
+
 # =============================================================================
 # Groups Management
 # =============================================================================
@@ -790,6 +857,175 @@ def federation_sync_status(realm_name, provider_id):
     )
 
 
+@admin_bp.route('/<realm_name>/user-federation/<provider_id>/role-mappings')
+@login_required
+def federation_role_mappings(realm_name, provider_id):
+    """View and manage federation role mappings"""
+    from apps.models.federation import (
+        UserFederationProvider, FederationRoleMapping, FederatedRoleSync
+    )
+    
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        flash('Provider not found', 'error')
+        return redirect(url_for('admin.federation_list', realm_name=realm_name))
+    
+    # Get role mappings
+    mappings = FederationRoleMapping.find_by_provider(provider_id)
+    
+    # Get realm roles for mapping selection
+    realm_roles = Role.query.filter_by(realm_id=realm.id, client_id=None).order_by(Role.name).all()
+    
+    # Get recent role sync events
+    recent_syncs = FederatedRoleSync.query.filter_by(provider_id=provider_id)\
+        .order_by(FederatedRoleSync.last_sync.desc()).limit(10).all()
+    
+    realms = Realm.query.all()
+    return render_template(
+        'admin/federation/role_mappings.html',
+        realm=realm,
+        realms=realms,
+        provider=provider,
+        mappings=mappings,
+        realm_roles=realm_roles,
+        recent_syncs=recent_syncs,
+        segment='federation'
+    )
+
+
+@admin_bp.route('/<realm_name>/user-federation/<provider_id>/role-mappings/add', methods=['POST'])
+@login_required
+def federation_role_mapping_add(realm_name, provider_id):
+    """Add a new role mapping"""
+    from apps.models.federation import UserFederationProvider, FederationRoleMapping
+    from apps import db
+    
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        flash('Provider not found', 'error')
+        return redirect(url_for('admin.federation_list', realm_name=realm_name))
+    
+    external_role = request.form.get('external_role_name', '').strip()
+    internal_role_id = request.form.get('internal_role_id', '').strip()
+    mapping_type = request.form.get('mapping_type', 'direct')
+    mapping_value = request.form.get('mapping_value', '').strip() or None
+    priority = int(request.form.get('priority', 0))
+    enabled = request.form.get('enabled') == 'on'
+    
+    if not external_role or not internal_role_id:
+        flash('External role name and internal role are required', 'error')
+        return redirect(url_for('admin.federation_role_mappings', realm_name=realm_name, provider_id=provider_id))
+    
+    # Check if mapping already exists
+    existing = FederationRoleMapping.query.filter_by(
+        provider_id=provider_id, external_role_name=external_role
+    ).first()
+    
+    if existing:
+        flash(f'Mapping for external role "{external_role}" already exists', 'error')
+        return redirect(url_for('admin.federation_role_mappings', realm_name=realm_name, provider_id=provider_id))
+    
+    try:
+        mapping = FederationRoleMapping(
+            provider_id=provider_id,
+            external_role_name=external_role,
+            internal_role_id=internal_role_id,
+            mapping_type=mapping_type,
+            mapping_value=mapping_value,
+            priority=priority,
+            enabled=enabled
+        )
+        db.session.add(mapping)
+        db.session.commit()
+        flash(f'Role mapping for "{external_role}" created successfully', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Failed to create role mapping: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.federation_role_mappings', realm_name=realm_name, provider_id=provider_id))
+
+
+@admin_bp.route('/<realm_name>/user-federation/<provider_id>/role-mappings/<mapping_id>/edit', methods=['POST'])
+@login_required
+def federation_role_mapping_edit(realm_name, provider_id, mapping_id):
+    """Edit an existing role mapping"""
+    from apps.models.federation import UserFederationProvider, FederationRoleMapping
+    from apps import db
+    from datetime import datetime
+    
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        flash('Provider not found', 'error')
+        return redirect(url_for('admin.federation_list', realm_name=realm_name))
+    
+    mapping = FederationRoleMapping.query.get(mapping_id)
+    if not mapping or mapping.provider_id != provider_id:
+        flash('Mapping not found', 'error')
+        return redirect(url_for('admin.federation_role_mappings', realm_name=realm_name, provider_id=provider_id))
+    
+    try:
+        mapping.external_role_name = request.form.get('external_role_name', mapping.external_role_name).strip()
+        mapping.internal_role_id = request.form.get('internal_role_id', mapping.internal_role_id).strip()
+        mapping.mapping_type = request.form.get('mapping_type', mapping.mapping_type)
+        mapping.mapping_value = request.form.get('mapping_value', '').strip() or None
+        mapping.priority = int(request.form.get('priority', mapping.priority))
+        mapping.enabled = request.form.get('enabled') == 'on'
+        mapping.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        flash('Role mapping updated successfully', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Failed to update role mapping: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.federation_role_mappings', realm_name=realm_name, provider_id=provider_id))
+
+
+@admin_bp.route('/<realm_name>/user-federation/<provider_id>/role-mappings/<mapping_id>/delete', methods=['POST'])
+@login_required
+def federation_role_mapping_delete(realm_name, provider_id, mapping_id):
+    """Delete a role mapping"""
+    from apps.models.federation import UserFederationProvider, FederationRoleMapping
+    from apps import db
+    
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        flash('Provider not found', 'error')
+        return redirect(url_for('admin.federation_list', realm_name=realm_name))
+    
+    mapping = FederationRoleMapping.query.get(mapping_id)
+    if not mapping or mapping.provider_id != provider_id:
+        flash('Mapping not found', 'error')
+        return redirect(url_for('admin.federation_role_mappings', realm_name=realm_name, provider_id=provider_id))
+    
+    try:
+        external_role = mapping.external_role_name
+        db.session.delete(mapping)
+        db.session.commit()
+        flash(f'Role mapping for "{external_role}" deleted', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Failed to delete role mapping: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.federation_role_mappings', realm_name=realm_name, provider_id=provider_id))
+
+
 def _build_provider_config(provider_type, form):
     """Build provider config from form data"""
     config = {}
@@ -811,6 +1047,16 @@ def _build_provider_config(provider_type, form):
             'connection_timeout': int(form.get('connection_timeout', 30)),
             'batch_size': int(form.get('batch_size', 100)),
             'vendor': form.get('vendor', 'other'),
+            # Role sync settings
+            'role_sync_enabled': form.get('role_sync_enabled') == 'on',
+            'role_source': form.get('role_source', 'memberOf'),
+            'role_attribute': form.get('role_attribute', 'memberOf'),
+            'extract_cn_from_dn': form.get('extract_cn_from_dn') == 'on',
+            'groups_dn': form.get('groups_dn', ''),
+            'group_object_classes': [c.strip() for c in form.get('group_object_classes', 'groupOfNames,groupOfUniqueNames').split(',') if c.strip()],
+            'group_name_ldap_attribute': form.get('group_name_ldap_attribute', 'cn'),
+            'create_missing_roles': form.get('create_missing_roles') == 'on',
+            'default_role_if_empty': form.get('default_role_if_empty', ''),
         }
     
     elif provider_type == 'mysql':
@@ -830,6 +1076,16 @@ def _build_provider_config(provider_type, form):
             'enabled_column': form.get('enabled_column', ''),
             'password_hash_algorithm': form.get('password_hash_algorithm', 'bcrypt'),
             'batch_size': int(form.get('batch_size', 100)),
+            # Role sync settings
+            'role_sync_enabled': form.get('role_sync_enabled') == 'on',
+            'role_source': form.get('role_source', 'column'),
+            'role_column': form.get('role_column', 'roles'),
+            'role_table': form.get('role_table', ''),
+            'role_user_id_column': form.get('role_user_id_column', 'user_id'),
+            'role_name_column': form.get('role_name_column', 'role_name'),
+            'role_delimiter': form.get('role_delimiter', ','),
+            'create_missing_roles': form.get('create_missing_roles') == 'on',
+            'default_role_if_empty': form.get('default_role_if_empty', ''),
         }
     
     elif provider_type == 'postgresql':
@@ -852,6 +1108,17 @@ def _build_provider_config(provider_type, form):
             'password_hash_algorithm': form.get('password_hash_algorithm', 'bcrypt'),
             'sslmode': form.get('sslmode', 'prefer'),
             'batch_size': int(form.get('batch_size', 100)),
+            # Role sync settings
+            'role_sync_enabled': form.get('role_sync_enabled') == 'on',
+            'role_source': form.get('role_source', 'column'),
+            'role_column': form.get('role_column', 'roles'),
+            'role_jsonb_path': form.get('role_jsonb_path', 'roles'),
+            'role_table': form.get('role_table', ''),
+            'role_user_id_column': form.get('role_user_id_column', 'user_id'),
+            'role_name_column': form.get('role_name_column', 'role_name'),
+            'role_delimiter': form.get('role_delimiter', ','),
+            'create_missing_roles': form.get('create_missing_roles') == 'on',
+            'default_role_if_empty': form.get('default_role_if_empty', ''),
         }
     
     return config

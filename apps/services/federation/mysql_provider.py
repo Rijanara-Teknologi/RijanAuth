@@ -92,6 +92,17 @@ class MySQLFederationProvider(BaseFederationProvider):
         
         # Additional attribute columns (comma-separated)
         'attribute_columns': '',  # e.g., 'phone,department,title'
+        
+        # Role mapping settings
+        'role_sync_enabled': False,  # Enable role synchronization
+        'role_source': 'column',  # 'column' (in user table) or 'table' (separate table)
+        'role_column': 'roles',  # Column name if role_source is 'column'
+        'role_table': '',  # Separate table for roles
+        'role_user_id_column': 'user_id',  # User ID column in role table
+        'role_name_column': 'role_name',  # Role name column in role table
+        'role_delimiter': ',',  # Delimiter for string-based roles in column
+        'create_missing_roles': False,  # Auto-create unmapped roles
+        'default_role_if_empty': '',  # Default role if no roles found
     }
     
     REQUIRED_CONFIG_KEYS = ['host', 'database', 'user_table']
@@ -196,6 +207,12 @@ class MySQLFederationProvider(BaseFederationProvider):
         if attr_cols:
             columns.extend([c.strip() for c in attr_cols.split(',') if c.strip()])
         
+        # Role column if role_source is 'column'
+        if self.config.get('role_sync_enabled', False) and self.config.get('role_source') == 'column':
+            role_col = self.config.get('role_column', 'roles')
+            if role_col and role_col not in columns:
+                columns.append(role_col)
+        
         return [c for c in columns if c]
     
     def _build_base_query(self) -> str:
@@ -208,7 +225,7 @@ class MySQLFederationProvider(BaseFederationProvider):
         
         return f"SELECT {', '.join(quoted_cols)} FROM `{table}`"
     
-    def _parse_row(self, row: Dict) -> Dict[str, Any]:
+    def _parse_row(self, row: Dict, include_roles: bool = True) -> Dict[str, Any]:
         """Parse database row to user dict"""
         id_col = self.config.get('id_column', 'id')
         username_col = self.config.get('username_column', 'username')
@@ -232,17 +249,95 @@ class MySQLFederationProvider(BaseFederationProvider):
                 if col and col in row:
                     attributes[col] = row[col]
         
+        external_id = str(row.get(id_col, ''))
+        
+        # Get roles if enabled
+        roles = []
+        if include_roles and self.config.get('role_sync_enabled', False):
+            roles = self._get_user_roles(external_id, row)
+        
         return {
-            'external_id': str(row.get(id_col, '')),
+            'external_id': external_id,
             'username': row.get(username_col, ''),
             'email': row.get(email_col, ''),
             'first_name': row.get(first_name_col, '') if first_name_col else '',
             'last_name': row.get(last_name_col, '') if last_name_col else '',
             'enabled': enabled,
             'attributes': attributes,
+            'roles': roles,
             '_password_hash': row.get(self.config.get('password_column', 'password'), ''),
             '_salt': row.get(self.config.get('salt_column', ''), '') if self.config.get('salt_column') else '',
         }
+    
+    def _get_user_roles(self, external_id: str, row: Dict = None) -> List[str]:
+        """Get roles for a user from MySQL database"""
+        role_source = self.config.get('role_source', 'column')
+        
+        if role_source == 'column':
+            return self._get_roles_from_column(row)
+        elif role_source == 'table':
+            return self._get_roles_from_table(external_id)
+        
+        return []
+    
+    def _get_roles_from_column(self, row: Dict) -> List[str]:
+        """Get roles from a column in the user table"""
+        if not row:
+            return []
+        
+        role_column = self.config.get('role_column', 'roles')
+        role_data = row.get(role_column)
+        
+        if not role_data:
+            return []
+        
+        # Handle different data types
+        if isinstance(role_data, str):
+            delimiter = self.config.get('role_delimiter', ',')
+            return [r.strip() for r in role_data.split(delimiter) if r.strip()]
+        elif isinstance(role_data, (list, tuple)):
+            return [str(r).strip() for r in role_data if str(r).strip()]
+        
+        return []
+    
+    def _get_roles_from_table(self, external_id: str) -> List[str]:
+        """Get roles from a separate role table"""
+        role_table = self.config.get('role_table', '')
+        if not role_table:
+            return []
+        
+        self._ensure_connected()
+        
+        user_id_col = self.config.get('role_user_id_column', 'user_id')
+        role_name_col = self.config.get('role_name_column', 'role_name')
+        
+        query = f"SELECT `{role_name_col}` FROM `{role_table}` WHERE `{user_id_col}` = %s"
+        
+        try:
+            with self._connection.cursor() as cursor:
+                cursor.execute(query, (external_id,))
+                rows = cursor.fetchall()
+                return [row[role_name_col] for row in rows if row.get(role_name_col)]
+        except pymysql.Error as e:
+            logger.error(f"Failed to fetch roles from table: {e}")
+            return []
+    
+    def get_user_roles_by_id(self, external_id: str) -> List[str]:
+        """Get roles for a user by external ID (public method)"""
+        if not self.config.get('role_sync_enabled', False):
+            return []
+        
+        role_source = self.config.get('role_source', 'column')
+        
+        if role_source == 'table':
+            return self._get_roles_from_table(external_id)
+        elif role_source == 'column':
+            # Need to fetch the user row first
+            user = self.get_user_by_id(external_id)
+            if user:
+                return user.get('roles', [])
+        
+        return []
     
     # ==================== User Lookup ====================
     

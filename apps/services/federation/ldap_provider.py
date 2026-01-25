@@ -86,6 +86,16 @@ class LDAPFederationProvider(BaseFederationProvider):
         'membership_ldap_attribute': 'member',
         'membership_user_ldap_attribute': 'dn',
         'mode': 'READ_ONLY',  # 'READ_ONLY', 'LDAP_ONLY', 'IMPORT'
+        
+        # Role synchronization settings
+        'role_sync_enabled': False,  # Enable role synchronization
+        'role_source': 'memberOf',  # 'memberOf' (user attribute) or 'group' (separate search)
+        'role_attribute': 'memberOf',  # Attribute containing group DNs
+        'extract_cn_from_dn': True,  # Extract CN from DN (e.g., cn=admin,ou=groups -> admin)
+        'create_missing_roles': False,  # Auto-create unmapped roles
+        'default_role_if_empty': '',  # Default role if no roles found
+        'nested_groups': False,  # Follow nested group memberships
+        'max_nesting_depth': 3,  # Maximum depth for nested groups
     }
     
     REQUIRED_CONFIG_KEYS = ['connection_url', 'users_dn']
@@ -238,9 +248,18 @@ class LDAPFederationProvider(BaseFederationProvider):
             'userAccountControl',  # AD account status
             'nsAccountLock',  # RHDS account status
         ]
+        
+        # Add role attribute if role sync is enabled and using memberOf
+        if self.config.get('role_sync_enabled', False):
+            role_source = self.config.get('role_source', 'memberOf')
+            if role_source == 'memberOf':
+                role_attr = self.config.get('role_attribute', 'memberOf')
+                if role_attr and role_attr not in attrs:
+                    attrs.append(role_attr)
+        
         return [a for a in attrs if a]
     
-    def _parse_user_entry(self, entry) -> Dict[str, Any]:
+    def _parse_user_entry(self, entry, include_roles: bool = True) -> Dict[str, Any]:
         """Parse LDAP entry to user dict"""
         attrs = entry.entry_attributes_as_dict
         
@@ -282,17 +301,151 @@ class LDAPFederationProvider(BaseFederationProvider):
         if 'nsAccountLock' in attrs:
             enabled = str(attrs['nsAccountLock'][0]).lower() != 'true'
         
+        user_dn = str(entry.entry_dn)
+        
+        # Get roles if enabled
+        roles = []
+        if include_roles and self.config.get('role_sync_enabled', False):
+            roles = self._get_user_roles(user_dn, attrs)
+        
         return {
             'external_id': external_id,
-            'dn': str(entry.entry_dn),
+            'dn': user_dn,
             'username': username,
             'email': email,
             'first_name': first_name,
             'last_name': last_name,
             'full_name': full_name,
             'enabled': enabled,
+            'roles': roles,
+            'memberOf': attrs.get('memberOf', []),  # Raw memberOf for debugging
             'attributes': {k: v[0] if len(v) == 1 else v for k, v in attrs.items()},
         }
+    
+    def _get_user_roles(self, user_dn: str, attrs: Dict = None) -> List[str]:
+        """Get roles/groups for a user from LDAP"""
+        role_source = self.config.get('role_source', 'memberOf')
+        
+        if role_source == 'memberOf':
+            return self._get_roles_from_memberof(attrs)
+        elif role_source == 'group':
+            return self._get_roles_from_group_search(user_dn)
+        
+        return []
+    
+    def _get_roles_from_memberof(self, attrs: Dict) -> List[str]:
+        """Get roles from memberOf attribute"""
+        if not attrs:
+            return []
+        
+        role_attr = self.config.get('role_attribute', 'memberOf')
+        member_of = attrs.get(role_attr, [])
+        
+        if not member_of:
+            return []
+        
+        # Ensure it's a list
+        if isinstance(member_of, str):
+            member_of = [member_of]
+        
+        roles = []
+        extract_cn = self.config.get('extract_cn_from_dn', True)
+        
+        for dn in member_of:
+            if extract_cn:
+                # Extract CN from DN (e.g., cn=admin,ou=groups,dc=example,dc=com -> admin)
+                role_name = self._extract_cn_from_dn(str(dn))
+            else:
+                role_name = str(dn)
+            
+            if role_name:
+                roles.append(role_name)
+        
+        return roles
+    
+    def _get_roles_from_group_search(self, user_dn: str) -> List[str]:
+        """Get roles by searching for groups that contain the user"""
+        groups_dn = self.config.get('groups_dn', '')
+        if not groups_dn:
+            return []
+        
+        if not self._connection:
+            self.connect()
+        
+        # Build group filter
+        group_classes = self.config.get('group_object_classes', ['groupOfNames', 'groupOfUniqueNames', 'group'])
+        if len(group_classes) == 1:
+            class_filter = f"(objectClass={group_classes[0]})"
+        else:
+            class_filter = "(|" + "".join(f"(objectClass={gc})" for gc in group_classes) + ")"
+        
+        # Membership attribute
+        membership_attr = self.config.get('membership_ldap_attribute', 'member')
+        membership_user_attr = self.config.get('membership_user_ldap_attribute', 'dn')
+        
+        # Build membership filter
+        if membership_user_attr == 'dn':
+            member_filter = f"({membership_attr}={escape_filter_chars(user_dn)})"
+        else:
+            # Need to get the user's attribute value
+            member_filter = f"({membership_attr}={escape_filter_chars(user_dn)})"
+        
+        search_filter = f"(&{class_filter}{member_filter})"
+        group_name_attr = self.config.get('group_name_ldap_attribute', 'cn')
+        
+        try:
+            self._connection.search(
+                search_base=groups_dn,
+                search_filter=search_filter,
+                search_scope=self._get_search_scope(),
+                attributes=[group_name_attr]
+            )
+            
+            roles = []
+            for entry in self._connection.entries:
+                attrs = entry.entry_attributes_as_dict
+                if group_name_attr in attrs:
+                    group_name = attrs[group_name_attr]
+                    if isinstance(group_name, list):
+                        group_name = group_name[0] if group_name else ''
+                    if group_name:
+                        roles.append(str(group_name))
+            
+            return roles
+            
+        except LDAPException as e:
+            logger.error(f"LDAP group search failed: {str(e)}")
+            return []
+    
+    def _extract_cn_from_dn(self, dn: str) -> str:
+        """Extract CN value from DN string"""
+        if not dn:
+            return ''
+        
+        # Parse DN components
+        import re
+        match = re.match(r'^[Cc][Nn]=([^,]+)', dn)
+        if match:
+            return match.group(1).strip()
+        
+        return dn
+    
+    def get_user_roles_by_dn(self, user_dn: str) -> List[str]:
+        """Get roles for a user by DN (public method)"""
+        if not self.config.get('role_sync_enabled', False):
+            return []
+        
+        role_source = self.config.get('role_source', 'memberOf')
+        
+        if role_source == 'group':
+            return self._get_roles_from_group_search(user_dn)
+        elif role_source == 'memberOf':
+            # Need to fetch the user first
+            user = self.get_user_by_id(user_dn)
+            if user:
+                return user.get('roles', [])
+        
+        return []
     
     def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
         """Get user by username"""
@@ -482,7 +635,7 @@ class LDAPFederationProvider(BaseFederationProvider):
             logger.error(f"LDAP sync search failed: {str(e)}")
             raise
     
-    def _parse_paged_entry(self, entry: Dict) -> Dict[str, Any]:
+    def _parse_paged_entry(self, entry: Dict, include_roles: bool = True) -> Dict[str, Any]:
         """Parse paged search result entry"""
         attrs = entry.get('attributes', {})
         dn = entry.get('dn', '')
@@ -520,6 +673,11 @@ class LDAPFederationProvider(BaseFederationProvider):
         if 'nsAccountLock' in attrs:
             enabled = str(get_val('nsAccountLock')).lower() != 'true'
         
+        # Get roles if enabled
+        roles = []
+        if include_roles and self.config.get('role_sync_enabled', False):
+            roles = self._get_user_roles(dn, attrs)
+        
         return {
             'external_id': external_id,
             'dn': dn,
@@ -529,6 +687,8 @@ class LDAPFederationProvider(BaseFederationProvider):
             'last_name': get_val(last_name_attr),
             'full_name': get_val(full_name_attr),
             'enabled': enabled,
+            'roles': roles,
+            'memberOf': attrs.get('memberOf', []),  # Raw memberOf for debugging
             'attributes': attrs,
         }
     

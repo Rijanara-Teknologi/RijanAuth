@@ -202,6 +202,86 @@
 
                                             <hr>
 
+                                            <!-- Role Mapping Settings -->
+                                            <h6 class="mb-3">Role Mapping Settings</h6>
+                                            <div class="custom-control custom-switch mb-3">
+                                                <input type="checkbox" class="custom-control-input" id="role_sync_enabled" name="role_sync_enabled">
+                                                <label class="custom-control-label" for="role_sync_enabled">Enable Role Synchronization</label>
+                                            </div>
+                                            <div id="role_settings" style="display: none;">
+                                                <div class="form-group">
+                                                    <label>Role Source</label>
+                                                    <select class="form-control" name="role_source" id="role_source">
+                                                        <option value="column">Column in User Table</option>
+                                                        <option value="table">Separate Role Table</option>
+                                                        <option value="jsonb">JSONB Field</option>
+                                                    </select>
+                                                </div>
+                                                
+                                                <div id="role_column_settings">
+                                                    <div class="form-group">
+                                                        <label>Role Column</label>
+                                                        <input type="text" class="form-control" name="role_column" value="roles" placeholder="roles">
+                                                        <small class="text-muted">Column containing user roles (can be text, text[], or JSONB)</small>
+                                                    </div>
+                                                    <div class="form-group">
+                                                        <label>Role Delimiter</label>
+                                                        <input type="text" class="form-control" name="role_delimiter" value="," style="max-width: 60px;">
+                                                        <small class="text-muted">Delimiter for text-based roles</small>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div id="role_table_settings" style="display: none;">
+                                                    <div class="form-group">
+                                                        <label>Role Table Name</label>
+                                                        <input type="text" class="form-control" name="role_table" placeholder="user_roles">
+                                                    </div>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>User ID Column</label>
+                                                                <input type="text" class="form-control" name="role_user_id_column" value="user_id">
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Role Name Column</label>
+                                                                <input type="text" class="form-control" name="role_name_column" value="role_name">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div id="role_jsonb_settings" style="display: none;">
+                                                    <div class="form-group">
+                                                        <label>JSONB Column</label>
+                                                        <input type="text" class="form-control" name="role_column" value="data" placeholder="data">
+                                                    </div>
+                                                    <div class="form-group">
+                                                        <label>JSON Path to Roles</label>
+                                                        <input type="text" class="form-control" name="role_jsonb_path" value="roles" placeholder="roles or data.user.roles">
+                                                        <small class="text-muted">Dot-notation path to roles array in JSONB</small>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div class="row">
+                                                    <div class="col-md-6">
+                                                        <div class="custom-control custom-switch mb-3">
+                                                            <input type="checkbox" class="custom-control-input" id="create_missing_roles" name="create_missing_roles">
+                                                            <label class="custom-control-label" for="create_missing_roles">Auto-create missing roles</label>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <div class="form-group">
+                                                            <label>Default Role if Empty</label>
+                                                            <input type="text" class="form-control" name="default_role_if_empty" placeholder="user">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <hr>
+
                                             <!-- Sync Settings -->
                                             <h6 class="mb-3">Synchronization Settings</h6>
                                             <div class="row">
@@ -282,4 +362,21 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Toggle role settings visibility
+    document.getElementById('role_sync_enabled').addEventListener('change', function() {
+        document.getElementById('role_settings').style.display = this.checked ? 'block' : 'none';
+    });
+    
+    // Toggle role source settings
+    document.getElementById('role_source').addEventListener('change', function() {
+        const source = this.value;
+        document.getElementById('role_column_settings').style.display = source === 'column' ? 'block' : 'none';
+        document.getElementById('role_table_settings').style.display = source === 'table' ? 'block' : 'none';
+        document.getElementById('role_jsonb_settings').style.display = source === 'jsonb' ? 'block' : 'none';
+    });
+</script>
 {% endblock %}

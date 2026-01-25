@@ -552,6 +552,287 @@ def api_delete_federation_mapper(realm_name, provider_id, mapper_id):
 
 
 # =============================================================================
+# Federation Role Mappings API
+# =============================================================================
+
+@admin_bp.route('/api/<realm_name>/user-federation/<provider_id>/role-mappings', methods=['GET'])
+@login_required
+def api_list_role_mappings(realm_name, provider_id):
+    """List role mappings for a federation provider"""
+    from apps.models.federation import UserFederationProvider, FederationRoleMapping
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        return jsonify({'error': 'Provider not found'}), 404
+    
+    mappings = FederationRoleMapping.find_by_provider(provider_id)
+    return jsonify([m.to_dict() for m in mappings])
+
+
+@admin_bp.route('/api/<realm_name>/user-federation/<provider_id>/role-mappings', methods=['POST'])
+@login_required
+def api_create_role_mapping(realm_name, provider_id):
+    """Create a role mapping for a federation provider"""
+    from apps.models.federation import UserFederationProvider, FederationRoleMapping
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        return jsonify({'error': 'Provider not found'}), 404
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    external_role = data.get('external_role_name', '').strip()
+    internal_role_id = data.get('internal_role_id', '').strip()
+    
+    if not external_role or not internal_role_id:
+        return jsonify({'error': 'external_role_name and internal_role_id are required'}), 400
+    
+    # Check if mapping already exists
+    existing = FederationRoleMapping.query.filter_by(
+        provider_id=provider_id, external_role_name=external_role
+    ).first()
+    if existing:
+        return jsonify({'error': f'Mapping for "{external_role}" already exists'}), 409
+    
+    mapping = FederationRoleMapping(
+        provider_id=provider_id,
+        external_role_name=external_role,
+        internal_role_id=internal_role_id,
+        mapping_type=data.get('mapping_type', 'direct'),
+        mapping_value=data.get('mapping_value'),
+        priority=int(data.get('priority', 0)),
+        enabled=data.get('enabled', True)
+    )
+    db.session.add(mapping)
+    db.session.commit()
+    
+    return jsonify(mapping.to_dict()), 201
+
+
+@admin_bp.route('/api/<realm_name>/user-federation/<provider_id>/role-mappings/<mapping_id>', methods=['GET'])
+@login_required
+def api_get_role_mapping(realm_name, provider_id, mapping_id):
+    """Get a specific role mapping"""
+    from apps.models.federation import UserFederationProvider, FederationRoleMapping
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        return jsonify({'error': 'Provider not found'}), 404
+    
+    mapping = FederationRoleMapping.query.get(mapping_id)
+    if not mapping or mapping.provider_id != provider_id:
+        return jsonify({'error': 'Mapping not found'}), 404
+    
+    return jsonify(mapping.to_dict())
+
+
+@admin_bp.route('/api/<realm_name>/user-federation/<provider_id>/role-mappings/<mapping_id>', methods=['PUT'])
+@login_required
+def api_update_role_mapping(realm_name, provider_id, mapping_id):
+    """Update a role mapping"""
+    from apps.models.federation import UserFederationProvider, FederationRoleMapping
+    from datetime import datetime
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        return jsonify({'error': 'Provider not found'}), 404
+    
+    mapping = FederationRoleMapping.query.get(mapping_id)
+    if not mapping or mapping.provider_id != provider_id:
+        return jsonify({'error': 'Mapping not found'}), 404
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    if 'external_role_name' in data:
+        mapping.external_role_name = data['external_role_name']
+    if 'internal_role_id' in data:
+        mapping.internal_role_id = data['internal_role_id']
+    if 'mapping_type' in data:
+        mapping.mapping_type = data['mapping_type']
+    if 'mapping_value' in data:
+        mapping.mapping_value = data['mapping_value']
+    if 'priority' in data:
+        mapping.priority = int(data['priority'])
+    if 'enabled' in data:
+        mapping.enabled = data['enabled']
+    
+    mapping.updated_at = datetime.utcnow()
+    db.session.commit()
+    
+    return jsonify(mapping.to_dict())
+
+
+@admin_bp.route('/api/<realm_name>/user-federation/<provider_id>/role-mappings/<mapping_id>', methods=['DELETE'])
+@login_required
+def api_delete_role_mapping(realm_name, provider_id, mapping_id):
+    """Delete a role mapping"""
+    from apps.models.federation import UserFederationProvider, FederationRoleMapping
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        return jsonify({'error': 'Provider not found'}), 404
+    
+    mapping = FederationRoleMapping.query.get(mapping_id)
+    if not mapping or mapping.provider_id != provider_id:
+        return jsonify({'error': 'Mapping not found'}), 404
+    
+    db.session.delete(mapping)
+    db.session.commit()
+    
+    return '', 204
+
+
+@admin_bp.route('/api/<realm_name>/user-federation/<provider_id>/role-format', methods=['GET'])
+@login_required
+def api_get_role_format_config(realm_name, provider_id):
+    """Get role format configuration for a provider"""
+    from apps.models.federation import UserFederationProvider, FederationRoleFormatConfig
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        return jsonify({'error': 'Provider not found'}), 404
+    
+    config = FederationRoleFormatConfig.get_for_provider(provider_id)
+    return jsonify(config.to_dict() if config.id else {
+        'format_type': 'string',
+        'delimiter': ',',
+        'role_field': 'roles',
+        'auto_detect': True
+    })
+
+
+@admin_bp.route('/api/<realm_name>/user-federation/<provider_id>/role-format', methods=['PUT'])
+@login_required
+def api_update_role_format_config(realm_name, provider_id):
+    """Update role format configuration for a provider"""
+    from apps.models.federation import UserFederationProvider
+    from apps.services.federation import RoleSyncService
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        return jsonify({'error': 'Provider not found'}), 404
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    config = RoleSyncService.configure_role_format(
+        provider_id=provider_id,
+        format_type=data.get('format_type', 'string'),
+        delimiter=data.get('delimiter', ','),
+        array_path=data.get('array_path'),
+        format_pattern=data.get('format_pattern'),
+        role_field=data.get('role_field', 'roles'),
+        auto_detect=data.get('auto_detect', True)
+    )
+    
+    return jsonify(config.to_dict())
+
+
+@admin_bp.route('/api/<realm_name>/user-federation/<provider_id>/test-role-format', methods=['POST'])
+@login_required
+def api_test_role_format(realm_name, provider_id):
+    """Test role format detection with sample data"""
+    from apps.models.federation import UserFederationProvider
+    from apps.services.federation import RoleSyncService
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        return jsonify({'error': 'Provider not found'}), 404
+    
+    data = request.get_json()
+    if not data or 'sample_data' not in data:
+        return jsonify({'error': 'sample_data is required'}), 400
+    
+    result = RoleSyncService.test_role_format(
+        data=data['sample_data'],
+        format_type=data.get('format_type'),
+        delimiter=data.get('delimiter'),
+        array_path=data.get('array_path'),
+        pattern=data.get('pattern')
+    )
+    
+    return jsonify(result)
+
+
+@admin_bp.route('/api/<realm_name>/user-federation/<provider_id>/role-sync-history', methods=['GET'])
+@login_required
+def api_role_sync_history(realm_name, provider_id):
+    """Get role synchronization history for a provider"""
+    from apps.models.federation import UserFederationProvider, FederatedRoleSync
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    provider = UserFederationProvider.find_by_id(provider_id)
+    if not provider or provider.realm_id != realm.id:
+        return jsonify({'error': 'Provider not found'}), 404
+    
+    limit = request.args.get('limit', 50, type=int)
+    syncs = FederatedRoleSync.query.filter_by(provider_id=provider_id)\
+        .order_by(FederatedRoleSync.last_sync.desc()).limit(limit).all()
+    
+    return jsonify([s.to_dict() for s in syncs])
+
+
+@admin_bp.route('/api/<realm_name>/users/<user_id>/role-sync-history', methods=['GET'])
+@login_required
+def api_user_role_sync_history(realm_name, user_id):
+    """Get role synchronization history for a specific user"""
+    from apps.models.federation import FederatedRoleSync
+    
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    user = User.query.get(user_id)
+    if not user or user.realm_id != realm.id:
+        return jsonify({'error': 'User not found'}), 404
+    
+    limit = request.args.get('limit', 20, type=int)
+    syncs = FederatedRoleSync.get_history(user_id, limit=limit)
+    
+    return jsonify([s.to_dict() for s in syncs])
+
+
+# =============================================================================
 # Protocol Mappers API
 # =============================================================================
 

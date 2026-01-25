@@ -1,5 +1,73 @@
 # Change Log
 
+## [2.5.0] 2026-01-25 - Federated Role Synchronization
+
+### New Features
+
+- **Federated Role Synchronization**: Comprehensive role sync between external identity sources and RijanAuth
+  - **Intelligent Format Detection**: Auto-detect role data formats (string, array, JSON, custom)
+  - **Role Mapping Engine**: Map external roles to internal RijanAuth roles
+  - **Fallback Mechanisms**: Graceful handling of varying role data formats
+
+- **Role Mapping Configuration**:
+  - Direct mapping (exact match)
+  - Prefix matching (role name starts with pattern)
+  - Regex matching (pattern-based matching)
+  - Priority ordering for conflict resolution
+  - Auto-create missing roles option
+  - Default role assignment if no roles found
+  - Protected roles that cannot be overridden
+
+- **Provider-Specific Role Extraction**:
+  - **LDAP/AD**: Extract roles from memberOf attribute or group search
+    - CN extraction from DN strings
+    - Configurable group object classes
+    - Nested group support
+  - **MySQL/MariaDB**: Extract roles from column or separate table
+    - Support for delimiter-separated strings
+    - Separate role table with user-role relationships
+  - **PostgreSQL**: Extract roles from column, table, or JSONB fields
+    - Array type support for PostgreSQL TEXT[]
+    - JSONB path navigation for nested role data
+    - Support for complex JSON structures
+
+- **Admin UI**:
+  - Role mapping configuration in provider create/edit forms
+  - Dedicated Role Mappings management page
+  - Role mapping CRUD with modal forms
+  - Recent role sync history display
+  - Available realm roles reference
+
+- **REST API**:
+  - `GET/POST /api/{realm}/user-federation/{provider}/role-mappings` - List/create mappings
+  - `GET/PUT/DELETE /api/{realm}/user-federation/{provider}/role-mappings/{id}` - Mapping CRUD
+  - `GET/PUT /api/{realm}/user-federation/{provider}/role-format` - Format config
+  - `POST /api/{realm}/user-federation/{provider}/test-role-format` - Test format detection
+  - `GET /api/{realm}/user-federation/{provider}/role-sync-history` - Provider sync history
+  - `GET /api/{realm}/users/{user}/role-sync-history` - User sync history
+
+### New Files
+
+- `apps/services/federation/role_sync_service.py` - RoleSyncService and RoleFormatDetector
+- `apps/templates/admin/federation/role_mappings.html` - Role mappings management UI
+
+### Updated Files
+
+- `apps/models/federation.py` - Added FederationRoleMapping, FederationRoleFormatConfig, FederatedRoleSync models
+- `apps/models/__init__.py` - Export new federation models
+- `apps/services/federation/__init__.py` - Export RoleSyncService, RoleFormatDetector
+- `apps/services/federation/federation_service.py` - Integrated role sync into user import
+- `apps/services/federation/ldap_provider.py` - Added role extraction methods
+- `apps/services/federation/mysql_provider.py` - Added role extraction methods
+- `apps/services/federation/postgresql_provider.py` - Added role extraction methods
+- `apps/blueprints/admin/routes.py` - Added role mapping routes and _build_provider_config updates
+- `apps/blueprints/admin/api.py` - Added role mapping API endpoints
+- `apps/templates/admin/federation/create_ldap.html` - Added role mapping settings
+- `apps/templates/admin/federation/create_mysql.html` - Added role mapping settings
+- `apps/templates/admin/federation/create_postgresql.html` - Added role mapping settings
+
+---
+
 ## [2.4.0] 2026-01-25 - Custom JWT Claims & Protocol Mappers
 
 ### New Features

@@ -21,6 +21,17 @@ from apps.utils.crypto import encrypt_data, decrypt_data
 
 logger = logging.getLogger(__name__)
 
+# Lazy import for RoleSyncService to avoid circular imports
+_role_sync_service = None
+
+def _get_role_sync_service():
+    """Get RoleSyncService lazily to avoid circular imports"""
+    global _role_sync_service
+    if _role_sync_service is None:
+        from apps.services.federation.role_sync_service import RoleSyncService
+        _role_sync_service = RoleSyncService
+    return _role_sync_service
+
 
 class FederationService:
     """
@@ -192,18 +203,21 @@ class FederationService:
     @classmethod
     def import_federated_user(cls, realm_id: str, provider_id: str, 
                              external_user: Dict[str, Any],
-                             provider_instance: Optional[BaseFederationProvider] = None) -> Optional[User]:
+                             provider_instance: Optional[BaseFederationProvider] = None,
+                             sync_roles: bool = True) -> Optional[User]:
         """
         Import or update a federated user.
         
         Creates local user reference if not exists, or updates existing.
         Links user to federation provider.
+        Optionally synchronizes roles from external source.
         
         Args:
             realm_id: Realm ID
             provider_id: Federation provider ID
             external_user: User data from external source
             provider_instance: Optional provider instance for attribute mapping
+            sync_roles: Whether to synchronize roles from external source
             
         Returns:
             User object or None on failure
@@ -212,6 +226,9 @@ class FederationService:
         if not external_id:
             logger.error("External user has no external_id")
             return None
+        
+        # Get provider config for role sync check
+        provider_config = UserFederationProvider.find_by_id(provider_id)
         
         # Check if user is already linked
         link = UserFederationLink.find_by_external_id(provider_id, external_id)
@@ -225,6 +242,11 @@ class FederationService:
                 link.external_username = external_user.get('username', '')
                 link.external_email = external_user.get('email', '')
                 db.session.commit()
+                
+                # Synchronize roles if enabled
+                if sync_roles and provider_config:
+                    cls._sync_user_roles(user, provider_config, external_user, realm_id)
+                
                 return user
         
         # Check if user exists locally by username or email
@@ -241,15 +263,63 @@ class FederationService:
             # Link existing local user to federation
             cls._create_federation_link(user, provider_id, external_user)
             cls._update_user_from_external(user, external_user, provider_instance)
+            
+            # Synchronize roles if enabled
+            if sync_roles and provider_config:
+                cls._sync_user_roles(user, provider_config, external_user, realm_id)
+            
             return user
         
         # Create new local user
         user = cls._create_federated_user(realm_id, external_user, provider_instance)
         if user:
             cls._create_federation_link(user, provider_id, external_user)
+            
+            # Synchronize roles if enabled
+            if sync_roles and provider_config:
+                cls._sync_user_roles(user, provider_config, external_user, realm_id)
+            
             return user
         
         return None
+    
+    @classmethod
+    def _sync_user_roles(cls, user: User, provider: UserFederationProvider, 
+                        external_user: Dict[str, Any], realm_id: str):
+        """
+        Synchronize roles from external source to internal RijanAuth roles.
+        
+        Args:
+            user: The local user object
+            provider: The federation provider
+            external_user: User data from external source
+            realm_id: The realm ID
+        """
+        # Check if role sync is enabled for this provider
+        config = provider.config or {}
+        if not config.get('role_sync_enabled', False):
+            logger.debug(f"Role sync not enabled for provider {provider.name}")
+            return
+        
+        try:
+            RoleSyncService = _get_role_sync_service()
+            result = RoleSyncService.synchronize_user_roles(
+                user=user,
+                provider=provider,
+                external_user=external_user,
+                realm_id=realm_id,
+                sync_type='login'
+            )
+            
+            if result.get('success'):
+                logger.info(f"Role sync completed for user {user.username}: "
+                           f"added={len(result.get('added', []))}, "
+                           f"removed={len(result.get('removed', []))}")
+            else:
+                logger.warning(f"Role sync failed for user {user.username}: {result.get('error')}")
+                
+        except Exception as e:
+            logger.error(f"Error during role synchronization for user {user.username}: {e}", exc_info=True)
     
     @classmethod
     def _create_federated_user(cls, realm_id: str, external_user: Dict[str, Any],

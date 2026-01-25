@@ -320,3 +320,253 @@ class FederationSyncLog(db.Model):
             'errors_count': self.errors_count,
             'error_message': self.error_message,
         }
+
+
+class FederationRoleMapping(db.Model, TimestampMixin):
+    """
+    Maps external roles from federation providers to internal RijanAuth roles.
+    Supports direct mapping, prefix matching, and regex patterns.
+    """
+    __tablename__ = 'federation_role_mappings'
+    
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    
+    # Provider relationship
+    provider_id = Column(String(36), db.ForeignKey('user_federation_providers.id', ondelete='CASCADE'),
+                        nullable=False, index=True)
+    
+    # External role name or pattern
+    external_role_name = Column(String(255), nullable=False)
+    
+    # Internal role relationship
+    internal_role_id = Column(String(36), db.ForeignKey('roles.id', ondelete='CASCADE'),
+                             nullable=False, index=True)
+    
+    # Mapping type: 'direct' (exact match), 'prefix' (starts with), 'regex' (pattern match)
+    mapping_type = Column(String(20), nullable=False, default='direct')
+    
+    # For prefix/regex mappings, store the pattern value
+    mapping_value = Column(String(255), nullable=True)
+    
+    # Enable/disable this mapping
+    enabled = Column(Boolean, default=True, nullable=False)
+    
+    # Priority (lower = higher priority, processed first)
+    priority = Column(Integer, default=0, nullable=False)
+    
+    # Relationships
+    provider = relationship('UserFederationProvider', 
+                           backref=db.backref('role_mappings', lazy='dynamic', cascade='all, delete-orphan'))
+    internal_role = relationship('Role')
+    
+    # Unique constraint: external role name must be unique per provider
+    __table_args__ = (
+        db.UniqueConstraint('provider_id', 'external_role_name', name='uq_federation_role_mapping'),
+    )
+    
+    def __repr__(self):
+        return f'<FederationRoleMapping {self.external_role_name} -> {self.internal_role_id}>'
+    
+    @classmethod
+    def find_by_provider(cls, provider_id):
+        """Get all role mappings for a provider, ordered by priority"""
+        return cls.query.filter_by(provider_id=provider_id, enabled=True)\
+            .order_by(cls.priority.asc()).all()
+    
+    @classmethod
+    def find_by_external_role(cls, provider_id, external_role):
+        """Find mapping for a specific external role"""
+        return cls.query.filter_by(
+            provider_id=provider_id, 
+            external_role_name=external_role,
+            enabled=True
+        ).first()
+    
+    def matches(self, role_name: str) -> bool:
+        """Check if this mapping matches the given role name"""
+        if self.mapping_type == 'direct':
+            return role_name.lower() == self.external_role_name.lower()
+        elif self.mapping_type == 'prefix':
+            prefix = self.mapping_value or self.external_role_name
+            return role_name.lower().startswith(prefix.lower())
+        elif self.mapping_type == 'regex':
+            import re
+            pattern = self.mapping_value or self.external_role_name
+            try:
+                return bool(re.match(pattern, role_name, re.IGNORECASE))
+            except re.error:
+                return False
+        return False
+    
+    def to_dict(self):
+        """Convert to dictionary"""
+        return {
+            'id': self.id,
+            'provider_id': self.provider_id,
+            'external_role_name': self.external_role_name,
+            'internal_role_id': self.internal_role_id,
+            'internal_role_name': self.internal_role.name if self.internal_role else None,
+            'mapping_type': self.mapping_type,
+            'mapping_value': self.mapping_value,
+            'enabled': self.enabled,
+            'priority': self.priority,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class FederationRoleFormatConfig(db.Model, TimestampMixin):
+    """
+    Configuration for detecting and parsing role data formats from external sources.
+    Supports string (delimited), array, JSON, and custom formats.
+    """
+    __tablename__ = 'federation_role_format_configs'
+    
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    
+    # Provider relationship
+    provider_id = Column(String(36), db.ForeignKey('user_federation_providers.id', ondelete='CASCADE'),
+                        nullable=False, unique=True, index=True)
+    
+    # Format type: 'string', 'array', 'json', 'custom'
+    format_type = Column(String(20), nullable=False, default='string')
+    
+    # For custom formats, store the parsing pattern/regex
+    format_pattern = Column(Text, nullable=True)
+    
+    # For string formats, the delimiter character(s)
+    delimiter = Column(String(10), default=',', nullable=True)
+    
+    # For JSON formats, the path to the roles array (e.g., 'data.roles')
+    array_path = Column(String(100), nullable=True)
+    
+    # Role field name in external data
+    role_field = Column(String(100), default='roles', nullable=False)
+    
+    # Enable/disable format detection
+    enabled = Column(Boolean, default=True, nullable=False)
+    
+    # Auto-detect format on first sync
+    auto_detect = Column(Boolean, default=True, nullable=False)
+    
+    # Relationships
+    provider = relationship('UserFederationProvider', 
+                           backref=db.backref('role_format_config', uselist=False, cascade='all, delete-orphan'))
+    
+    def __repr__(self):
+        return f'<FederationRoleFormatConfig {self.format_type} for provider {self.provider_id}>'
+    
+    @classmethod
+    def get_for_provider(cls, provider_id):
+        """Get format config for a provider, or return default"""
+        config = cls.query.filter_by(provider_id=provider_id).first()
+        if not config:
+            # Return default config without saving
+            return cls(
+                provider_id=provider_id,
+                format_type='string',
+                delimiter=',',
+                role_field='roles',
+                enabled=True,
+                auto_detect=True
+            )
+        return config
+    
+    def to_dict(self):
+        """Convert to dictionary"""
+        return {
+            'id': self.id,
+            'provider_id': self.provider_id,
+            'format_type': self.format_type,
+            'format_pattern': self.format_pattern,
+            'delimiter': self.delimiter,
+            'array_path': self.array_path,
+            'role_field': self.role_field,
+            'enabled': self.enabled,
+            'auto_detect': self.auto_detect,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class FederatedRoleSync(db.Model):
+    """
+    Tracks role synchronization history for federated users.
+    Records what roles were synchronized and when.
+    """
+    __tablename__ = 'federated_role_syncs'
+    
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    
+    # User relationship
+    user_id = Column(String(36), db.ForeignKey('users.id', ondelete='CASCADE'),
+                    nullable=False, index=True)
+    
+    # Provider relationship
+    provider_id = Column(String(36), db.ForeignKey('user_federation_providers.id', ondelete='CASCADE'),
+                        nullable=False, index=True)
+    
+    # External roles received from provider (raw data)
+    external_roles = Column(JSON, nullable=False, default=list)
+    
+    # Internal roles synchronized (role IDs)
+    synchronized_roles = Column(JSON, nullable=False, default=list)
+    
+    # Roles that were added in this sync
+    roles_added = Column(JSON, nullable=True, default=list)
+    
+    # Roles that were removed in this sync
+    roles_removed = Column(JSON, nullable=True, default=list)
+    
+    # Unmapped external roles (couldn't find mapping)
+    unmapped_roles = Column(JSON, nullable=True, default=list)
+    
+    # Detected format type
+    format_detected = Column(String(20), nullable=True)
+    
+    # Sync metadata
+    last_sync = Column(DateTime, default=datetime.utcnow, nullable=False)
+    sync_type = Column(String(20), nullable=False, default='login')  # 'login', 'scheduled', 'manual'
+    
+    # Relationships
+    user = relationship('User', backref=db.backref('role_syncs', lazy='dynamic', cascade='all, delete-orphan'))
+    provider = relationship('UserFederationProvider')
+    
+    __table_args__ = (
+        db.Index('ix_federated_role_sync_user_provider', 'user_id', 'provider_id'),
+    )
+    
+    def __repr__(self):
+        return f'<FederatedRoleSync user={self.user_id} provider={self.provider_id}>'
+    
+    @classmethod
+    def get_latest_for_user(cls, user_id, provider_id=None):
+        """Get the latest role sync for a user"""
+        query = cls.query.filter_by(user_id=user_id)
+        if provider_id:
+            query = query.filter_by(provider_id=provider_id)
+        return query.order_by(cls.last_sync.desc()).first()
+    
+    @classmethod
+    def get_history(cls, user_id, provider_id=None, limit=10):
+        """Get role sync history for a user"""
+        query = cls.query.filter_by(user_id=user_id)
+        if provider_id:
+            query = query.filter_by(provider_id=provider_id)
+        return query.order_by(cls.last_sync.desc()).limit(limit).all()
+    
+    def to_dict(self):
+        """Convert to dictionary"""
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'provider_id': self.provider_id,
+            'external_roles': self.external_roles,
+            'synchronized_roles': self.synchronized_roles,
+            'roles_added': self.roles_added,
+            'roles_removed': self.roles_removed,
+            'unmapped_roles': self.unmapped_roles,
+            'format_detected': self.format_detected,
+            'last_sync': self.last_sync.isoformat() if self.last_sync else None,
+            'sync_type': self.sync_type,
+        }
