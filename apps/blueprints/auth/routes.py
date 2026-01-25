@@ -8,6 +8,7 @@ from flask_login import login_user, logout_user, current_user
 from apps.blueprints.auth import auth_bp
 from apps.models.user import User
 from apps.models.realm import Realm
+from apps.utils.customization_renderer import get_page_customization
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
@@ -99,7 +100,11 @@ def login():
         if authenticated and user:
             if not user.enabled:
                 current_app.logger.warning("USER DISABLED", extra={'user_id': user.id})
-                return render_template('auth/login.html', msg='Account is disabled')
+                # Get customization for master realm
+                master_realm = Realm.find_by_name('master')
+                customization = get_page_customization(master_realm.id, 'login') if master_realm else None
+                return render_template('auth/login.html', msg='Account is disabled', 
+                                     realm=master_realm, customization=customization)
 
             # Log pre-login state
             current_app.logger.debug("PRE-LOGIN USER STATE", extra={
@@ -128,12 +133,19 @@ def login():
             'user_exists': bool(user),
             'ip_address': request.remote_addr
         })
-        return render_template('auth/login.html', msg='Invalid credentials')
+        # Get customization for master realm
+        master_realm = Realm.find_by_name('master')
+        customization = get_page_customization(master_realm.id, 'login') if master_realm else None
+        return render_template('auth/login.html', msg='Invalid credentials',
+                             realm=master_realm, customization=customization)
     
     current_app.logger.debug("RENDERING LOGIN PAGE", extra={
         'next_param': request.args.get('next', 'NOT SET')
     })
-    return render_template('auth/login.html')
+    # Get customization for master realm
+    master_realm = Realm.find_by_name('master')
+    customization = get_page_customization(master_realm.id, 'login') if master_realm else None
+    return render_template('auth/login.html', realm=master_realm, customization=customization)
 
 
 @auth_bp.route('/logout')

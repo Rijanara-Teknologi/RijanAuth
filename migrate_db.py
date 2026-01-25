@@ -187,6 +187,71 @@ def run_migration():
         ))
     
     # ==========================================================================
+    # Media Assets Table
+    # ==========================================================================
+    if not table_exists(cursor, 'media_assets'):
+        migrations.append((
+            """
+            CREATE TABLE media_assets (
+                id VARCHAR(36) PRIMARY KEY,
+                realm_id VARCHAR(36) NOT NULL,
+                asset_type VARCHAR(20) NOT NULL CHECK (asset_type IN ('logo', 'background')),
+                original_filename VARCHAR(255) NOT NULL,
+                stored_path VARCHAR(512) NOT NULL,
+                content_type VARCHAR(100) NOT NULL,
+                file_size INTEGER NOT NULL,
+                created_at DATETIME,
+                updated_at DATETIME,
+                FOREIGN KEY (realm_id) REFERENCES realms(id) ON DELETE CASCADE
+            )
+            """,
+            "Created 'media_assets' table"
+        ))
+        
+        migrations.append((
+            "CREATE INDEX ix_media_assets_realm_id ON media_assets(realm_id)",
+            "Created index on media_assets.realm_id"
+        ))
+    
+    # ==========================================================================
+    # Realm Page Customizations Table
+    # ==========================================================================
+    if not table_exists(cursor, 'realm_page_customizations'):
+        migrations.append((
+            """
+            CREATE TABLE realm_page_customizations (
+                id VARCHAR(36) PRIMARY KEY,
+                realm_id VARCHAR(36) NOT NULL,
+                page_type VARCHAR(50) NOT NULL CHECK (page_type IN ('login', 'register', 'forgot_password', 'consent', 'error')),
+                background_type VARCHAR(20) NOT NULL DEFAULT 'color' CHECK (background_type IN ('color', 'gradient', 'image')),
+                background_color VARCHAR(20) DEFAULT '#673AB7',
+                background_gradient TEXT,
+                background_image_id VARCHAR(36),
+                primary_color VARCHAR(20) DEFAULT '#673AB7',
+                secondary_color VARCHAR(20) DEFAULT '#3F51B5',
+                font_family VARCHAR(100) DEFAULT 'Inter, system-ui, -apple-system, sans-serif',
+                button_radius INTEGER DEFAULT 4,
+                form_radius INTEGER DEFAULT 4,
+                logo_id VARCHAR(36),
+                logo_position VARCHAR(20) DEFAULT 'center' CHECK (logo_position IN ('center', 'top', 'bottom')),
+                custom_css TEXT,
+                created_at DATETIME,
+                updated_at DATETIME,
+                FOREIGN KEY (realm_id) REFERENCES realms(id) ON DELETE CASCADE,
+                FOREIGN KEY (background_image_id) REFERENCES media_assets(id) ON DELETE SET NULL,
+                FOREIGN KEY (logo_id) REFERENCES media_assets(id) ON DELETE SET NULL,
+                UNIQUE(realm_id, page_type)
+            )
+            """,
+            "Created 'realm_page_customizations' table"
+        ))
+        
+        migrations.append((
+            "CREATE INDEX ix_realm_page_customizations_realm_id ON realm_page_customizations(realm_id)",
+            "Created index on realm_page_customizations.realm_id"
+        ))
+    
+    # ==========================================================================
     # Execute migrations
     # ==========================================================================
     if not migrations:

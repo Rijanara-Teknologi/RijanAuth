@@ -1,0 +1,422 @@
+{% extends "layouts/admin_base.html" %}
+
+{% block title %}Branding & Customization{% endblock %}
+
+{% block content %}
+<div class="pcoded-main-container">
+    <div class="pcoded-wrapper">
+        <div class="pcoded-content">
+            <div class="pcoded-inner-content">
+                <div class="main-body">
+                    <div class="page-wrapper">
+                        <!-- Page Header -->
+                        <div class="page-header">
+                            <div class="page-block">
+                                <div class="row align-items-center">
+                                    <div class="col-md-12">
+                                        <div class="page-header-title">
+                                            <h5 class="m-b-10">Branding & Customization</h5>
+                                        </div>
+                                        <ul class="breadcrumb">
+                                            <li class="breadcrumb-item"><a href="{{ url_for('admin.index') }}"><i
+                                                        class="feather icon-home"></i></a></li>
+                                            <li class="breadcrumb-item"><a
+                                                    href="{{ url_for('admin.dashboard', realm_name=realm.name) }}">{{
+                                                    realm.name }}</a></li>
+                                            <li class="breadcrumb-item"><a
+                                                    href="{{ url_for('admin.realm_settings', realm_name=realm.name) }}">Settings</a></li>
+                                            <li class="breadcrumb-item active">Branding</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5>Customize Authentication Pages</h5>
+                                        <div class="float-right">
+                                            <select id="pageTypeSelect" class="form-control form-control-sm" onchange="changePageType()">
+                                                <option value="login" {% if page_type == 'login' %}selected{% endif %}>Login Page</option>
+                                                <option value="register" {% if page_type == 'register' %}selected{% endif %}>Registration Page</option>
+                                                <option value="forgot_password" {% if page_type == 'forgot_password' %}selected{% endif %}>Forgot Password</option>
+                                                <option value="consent" {% if page_type == 'consent' %}selected{% endif %}>Consent Page</option>
+                                                <option value="error" {% if page_type == 'error' %}selected{% endif %}>Error Page</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="card-body">
+                                        <form method="POST" action="{{ url_for('admin.realm_branding', realm_name=realm.name) }}">
+                                            <input type="hidden" name="page_type" value="{{ page_type }}">
+                                            
+                                            <div class="row">
+                                                <!-- Left Column: Customization Options -->
+                                                <div class="col-md-8">
+                                                    <!-- Color Scheme Section -->
+                                                    <div class="card mb-3">
+                                                        <div class="card-header">
+                                                            <h6 class="mb-0">Color Scheme</h6>
+                                                        </div>
+                                                        <div class="card-body">
+                                                            <div class="row">
+                                                                <div class="col-md-6">
+                                                                    <div class="form-group">
+                                                                        <label>Primary Color</label>
+                                                                        <input type="color" class="form-control" name="primary_color"
+                                                                            value="{{ customization.primary_color or '#673AB7' }}" 
+                                                                            onchange="updatePreview()">
+                                                                    </div>
+                                                                </div>
+                                                                <div class="col-md-6">
+                                                                    <div class="form-group">
+                                                                        <label>Secondary Color</label>
+                                                                        <input type="color" class="form-control" name="secondary_color"
+                                                                            value="{{ customization.secondary_color or '#3F51B5' }}"
+                                                                            onchange="updatePreview()">
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div class="row">
+                                                                <div class="col-md-6">
+                                                                    <div class="form-group">
+                                                                        <label>Button Radius (px)</label>
+                                                                        <input type="range" class="form-control-range" name="button_radius"
+                                                                            min="0" max="12" value="{{ customization.button_radius or 4 }}"
+                                                                            onchange="updatePreview()">
+                                                                        <small class="text-muted">Current: <span id="buttonRadiusValue">{{ customization.button_radius or 4 }}</span>px</small>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="col-md-6">
+                                                                    <div class="form-group">
+                                                                        <label>Form Radius (px)</label>
+                                                                        <input type="range" class="form-control-range" name="form_radius"
+                                                                            min="0" max="12" value="{{ customization.form_radius or 4 }}"
+                                                                            onchange="updatePreview()">
+                                                                        <small class="text-muted">Current: <span id="formRadiusValue">{{ customization.form_radius or 4 }}</span>px</small>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Background Section -->
+                                                    <div class="card mb-3">
+                                                        <div class="card-header">
+                                                            <h6 class="mb-0">Background</h6>
+                                                        </div>
+                                                        <div class="card-body">
+                                                            <div class="form-group">
+                                                                <label>Background Type</label>
+                                                                <select class="form-control" name="background_type" id="backgroundType"
+                                                                    onchange="toggleBackgroundOptions()">
+                                                                    <option value="color" {% if customization.background_type == 'color' %}selected{% endif %}>Solid Color</option>
+                                                                    <option value="gradient" {% if customization.background_type == 'gradient' %}selected{% endif %}>Gradient</option>
+                                                                    <option value="image" {% if customization.background_type == 'image' %}selected{% endif %}>Image</option>
+                                                                </select>
+                                                            </div>
+                                                            
+                                                            <!-- Color Background -->
+                                                            <div id="colorBackground" class="background-option">
+                                                                <div class="form-group">
+                                                                    <label>Background Color</label>
+                                                                    <input type="color" class="form-control" name="background_color"
+                                                                        value="{{ customization.background_color or '#673AB7' }}"
+                                                                        onchange="updatePreview()">
+                                                                </div>
+                                                            </div>
+                                                            
+                                                            <!-- Gradient Background -->
+                                                            <div id="gradientBackground" class="background-option" style="display: none;">
+                                                                <div class="form-group">
+                                                                    <label>Gradient Colors</label>
+                                                                    <div id="gradientColors">
+                                                                        {% if customization %}
+                                                                            {% set gradient = customization.get_background_gradient_dict() %}
+                                                                            {% if gradient and gradient.colors %}
+                                                                                {% for color in gradient.colors %}
+                                                                                <input type="color" class="form-control mb-2" name="gradient_colors[]" value="{{ color }}" onchange="updatePreview()">
+                                                                                {% endfor %}
+                                                                            {% else %}
+                                                                                <input type="color" class="form-control mb-2" name="gradient_colors[]" value="#673AB7" onchange="updatePreview()">
+                                                                                <input type="color" class="form-control mb-2" name="gradient_colors[]" value="#3F51B5" onchange="updatePreview()">
+                                                                            {% endif %}
+                                                                        {% else %}
+                                                                            <input type="color" class="form-control mb-2" name="gradient_colors[]" value="#673AB7" onchange="updatePreview()">
+                                                                            <input type="color" class="form-control mb-2" name="gradient_colors[]" value="#3F51B5" onchange="updatePreview()">
+                                                                        {% endif %}
+                                                                    </div>
+                                                                    <button type="button" class="btn btn-sm btn-secondary" onclick="addGradientColor()">Add Color</button>
+                                                                </div>
+                                                                <div class="form-group">
+                                                                    <label>Gradient Direction</label>
+                                                                    <select class="form-control" name="gradient_direction" onchange="updatePreview()">
+                                                                        <option value="to right" {% if gradient and gradient.direction == 'to right' %}selected{% endif %}>To Right</option>
+                                                                        <option value="to left" {% if gradient and gradient.direction == 'to left' %}selected{% endif %}>To Left</option>
+                                                                        <option value="to bottom" {% if gradient and gradient.direction == 'to bottom' %}selected{% endif %}>To Bottom</option>
+                                                                        <option value="to top" {% if gradient and gradient.direction == 'to top' %}selected{% endif %}>To Top</option>
+                                                                        <option value="45deg" {% if gradient and gradient.direction == '45deg' %}selected{% endif %}>45° Diagonal</option>
+                                                                    </select>
+                                                                </div>
+                                                            </div>
+                                                            
+                                                            <!-- Image Background -->
+                                                            <div id="imageBackground" class="background-option" style="display: none;">
+                                                                {% if customization and customization.background_image_id %}
+                                                                <div class="mb-3">
+                                                                    {% set bg_asset = customization.background_image %}
+                                                                    {% if bg_asset %}
+                                                                    <img src="{{ url_for('serve_media', asset_id=customization.background_image_id, filename=bg_asset.stored_path) }}" 
+                                                                        alt="Background" class="img-thumbnail" style="max-height: 200px;">
+                                                                    {% endif %}
+                                                                    <form method="POST" action="{{ url_for('admin.remove_background', realm_name=realm.name) }}" style="display: inline;">
+                                                                        <input type="hidden" name="page_type" value="{{ page_type }}">
+                                                                        <button type="submit" class="btn btn-sm btn-danger mt-2">Remove Background</button>
+                                                                    </form>
+                                                                </div>
+                                                                {% else %}
+                                                                <div class="form-group">
+                                                                    <label>Upload Background Image</label>
+                                                                    <input type="file" class="form-control-file" id="backgroundFile" accept="image/*">
+                                                                    <small class="text-muted">Max size: 2MB. Formats: PNG, JPG, SVG, WebP</small>
+                                                                    <button type="button" class="btn btn-sm btn-primary mt-2" onclick="uploadBackground()">Upload</button>
+                                                                </div>
+                                                                {% endif %}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Logo Section -->
+                                                    <div class="card mb-3">
+                                                        <div class="card-header">
+                                                            <h6 class="mb-0">Logo</h6>
+                                                        </div>
+                                                        <div class="card-body">
+                                                            {% if customization and customization.logo_id %}
+                                                            <div class="mb-3">
+                                                                {% set logo_asset = customization.logo %}
+                                                                {% if logo_asset %}
+                                                                <img src="{{ url_for('serve_media', asset_id=customization.logo_id, filename=logo_asset.stored_path) }}" 
+                                                                    alt="Logo" class="img-thumbnail" style="max-height: 100px;">
+                                                                {% endif %}
+                                                                <form method="POST" action="{{ url_for('admin.remove_logo', realm_name=realm.name) }}" style="display: inline;">
+                                                                    <input type="hidden" name="page_type" value="{{ page_type }}">
+                                                                    <button type="submit" class="btn btn-sm btn-danger mt-2">Remove Logo</button>
+                                                                </form>
+                                                            </div>
+                                                            {% else %}
+                                                            <div class="form-group">
+                                                                <label>Upload Logo</label>
+                                                                <input type="file" class="form-control-file" id="logoFile" accept="image/png,image/svg+xml,image/jpeg">
+                                                                <small class="text-muted">Max size: 500KB. Formats: PNG, SVG, JPG</small>
+                                                                <button type="button" class="btn btn-sm btn-primary mt-2" onclick="uploadLogo()">Upload</button>
+                                                            </div>
+                                                            {% endif %}
+                                                            <div class="form-group mt-3">
+                                                                <label>Logo Position</label>
+                                                                <select class="form-control" name="logo_position" onchange="updatePreview()">
+                                                                    <option value="center" {% if customization.logo_position == 'center' %}selected{% endif %}>Center</option>
+                                                                    <option value="top" {% if customization.logo_position == 'top' %}selected{% endif %}>Top</option>
+                                                                    <option value="bottom" {% if customization.logo_position == 'bottom' %}selected{% endif %}>Bottom</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Typography Section -->
+                                                    <div class="card mb-3">
+                                                        <div class="card-header">
+                                                            <h6 class="mb-0">Typography</h6>
+                                                        </div>
+                                                        <div class="card-body">
+                                                            <div class="form-group">
+                                                                <label>Font Family</label>
+                                                                <select class="form-control" name="font_family" onchange="updatePreview()">
+                                                                    <option value="Inter, system-ui, -apple-system, sans-serif" {% if customization.font_family == 'Inter, system-ui, -apple-system, sans-serif' %}selected{% endif %}>Inter (Default)</option>
+                                                                    <option value="'Roboto', sans-serif" {% if customization.font_family == "'Roboto', sans-serif" %}selected{% endif %}>Roboto</option>
+                                                                    <option value="'Open Sans', sans-serif" {% if customization.font_family == "'Open Sans', sans-serif" %}selected{% endif %}>Open Sans</option>
+                                                                    <option value="'Lato', sans-serif" {% if customization.font_family == "'Lato', sans-serif" %}selected{% endif %}>Lato</option>
+                                                                    <option value="'Montserrat', sans-serif" {% if customization.font_family == "'Montserrat', sans-serif" %}selected{% endif %}>Montserrat</option>
+                                                                    <option value="Arial, sans-serif" {% if customization.font_family == 'Arial, sans-serif' %}selected{% endif %}>Arial</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Advanced Customization -->
+                                                    <div class="card mb-3">
+                                                        <div class="card-header">
+                                                            <h6 class="mb-0">Advanced Custom CSS</h6>
+                                                        </div>
+                                                        <div class="card-body">
+                                                            <div class="alert alert-warning">
+                                                                <i class="feather icon-alert-triangle"></i> 
+                                                                <strong>Security Warning:</strong> Custom CSS is sanitized for security. Dangerous patterns will be removed.
+                                                            </div>
+                                                            <div class="form-group">
+                                                                <label>Custom CSS</label>
+                                                                <textarea class="form-control" name="custom_css" rows="10" 
+                                                                    placeholder="/* Your custom CSS here */">{{ customization.custom_css or '' }}</textarea>
+                                                                <small class="text-muted">CSS will be automatically prefixed with .custom-page for safety</small>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="form-group">
+                                                        <button type="submit" class="btn btn-primary">
+                                                            <i class="feather icon-save"></i> Save Customization
+                                                        </button>
+                                                        <a href="{{ url_for('admin.realm_settings', realm_name=realm.name) }}" class="btn btn-secondary">
+                                                            Cancel
+                                                        </a>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Right Column: Preview -->
+                                                <div class="col-md-4">
+                                                    <div class="card">
+                                                        <div class="card-header">
+                                                            <h6 class="mb-0">Live Preview</h6>
+                                                        </div>
+                                                        <div class="card-body">
+                                                            <div id="previewContainer" style="border: 1px solid #ddd; padding: 20px; min-height: 400px; border-radius: 4px;">
+                                                                <div style="text-align: center; padding: 20px;">
+                                                                    <h4 style="color: var(--primary-color);">{{ realm.display_name or realm.name }}</h4>
+                                                                    <p style="color: var(--secondary-color);">Sign in to continue</p>
+                                                                    <div style="margin-top: 20px;">
+                                                                        <input type="text" placeholder="Username" 
+                                                                            style="width: 100%; padding: 10px; border-radius: var(--form-radius); border: 1px solid #ddd; margin-bottom: 10px;">
+                                                                        <input type="password" placeholder="Password" 
+                                                                            style="width: 100%; padding: 10px; border-radius: var(--form-radius); border: 1px solid #ddd; margin-bottom: 10px;">
+                                                                        <button style="width: 100%; padding: 10px; background: var(--primary-color); color: white; border: none; border-radius: var(--button-radius);">
+                                                                            Sign In
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block javascripts %}
+<script>
+function changePageType() {
+    const pageType = document.getElementById('pageTypeSelect').value;
+    window.location.href = '{{ url_for("admin.realm_branding", realm_name=realm.name) }}?page=' + pageType;
+}
+
+function toggleBackgroundOptions() {
+    const bgType = document.getElementById('backgroundType').value;
+    document.querySelectorAll('.background-option').forEach(el => el.style.display = 'none');
+    
+    if (bgType === 'color') {
+        document.getElementById('colorBackground').style.display = 'block';
+    } else if (bgType === 'gradient') {
+        document.getElementById('gradientBackground').style.display = 'block';
+    } else if (bgType === 'image') {
+        document.getElementById('imageBackground').style.display = 'block';
+    }
+    
+    updatePreview();
+}
+
+function addGradientColor() {
+    const container = document.getElementById('gradientColors');
+    const newInput = document.createElement('input');
+    newInput.type = 'color';
+    newInput.className = 'form-control mb-2';
+    newInput.name = 'gradient_colors[]';
+    newInput.value = '#673AB7';
+    newInput.onchange = updatePreview;
+    container.appendChild(newInput);
+}
+
+function updatePreview() {
+    // Update CSS variables in preview
+    const primaryColor = document.querySelector('input[name="primary_color"]').value;
+    const secondaryColor = document.querySelector('input[name="secondary_color"]').value;
+    const buttonRadius = document.querySelector('input[name="button_radius"]').value;
+    const formRadius = document.querySelector('input[name="form_radius"]').value;
+    
+    document.getElementById('previewContainer').style.setProperty('--primary-color', primaryColor);
+    document.getElementById('previewContainer').style.setProperty('--secondary-color', secondaryColor);
+    document.getElementById('previewContainer').style.setProperty('--button-radius', buttonRadius + 'px');
+    document.getElementById('previewContainer').style.setProperty('--form-radius', formRadius + 'px');
+    
+    // Update background
+    const bgType = document.getElementById('backgroundType').value;
+    const preview = document.getElementById('previewContainer');
+    
+    if (bgType === 'color') {
+        const bgColor = document.querySelector('input[name="background_color"]').value;
+        preview.style.background = bgColor;
+    } else if (bgType === 'gradient') {
+        const colors = Array.from(document.querySelectorAll('input[name="gradient_colors[]"]')).map(inp => inp.value);
+        const direction = document.querySelector('select[name="gradient_direction"]').value;
+        preview.style.background = `linear-gradient(${direction}, ${colors.join(', ')})`;
+    }
+    
+    // Update radius values display
+    document.getElementById('buttonRadiusValue').textContent = buttonRadius;
+    document.getElementById('formRadiusValue').textContent = formRadius;
+}
+
+function uploadLogo() {
+    const fileInput = document.getElementById('logoFile');
+    if (!fileInput.files.length) {
+        alert('Please select a file');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('logo', fileInput.files[0]);
+    formData.append('page_type', '{{ page_type }}');
+    
+    fetch('{{ url_for("admin.upload_logo", realm_name=realm.name) }}', {
+        method: 'POST',
+        body: formData
+    }).then(() => {
+        location.reload();
+    });
+}
+
+function uploadBackground() {
+    const fileInput = document.getElementById('backgroundFile');
+    if (!fileInput.files.length) {
+        alert('Please select a file');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('background', fileInput.files[0]);
+    formData.append('page_type', '{{ page_type }}');
+    
+    fetch('{{ url_for("admin.upload_background", realm_name=realm.name) }}', {
+        method: 'POST',
+        body: formData
+    }).then(() => {
+        location.reload();
+    });
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    toggleBackgroundOptions();
+    updatePreview();
+});
+</script>
+{% endblock %}

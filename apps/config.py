@@ -10,7 +10,10 @@ class Config(object):
     basedir = os.path.abspath(os.path.dirname(__file__))
 
     # Assets Management
-    ASSETS_ROOT = os.getenv('ASSETS_ROOT', '/static/assets')  
+    ASSETS_ROOT = os.getenv('ASSETS_ROOT', '/static/assets')
+    
+    # Media upload directory for customization
+    MEDIA_ROOT = os.path.join(basedir, 'static', 'media')  
     
     # Set up the App SECRET_KEY
     SECRET_KEY  = os.getenv('SECRET_KEY', None)

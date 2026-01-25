@@ -1,5 +1,56 @@
 # Change Log
 
+## [2.6.0] 2026-01-25 - Page Customization System
+
+### New Features
+
+- **Realm Page Customization System**:
+  - Complete branding and customization system for authentication pages
+  - Customize login, registration, forgot password, consent, and error pages
+  - Color scheme customization (primary, secondary colors)
+  - Background customization (solid color, gradient, or image)
+  - Logo upload and positioning
+  - Typography customization (font family selection)
+  - Form and button styling (border radius)
+  - Advanced custom CSS injection with security sanitization
+  - Real-time preview of customization changes
+  - Page-specific customization (different settings per page type)
+
+- **Media Asset Management**:
+  - Secure logo upload (PNG, SVG, JPG, max 500KB)
+  - Background image upload (PNG, JPG, SVG, WebP, max 2MB)
+  - Media asset serving with proper security
+  - Automatic file validation and sanitization
+
+- **Security Features**:
+  - CSS sanitization to prevent XSS attacks
+  - Dangerous pattern removal from custom CSS
+  - Safe CSS prefixing for selector scoping
+  - File type and size validation
+  - Protected system elements (realm name, client name cannot be customized)
+
+- **Admin UI**:
+  - New "Branding" tab in realm settings
+  - Comprehensive customization interface with live preview
+  - Page type selector for different authentication pages
+  - Color pickers, gradient builder, and image uploaders
+  - Custom CSS editor with security warnings
+
+### Database Changes
+
+- Added `realm_page_customizations` table for storing customization settings
+- Added `media_assets` table for storing uploaded logos and backgrounds
+- Migration script updated to create new tables
+
+### Technical Details
+
+- New models: `RealmPageCustomization`, `MediaAsset`
+- New utilities: `CSSSanitizer`, `MediaHandler`, `CustomizationRenderer`
+- Updated auth templates to use customization system
+- Media serving route for secure file delivery
+
+---
+
 ## [2.5.1] 2026-01-25 - User Role & Group Management
 
 ### New Features

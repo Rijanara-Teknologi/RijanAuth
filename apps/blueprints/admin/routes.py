@@ -14,9 +14,14 @@ from apps.models.role import Role
 from apps.models.group import Group
 from apps.models.session import UserSession
 from apps.models.event import Event
+from apps.models.customization import RealmPageCustomization, MediaAsset
 from apps.services.realm_service import RealmService
 from apps.services.user_service import UserService
 from apps.services.client_service import ClientService
+from apps.utils.css_sanitizer import CSSSanitizer
+from apps.utils.media_handler import MediaHandler
+from apps import db
+import json
 
 
 def get_realm_or_404(realm_name):
@@ -146,6 +151,197 @@ def realm_settings(realm_name):
         realms=realms,
         segment='realm-settings'
     )
+
+
+@admin_bp.route('/<realm_name>/branding', methods=['GET', 'POST'])
+@login_required
+def realm_branding(realm_name):
+    """Realm branding/customization page"""
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    page_type = request.args.get('page', 'login')  # Default to login page
+    
+    if request.method == 'POST':
+        # Get or create customization
+        customization = RealmPageCustomization.get_or_create(realm.id, page_type)
+        
+        # Update customization from form
+        customization.background_type = request.form.get('background_type', 'color')
+        customization.background_color = request.form.get('background_color', '#673AB7')
+        
+        # Handle gradient
+        gradient_colors = request.form.getlist('gradient_colors[]')
+        gradient_direction = request.form.get('gradient_direction', 'to right')
+        if gradient_colors and len(gradient_colors) >= 2:
+            customization.set_background_gradient_dict({
+                'colors': gradient_colors,
+                'direction': gradient_direction
+            })
+        else:
+            customization.background_gradient = None
+        
+        # Colors
+        customization.primary_color = request.form.get('primary_color', '#673AB7')
+        customization.secondary_color = request.form.get('secondary_color', '#3F51B5')
+        
+        # Typography
+        customization.font_family = request.form.get('font_family', 'Inter, system-ui, -apple-system, sans-serif')
+        
+        # Styling
+        try:
+            customization.button_radius = int(request.form.get('button_radius', 4))
+        except (ValueError, TypeError):
+            customization.button_radius = 4
+        
+        try:
+            customization.form_radius = int(request.form.get('form_radius', 4))
+        except (ValueError, TypeError):
+            customization.form_radius = 4
+        
+        # Logo position
+        customization.logo_position = request.form.get('logo_position', 'center')
+        
+        # Custom CSS (sanitized)
+        custom_css = request.form.get('custom_css', '').strip()
+        sanitized_css, warnings = CSSSanitizer.sanitize(custom_css)
+        customization.custom_css = sanitized_css
+        
+        if warnings:
+            flash(f'CSS warnings: {"; ".join(warnings)}', 'warning')
+        
+        customization.save()
+        flash('Branding settings saved successfully', 'success')
+        return redirect(url_for('admin.realm_branding', realm_name=realm_name, page=page_type))
+    
+    # GET request - show branding page
+    customization = RealmPageCustomization.get(realm.id, page_type)
+    if not customization:
+        # Create default customization for display
+        customization = RealmPageCustomization.get_or_create(realm.id, page_type)
+    
+    realms = Realm.query.all()
+    return render_template(
+        'admin/realms/branding.html',
+        realm=realm,
+        realms=realms,
+        customization=customization,
+        page_type=page_type,
+        segment='realm-branding'
+    )
+
+
+@admin_bp.route('/<realm_name>/branding/upload-logo', methods=['POST'])
+@login_required
+def upload_logo(realm_name):
+    """Upload logo for realm"""
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    if 'logo' not in request.files:
+        flash('No file provided', 'error')
+        return redirect(url_for('admin.realm_branding', realm_name=realm_name))
+    
+    file = request.files['logo']
+    page_type = request.form.get('page_type', 'login')
+    
+    try:
+        # Save file
+        asset = MediaHandler.save_file(file, realm.id, 'logo')
+        
+        # Update customization
+        customization = RealmPageCustomization.get_or_create(realm.id, page_type)
+        customization.logo_id = asset.id
+        customization.save()
+        
+        flash('Logo uploaded successfully', 'success')
+    except ValueError as e:
+        flash(str(e), 'error')
+    except Exception as e:
+        flash(f'Error uploading logo: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.realm_branding', realm_name=realm_name, page=page_type))
+
+
+@admin_bp.route('/<realm_name>/branding/upload-background', methods=['POST'])
+@login_required
+def upload_background(realm_name):
+    """Upload background image for realm"""
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    if 'background' not in request.files:
+        flash('No file provided', 'error')
+        return redirect(url_for('admin.realm_branding', realm_name=realm_name))
+    
+    file = request.files['background']
+    page_type = request.form.get('page_type', 'login')
+    
+    try:
+        # Save file
+        asset = MediaHandler.save_file(file, realm.id, 'background')
+        
+        # Update customization
+        customization = RealmPageCustomization.get_or_create(realm.id, page_type)
+        customization.background_image_id = asset.id
+        customization.background_type = 'image'
+        customization.save()
+        
+        flash('Background image uploaded successfully', 'success')
+    except ValueError as e:
+        flash(str(e), 'error')
+    except Exception as e:
+        flash(f'Error uploading background: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.realm_branding', realm_name=realm_name, page=page_type))
+
+
+@admin_bp.route('/<realm_name>/branding/remove-logo', methods=['POST'])
+@login_required
+def remove_logo(realm_name):
+    """Remove logo from realm"""
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    page_type = request.form.get('page_type', 'login')
+    customization = RealmPageCustomization.get(realm.id, page_type)
+    
+    if customization and customization.logo_id:
+        asset = MediaAsset.find_by_id(customization.logo_id)
+        if asset:
+            MediaHandler.delete_file(asset)
+        customization.logo_id = None
+        customization.save()
+        flash('Logo removed successfully', 'success')
+    
+    return redirect(url_for('admin.realm_branding', realm_name=realm_name, page=page_type))
+
+
+@admin_bp.route('/<realm_name>/branding/remove-background', methods=['POST'])
+@login_required
+def remove_background(realm_name):
+    """Remove background image from realm"""
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    page_type = request.form.get('page_type', 'login')
+    customization = RealmPageCustomization.get(realm.id, page_type)
+    
+    if customization and customization.background_image_id:
+        asset = MediaAsset.find_by_id(customization.background_image_id)
+        if asset:
+            MediaHandler.delete_file(asset)
+        customization.background_image_id = None
+        customization.background_type = 'color'
+        customization.save()
+        flash('Background image removed successfully', 'success')
+    
+    return redirect(url_for('admin.realm_branding', realm_name=realm_name, page=page_type))
 
 
 @admin_bp.route('/realms/create', methods=['GET', 'POST'])

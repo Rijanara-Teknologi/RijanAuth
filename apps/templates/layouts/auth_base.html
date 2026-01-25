@@ -16,16 +16,29 @@
 
     <style>
         :root {
-            --primary-color: #673ab7;
-            --primary-dark: #512da8;
+            --primary-color: {{ customization.primary_color if customization else '#673ab7' }};
+            --secondary-color: {{ customization.secondary_color if customization else '#3F51B5' }};
+            --button-radius: {{ customization.button_radius if customization else 4 }}px;
+            --form-radius: {{ customization.form_radius if customization else 4 }}px;
+            --font-family: {{ customization.font_family if customization else 'Inter, system-ui, -apple-system, sans-serif' }};
         }
 
         body {
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            {% if customization and customization.background_type == 'image' and customization.background_image_url %}
+            background-image: url('{{ customization.background_image_url }}');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            {% elif customization and customization.background_type == 'gradient' and customization.background_gradient %}
+            background: linear-gradient({{ customization.background_gradient.direction }}, {{ customization.background_gradient.colors | join(', ') }});
+            {% else %}
+            background-color: {{ customization.background_color if customization else '#673AB7' }};
+            {% endif %}
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
+            font-family: var(--font-family);
         }
 
         .auth-wrapper {
@@ -49,18 +62,28 @@
         .card {
             border: none;
             box-shadow: 0 10px 40px 0 rgba(0, 0, 0, 0.1);
-            border-radius: 12px;
+            border-radius: var(--form-radius);
         }
 
         .btn-primary {
             background: var(--primary-color);
             border-color: var(--primary-color);
+            border-radius: var(--button-radius);
         }
 
         .btn-primary:hover {
-            background: var(--primary-dark);
-            border-color: var(--primary-dark);
+            background: var(--secondary-color);
+            border-color: var(--secondary-color);
         }
+        
+        .form-control {
+            border-radius: var(--form-radius);
+        }
+        
+        {% if customization and customization.safe_css %}
+        /* Custom CSS */
+        {{ customization.safe_css | safe }}
+        {% endif %}
 
         .logo-text {
             color: var(--primary-color);
@@ -75,9 +98,18 @@
         <div class="auth-content">
             <div class="card">
                 <div class="card-body text-center">
+                    {% if customization and customization.logo_url %}
+                    <div class="mb-4">
+                        <img src="{{ customization.logo_url }}" alt="Logo" style="max-height: 80px;">
+                    </div>
+                    {% else %}
                     <div class="mb-4">
                         <i class="feather icon-lock auth-icon"></i>
                     </div>
+                    {% endif %}
+                    {% if realm %}
+                    <h4 class="mb-2" style="color: var(--primary-color);">{{ realm.display_name or realm.name }}</h4>
+                    {% endif %}
                     {% block content %}{% endblock %}
                 </div>
             </div>

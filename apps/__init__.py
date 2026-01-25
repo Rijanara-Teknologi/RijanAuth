@@ -52,6 +52,26 @@ def register_blueprints(app):
     # 3. OIDC Blueprint (OpenID Connect Protocol)
     from apps.blueprints.oidc import oidc_bp
     app.register_blueprint(oidc_bp)
+    
+    # 4. Media serving route
+    @app.route('/media/<asset_id>/<filename>')
+    def serve_media(asset_id, filename):
+        """Serve media files for customization"""
+        import os
+        from flask import send_from_directory, abort
+        from apps.models.customization import MediaAsset
+        from apps.utils.media_handler import MediaHandler
+        
+        asset = MediaAsset.find_by_id(asset_id)
+        if not asset or asset.stored_path != filename:
+            abort(404)
+        
+        file_path = MediaHandler.get_file_path(asset)
+        if not file_path or not os.path.exists(file_path):
+            abort(404)
+        
+        upload_dir = MediaHandler.get_upload_directory()
+        return send_from_directory(upload_dir, asset.stored_path, mimetype=asset.content_type)
 
 
 def configure_database(app):
@@ -71,6 +91,7 @@ def configure_database(app):
         from apps.models.authentication import AuthenticationFlow, AuthenticationExecution, AuthenticatorConfig, RequiredAction
         from apps.models.event import Event, AdminEvent
         from apps.models.federation import UserFederationProvider, UserFederationMapper, UserFederationLink, FederationSyncLog
+        from apps.models.customization import RealmPageCustomization, MediaAsset
         
         try:
             db.create_all()
