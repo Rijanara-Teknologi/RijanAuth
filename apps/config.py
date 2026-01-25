@@ -23,6 +23,18 @@ class Config(object):
     REMEMBER_COOKIE_HTTPONLY = True
     REMEMBER_COOKIE_DURATION = 3600
 
+    # Logging Configuration
+    LOGGING = {
+        'level': os.getenv('LOG_LEVEL', 'INFO'),
+        'path': os.getenv('LOG_PATH', 'storage/logs'),
+        'max_files': 7,
+        'max_size': 100 * 1024 * 1024,  # 100MB
+        'format': '[%(asctime)s] %(environment)s.%(levelname)s: %(message)s %(context)s',
+        'sensitive_fields': ['password', 'token', 'secret', 'key', 'ssn', 'credit_card', 'authorization'],
+        'mask_char': '*',
+        'mask_length': 4
+    }
+
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     DB_ENGINE   = os.getenv('DB_ENGINE'   , None)

@@ -14,7 +14,9 @@ from apps.models.role import Role
 from apps.models.group import Group
 from apps.services.user_service import UserService
 from apps.services.client_service import ClientService
+from apps.logging import log_action
 from apps import db
+
 
 # =============================================================================
 # System API
@@ -93,6 +95,7 @@ def api_get_user(realm_name, user_id):
 
 @admin_bp.route('/api/<realm_name>/users', methods=['POST'])
 @login_required
+@log_action(action="create_user", resource_type="user")
 def api_create_user(realm_name):
     """Create a new user"""
     realm = Realm.find_by_name(realm_name)
@@ -130,6 +133,7 @@ def api_create_user(realm_name):
 
 @admin_bp.route('/api/<realm_name>/users/<user_id>', methods=['PUT'])
 @login_required
+@log_action(action="update_user", resource_type="user")
 def api_update_user(realm_name, user_id):
     """Update a user"""
     realm = Realm.find_by_name(realm_name)
@@ -162,6 +166,7 @@ def api_update_user(realm_name, user_id):
 
 @admin_bp.route('/api/<realm_name>/users/<user_id>', methods=['DELETE'])
 @login_required
+@log_action(action="delete_user", resource_type="user")
 def api_delete_user(realm_name, user_id):
     """Delete a user"""
     realm = Realm.find_by_name(realm_name)
@@ -178,6 +183,7 @@ def api_delete_user(realm_name, user_id):
 
 @admin_bp.route('/api/<realm_name>/users/<user_id>/reset-password', methods=['PUT'])
 @login_required
+@log_action(action="reset_password", resource_type="user")
 def api_reset_password(realm_name, user_id):
     """Reset user password"""
     realm = Realm.find_by_name(realm_name)

@@ -9,12 +9,9 @@ from apps.blueprints.auth import auth_bp
 from apps.models.user import User
 from apps.models.realm import Realm
 
-print("DEBUG_V2: auth.routes module loaded", flush=True)
-
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
-    import sys
-    current_app.logger.info(f"DEBUG_V2: Login route accessed. Method: {request.method}")
+    current_app.logger.debug(f"Login route accessed. Method: {request.method}")
     if current_user.is_authenticated:
         return redirect(url_for('admin.index'))
 

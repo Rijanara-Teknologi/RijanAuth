@@ -120,6 +120,13 @@ def _initialize_master_realm():
         traceback.print_exc()
 
 
+def configure_logging(app):
+    """Configure logging subsystem"""
+    from apps.logging import setup_logging, LoggingMiddleware
+    setup_logging(app)
+    LoggingMiddleware(app)
+
+
 def configure_realm_middleware(app):
     """Configure realm context middleware"""
     from apps.middleware.realm import load_realm
@@ -127,14 +134,6 @@ def configure_realm_middleware(app):
     @app.before_request
     def before_request():
         load_realm()
-
-
-# Import OAuth blueprint
-try:
-    from apps.authentication.oauth import github_blueprint
-    HAS_GITHUB_OAUTH = True
-except ImportError:
-    HAS_GITHUB_OAUTH = False
 
 
 def create_app(config):
@@ -150,15 +149,14 @@ def create_app(config):
     app = Flask(__name__)
     app.config.from_object(config)
     
+    # Configure logging
+    configure_logging(app)
+    
     # Register extensions
     register_extensions(app)
     
     # Register blueprints
     register_blueprints(app)
-    
-    # Register OAuth blueprint if available
-    if HAS_GITHUB_OAUTH:
-        app.register_blueprint(github_blueprint, url_prefix="/login")
     
     # Configure database
     configure_database(app)
