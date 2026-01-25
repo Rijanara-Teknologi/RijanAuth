@@ -16,102 +16,103 @@
                 <label class="text-muted small mb-1">Current Realm</label>
                 <select id="realm-selector" class="form-control form-control-sm" onchange="switchRealm(this.value)">
                     {% for r in realms %}
-                    <option value="{{ r.name }}" {% if realm and r.id == realm.id %}selected{% endif %}>
+                    <option value="{{ r.name }}" {% if realm and r.id==realm.id %}selected{% endif %}>
                         {{ r.display_name or r.name }}
                     </option>
                     {% endfor %}
                 </select>
             </div>
-            
+
             <ul class="nav pcoded-inner-navbar">
                 <li class="nav-item pcoded-menu-caption">
                     <label>Overview</label>
                 </li>
-                <li data-username="dashboard" 
-                    class="nav-item {% if segment == 'dashboard' %} active {% endif %}">
-                    <a href="{{ url_for('admin.dashboard', realm_name=realm.name if realm else 'master') }}" class="nav-link">
+                <li data-username="dashboard" class="nav-item {% if segment == 'dashboard' %} active {% endif %}">
+                    <a href="{{ url_for('admin.dashboard', realm_name=realm.name if realm else 'master') }}"
+                        class="nav-link">
                         <span class="pcoded-micon"><i class="feather icon-home"></i></span>
                         <span class="pcoded-mtext">Dashboard</span>
                     </a>
                 </li>
-                
+
                 <li class="nav-item pcoded-menu-caption">
                     <label>Manage</label>
                 </li>
-                
-                <li data-username="users" 
-                    class="nav-item {% if segment == 'users' %} active {% endif %}">
-                    <a href="{{ url_for('admin.users_list', realm_name=realm.name if realm else 'master') }}" class="nav-link">
+
+                <li data-username="users" class="nav-item {% if segment == 'users' %} active {% endif %}">
+                    <a href="{{ url_for('admin.users_list', realm_name=realm.name if realm else 'master') }}"
+                        class="nav-link">
                         <span class="pcoded-micon"><i class="feather icon-users"></i></span>
                         <span class="pcoded-mtext">Users</span>
                     </a>
                 </li>
-                
-                <li data-username="groups" 
-                    class="nav-item {% if segment == 'groups' %} active {% endif %}">
-                    <a href="{{ url_for('admin.groups_list', realm_name=realm.name if realm else 'master') }}" class="nav-link">
+
+                <li data-username="groups" class="nav-item {% if segment == 'groups' %} active {% endif %}">
+                    <a href="{{ url_for('admin.groups_list', realm_name=realm.name if realm else 'master') }}"
+                        class="nav-link">
                         <span class="pcoded-micon"><i class="feather icon-folder"></i></span>
                         <span class="pcoded-mtext">Groups</span>
                     </a>
                 </li>
-                
-                <li data-username="clients" 
-                    class="nav-item {% if segment == 'clients' %} active {% endif %}">
-                    <a href="{{ url_for('admin.clients_list', realm_name=realm.name if realm else 'master') }}" class="nav-link">
+
+                <li data-username="clients" class="nav-item {% if segment == 'clients' %} active {% endif %}">
+                    <a href="{{ url_for('admin.clients_list', realm_name=realm.name if realm else 'master') }}"
+                        class="nav-link">
                         <span class="pcoded-micon"><i class="feather icon-grid"></i></span>
                         <span class="pcoded-mtext">Clients</span>
                     </a>
                 </li>
-                
-                <li data-username="roles" 
-                    class="nav-item {% if segment == 'roles' %} active {% endif %}">
-                    <a href="{{ url_for('admin.roles_list', realm_name=realm.name if realm else 'master') }}" class="nav-link">
+
+                <li data-username="roles" class="nav-item {% if segment == 'roles' %} active {% endif %}">
+                    <a href="{{ url_for('admin.roles_list', realm_name=realm.name if realm else 'master') }}"
+                        class="nav-link">
                         <span class="pcoded-micon"><i class="feather icon-key"></i></span>
                         <span class="pcoded-mtext">Realm Roles</span>
                     </a>
                 </li>
-                
+
                 <li class="nav-item pcoded-menu-caption">
                     <label>Configure</label>
                 </li>
-                
-                <li data-username="realm settings" 
+
+                <li data-username="realm settings"
                     class="nav-item {% if segment == 'realm-settings' %} active {% endif %}">
-                    <a href="{{ url_for('admin.realm_settings', realm_name=realm.name if realm else 'master') }}" class="nav-link">
+                    <a href="{{ url_for('admin.realm_settings', realm_name=realm.name if realm else 'master') }}"
+                        class="nav-link">
                         <span class="pcoded-micon"><i class="feather icon-settings"></i></span>
                         <span class="pcoded-mtext">Realm Settings</span>
                     </a>
                 </li>
-                
-                <li data-username="events" 
-                    class="nav-item {% if segment == 'events' %} active {% endif %}">
-                    <a href="{{ url_for('admin.events_list', realm_name=realm.name if realm else 'master') }}" class="nav-link">
+
+                <li data-username="events" class="nav-item {% if segment == 'events' %} active {% endif %}">
+                    <a href="{{ url_for('admin.events_list', realm_name=realm.name if realm else 'master') }}"
+                        class="nav-link">
                         <span class="pcoded-micon"><i class="feather icon-activity"></i></span>
                         <span class="pcoded-mtext">Events</span>
                     </a>
                 </li>
-                
-                <li data-username="sessions" 
-                    class="nav-item {% if segment == 'sessions' %} active {% endif %}">
-                    <a href="{{ url_for('admin.sessions_list', realm_name=realm.name if realm else 'master') }}" class="nav-link">
+
+                <li data-username="sessions" class="nav-item {% if segment == 'sessions' %} active {% endif %}">
+                    <a href="{{ url_for('admin.sessions_list', realm_name=realm.name if realm else 'master') }}"
+                        class="nav-link">
                         <span class="pcoded-micon"><i class="feather icon-monitor"></i></span>
                         <span class="pcoded-mtext">Sessions</span>
                     </a>
                 </li>
-                
+
                 <li class="nav-item pcoded-menu-caption">
                     <label>Account</label>
                 </li>
-                
+
                 <li data-username="create realm" class="nav-item">
                     <a href="{{ url_for('admin.create_realm') }}" class="nav-link">
                         <span class="pcoded-micon"><i class="feather icon-plus-circle"></i></span>
                         <span class="pcoded-mtext">Create Realm</span>
                     </a>
                 </li>
-                
+
                 <li data-username="logout" class="nav-item">
-                    <a href="{{ url_for('authentication_blueprint.logout') }}" class="nav-link">
+                    <a href="{{ url_for('auth_bp.logout') }}" class="nav-link">
                         <span class="pcoded-micon"><i class="feather icon-power"></i></span>
                         <span class="pcoded-mtext">Sign Out</span>
                     </a>
@@ -123,15 +124,15 @@
 <!-- [ navigation menu ] end -->
 
 <script>
-function switchRealm(realmName) {
-    // Extract current path and replace realm
-    const path = window.location.pathname;
-    const adminMatch = path.match(/^\/admin\/([^\/]+)(\/.*)?$/);
-    if (adminMatch) {
-        const rest = adminMatch[2] || '';
-        window.location.href = '/admin/' + realmName + rest;
-    } else {
-        window.location.href = '/admin/' + realmName;
+    function switchRealm(realmName) {
+        // Extract current path and replace realm
+        const path = window.location.pathname;
+        const adminMatch = path.match(/^\/admin\/([^\/]+)(\/.*)?$/);
+        if (adminMatch) {
+            const rest = adminMatch[2] || '';
+            window.location.href = '/admin/' + realmName + rest;
+        } else {
+            window.location.href = '/admin/' + realmName;
+        }
     }
-}
 </script>

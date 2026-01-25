@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>RijanAuth - {% block title %}{% endblock %}</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=0, minimal-ui">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="description" content="RijanAuth Identity Server" />
+
+    <link rel="icon" href="{{ config.ASSETS_ROOT }}/images/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="{{ config.ASSETS_ROOT }}/fonts/fontawesome/css/fontawesome-all.min.css">
+    <link rel="stylesheet" href="{{ config.ASSETS_ROOT }}/plugins/animation/css/animate.min.css">
+    <link rel="stylesheet" href="{{ config.ASSETS_ROOT }}/css/style.css">
+    <link rel="stylesheet" href="{{ config.ASSETS_ROOT }}/css/dark.css">
+
+    <style>
+        :root {
+            --primary-color: #673ab7;
+            --primary-dark: #512da8;
+        }
+
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .auth-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            min-width: 100%;
+            min-height: 100vh;
+        }
+
+        .auth-content {
+            position: relative;
+            padding: 15px;
+            z-index: 5;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .card {
+            border: none;
+            box-shadow: 0 10px 40px 0 rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            border-color: var(--primary-dark);
+        }
+
+        .logo-text {
+            color: var(--primary-color);
+            font-weight: 700;
+            font-size: 24px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="auth-wrapper">
+        <div class="auth-content">
+            <div class="card">
+                <div class="card-body text-center">
+                    <div class="mb-4">
+                        <i class="feather icon-lock auth-icon"></i>
+                    </div>
+                    {% block content %}{% endblock %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ config.ASSETS_ROOT }}/js/vendor-all.min.js"></script>
+    <script src="{{ config.ASSETS_ROOT }}/plugins/bootstrap/js/bootstrap.min.js"></script>
+</body>
+
+</html>

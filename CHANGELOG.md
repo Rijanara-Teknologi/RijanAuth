@@ -56,6 +56,12 @@
 - `SEEDING.md` - Developer guide for seeders
 - `reset_admin.py` - Utility to reset admin password
 
+### Cleanup
+- **Legacy Removal**: Removed original Datta Able authentication blueprints (`authentication`, `home`)
+- **Template Cleanup**: Deleted unused demo templates, sample pages, and legacy layouts
+- **Asset Optimization**: Removed demo images, sliders, and unused JS plugins
+- **Architectural Shift**: Replaced monolithic structure with clean `auth` and `admin` blueprints
+
 ---
 
 ## [2.0.0] 2026-01-25 - RijanAuth Phase 1: Foundation

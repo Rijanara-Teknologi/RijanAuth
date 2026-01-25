@@ -19,23 +19,25 @@ def register_extensions(app):
     """Register Flask extensions"""
     db.init_app(app)
     login_manager.init_app(app)
-    login_manager.login_view = 'authentication_blueprint.login'
+    login_manager.login_view = 'auth_bp.login'
 
 
 def register_blueprints(app):
     """Register application blueprints"""
-    # Original Datta Able blueprints
-    for module_name in ('authentication', 'home'):
-        module = import_module('apps.{}.routes'.format(module_name))
-        app.register_blueprint(module.blueprint)
     
-    # RijanAuth Admin Blueprint
-    try:
-        from apps.blueprints.admin import admin_bp
-        app.register_blueprint(admin_bp)
-        print('> Admin blueprint registered at /admin')
-    except ImportError as e:
-        print(f'> Warning: Could not load admin blueprint: {e}')
+    # 1. Admin Blueprint (RijanAuth console)
+    from apps.blueprints.admin import admin_bp
+    app.register_blueprint(admin_bp)
+    
+    # 2. Auth Blueprint (Login/Logout)
+    from apps.blueprints.auth import auth_bp
+    app.register_blueprint(auth_bp)
+    
+    # Root redirect
+    @app.route('/')
+    def index():
+        from flask import redirect, url_for
+        return redirect(url_for('admin.index'))
     
     # RijanAuth OIDC Blueprint (will be added in Phase 3)
     # try:
