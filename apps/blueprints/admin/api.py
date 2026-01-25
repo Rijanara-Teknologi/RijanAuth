@@ -16,6 +16,19 @@ from apps.services.user_service import UserService
 from apps.services.client_service import ClientService
 from apps import db
 
+# =============================================================================
+# System API
+# =============================================================================
+
+@admin_bp.route('/api/health', methods=['GET'])
+def api_health():
+    """System health check"""
+    return jsonify({
+        'status': 'ok', 
+        'version': '2.1.1',
+        'service': 'RijanAuth'
+    })
+
 
 # =============================================================================
 # Realms API

@@ -71,6 +71,9 @@ class ProductionConfig(Config):
 
 class DebugConfig(Config):
     DEBUG = True
+    # Fixed key for development to maintain sessions across restarts
+    SECRET_KEY = 'Fixed_Debug_Secret_Key_For_RijanAuth_Dev'
+    SESSION_COOKIE_SECURE = False
 
 # Load all possible configurations
 config_dict = {

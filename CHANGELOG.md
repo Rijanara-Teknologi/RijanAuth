@@ -62,6 +62,15 @@
 - **Asset Optimization**: Removed demo images, sliders, and unused JS plugins
 - **Architectural Shift**: Replaced monolithic structure with clean `auth` and `admin` blueprints
 
+### Documentation
+- **Postman Collection**: Comprehensive API collection (`RijanAuth.postman_collection.json`)
+- **API Guide**: Detailed usage guide (`API_GUIDE.md`)
+- **Environment config**: Postman environment preset (`RijanAuth-Environment.postman_environment.json`)
+
+### Enhancements
+- **System Health**: Added `/api/health` endpoint for monitoring
+- **Login Debugging**: Enhanced logging for authentication troubleshooting
+
 ---
 
 ## [2.0.0] 2026-01-25 - RijanAuth Phase 1: Foundation
