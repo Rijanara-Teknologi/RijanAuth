@@ -22,7 +22,6 @@ class Config(object):
     SESSION_COOKIE_HTTPONLY = True
     REMEMBER_COOKIE_HTTPONLY = True
     REMEMBER_COOKIE_DURATION = 3600
-    SESSION_COOKIE_SAMESITE = 'Lax'
 
     # Logging Configuration
     LOGGING = {
@@ -89,6 +88,9 @@ class DebugConfig(Config):
     # Fixed key for development to maintain sessions across restarts
     SECRET_KEY = 'Fixed_Debug_Secret_Key_For_RijanAuth_Dev'
     SESSION_COOKIE_SECURE = False
+    SESSION_COOKIE_DOMAIN = None
+    SESSION_COOKIE_PATH = '/'
+    SESSION_COOKIE_SAMESITE = 'Lax'
 
 # Load all possible configurations
 config_dict = {
