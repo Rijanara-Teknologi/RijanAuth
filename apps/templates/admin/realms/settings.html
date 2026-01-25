@@ -1,0 +1,269 @@
+{% extends "layouts/admin_base.html" %}
+
+{% block title %}Realm Settings{% endblock %}
+
+{% block content %}
+<div class="pcoded-main-container">
+    <div class="pcoded-wrapper">
+        <div class="pcoded-content">
+            <div class="pcoded-inner-content">
+                <div class="main-body">
+                    <div class="page-wrapper">
+                        <!-- Page Header -->
+                        <div class="page-header">
+                            <div class="page-block">
+                                <div class="row align-items-center">
+                                    <div class="col-md-12">
+                                        <div class="page-header-title">
+                                            <h5 class="m-b-10">Realm Settings</h5>
+                                        </div>
+                                        <ul class="breadcrumb">
+                                            <li class="breadcrumb-item"><a href="{{ url_for('admin.index') }}"><i
+                                                        class="feather icon-home"></i></a></li>
+                                            <li class="breadcrumb-item"><a
+                                                    href="{{ url_for('admin.dashboard', realm_name=realm.name) }}">{{
+                                                    realm.name }}</a></li>
+                                            <li class="breadcrumb-item active">Settings</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <ul class="nav nav-tabs card-header-tabs" role="tablist">
+                                            <li class="nav-item">
+                                                <a class="nav-link active" data-toggle="tab" href="#general">General</a>
+                                            </li>
+                                            <li class="nav-item">
+                                                <a class="nav-link" data-toggle="tab" href="#login">Login</a>
+                                            </li>
+                                            <li class="nav-item">
+                                                <a class="nav-link" data-toggle="tab" href="#email">Email</a>
+                                            </li>
+                                            <li class="nav-item">
+                                                <a class="nav-link" data-toggle="tab" href="#tokens">Tokens</a>
+                                            </li>
+                                            <li class="nav-item">
+                                                <a class="nav-link" data-toggle="tab" href="#security">Security</a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <div class="card-body">
+                                        <form method="POST">
+                                            <div class="tab-content">
+                                                <!-- General Tab -->
+                                                <div class="tab-pane fade show active" id="general">
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Realm Name</label>
+                                                                <input type="text" class="form-control"
+                                                                    value="{{ realm.name }}" readonly>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Display Name</label>
+                                                                <input type="text" class="form-control"
+                                                                    name="display_name"
+                                                                    value="{{ realm.display_name or '' }}">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-group">
+                                                        <div class="custom-control custom-switch">
+                                                            <input type="checkbox" class="custom-control-input"
+                                                                id="enabled" name="enabled" {% if realm.enabled
+                                                                %}checked{% endif %}>
+                                                            <label class="custom-control-label"
+                                                                for="enabled">Enabled</label>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Login Tab -->
+                                                <div class="tab-pane fade" id="login">
+                                                    <h6 class="mb-3">Registration</h6>
+                                                    <div class="custom-control custom-switch mb-2">
+                                                        <input type="checkbox" class="custom-control-input"
+                                                            id="registration" name="registration_allowed" {% if
+                                                            realm.registration_allowed %}checked{% endif %}>
+                                                        <label class="custom-control-label" for="registration">User
+                                                            Registration</label>
+                                                    </div>
+                                                    <div class="custom-control custom-switch mb-2">
+                                                        <input type="checkbox" class="custom-control-input"
+                                                            id="verifyEmail" name="verify_email" {% if
+                                                            realm.verify_email %}checked{% endif %}>
+                                                        <label class="custom-control-label" for="verifyEmail">Verify
+                                                            Email</label>
+                                                    </div>
+
+                                                    <h6 class="mt-4 mb-3">Login Settings</h6>
+                                                    <div class="custom-control custom-switch mb-2">
+                                                        <input type="checkbox" class="custom-control-input"
+                                                            id="loginWithEmail" name="login_with_email_allowed" {% if
+                                                            realm.login_with_email_allowed %}checked{% endif %}>
+                                                        <label class="custom-control-label" for="loginWithEmail">Login
+                                                            with Email</label>
+                                                    </div>
+                                                    <div class="custom-control custom-switch mb-2">
+                                                        <input type="checkbox" class="custom-control-input"
+                                                            id="rememberMe" name="remember_me" {% if realm.remember_me
+                                                            %}checked{% endif %}>
+                                                        <label class="custom-control-label" for="rememberMe">Remember
+                                                            Me</label>
+                                                    </div>
+                                                    <div class="custom-control custom-switch mb-2">
+                                                        <input type="checkbox" class="custom-control-input"
+                                                            id="resetPassword" name="reset_password_allowed" {% if
+                                                            realm.reset_password_allowed %}checked{% endif %}>
+                                                        <label class="custom-control-label" for="resetPassword">Forgot
+                                                            Password</label>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Email Tab -->
+                                                <div class="tab-pane fade" id="email">
+                                                    <div class="alert alert-info">
+                                                        <i class="feather icon-info mr-2"></i>
+                                                        Email configuration is required for password reset and email
+                                                        verification.
+                                                    </div>
+                                                    <div class="row">
+                                                        <div class="col-md-8">
+                                                            <div class="form-group">
+                                                                <label>SMTP Host</label>
+                                                                <input type="text" class="form-control" name="smtp_host"
+                                                                    value="{{ realm.smtp_server or '' }}"
+                                                                    placeholder="smtp.example.com">
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-4">
+                                                            <div class="form-group">
+                                                                <label>Port</label>
+                                                                <input type="number" class="form-control"
+                                                                    name="smtp_port"
+                                                                    value="{{ realm.smtp_port or 25 }}">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-group">
+                                                        <label>From Email</label>
+                                                        <input type="email" class="form-control" name="smtp_from"
+                                                            value="{{ realm.smtp_from or '' }}"
+                                                            placeholder="noreply@example.com">
+                                                    </div>
+                                                </div>
+
+                                                <!-- Tokens Tab -->
+                                                <div class="tab-pane fade" id="tokens">
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Access Token Lifespan</label>
+                                                                <div class="input-group">
+                                                                    <input type="number" class="form-control"
+                                                                        name="access_token_lifespan"
+                                                                        value="{{ realm.access_token_lifespan or 300 }}">
+                                                                    <div class="input-group-append">
+                                                                        <span class="input-group-text">seconds</span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>SSO Session Idle</label>
+                                                                <div class="input-group">
+                                                                    <input type="number" class="form-control"
+                                                                        name="sso_idle_timeout"
+                                                                        value="{{ realm.sso_session_idle_timeout or 1800 }}">
+                                                                    <div class="input-group-append">
+                                                                        <span class="input-group-text">seconds</span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>SSO Session Max</label>
+                                                                <div class="input-group">
+                                                                    <input type="number" class="form-control"
+                                                                        name="sso_max"
+                                                                        value="{{ realm.sso_session_max_lifespan or 36000 }}">
+                                                                    <div class="input-group-append">
+                                                                        <span class="input-group-text">seconds</span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Offline Session Idle</label>
+                                                                <div class="input-group">
+                                                                    <input type="number" class="form-control"
+                                                                        name="offline_idle"
+                                                                        value="{{ realm.offline_session_idle_timeout or 2592000 }}">
+                                                                    <div class="input-group-append">
+                                                                        <span class="input-group-text">seconds</span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Security Tab -->
+                                                <div class="tab-pane fade" id="security">
+                                                    <h6 class="mb-3">Brute Force Protection</h6>
+                                                    <div class="custom-control custom-switch mb-3">
+                                                        <input type="checkbox" class="custom-control-input"
+                                                            id="bruteForce" name="brute_force_protected" {% if
+                                                            realm.brute_force_protected %}checked{% endif %}>
+                                                        <label class="custom-control-label" for="bruteForce">Enable
+                                                            Brute Force Detection</label>
+                                                    </div>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Max Login Failures</label>
+                                                                <input type="number" class="form-control"
+                                                                    name="max_login_failures"
+                                                                    value="{{ realm.max_login_failures or 30 }}">
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Wait Increment (seconds)</label>
+                                                                <input type="number" class="form-control"
+                                                                    name="wait_increment"
+                                                                    value="{{ realm.wait_increment_seconds or 60 }}">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <hr>
+                                            <button type="submit" class="btn btn-primary">
+                                                <i class="feather icon-save mr-1"></i> Save Settings
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

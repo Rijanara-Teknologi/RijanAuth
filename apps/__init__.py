@@ -28,13 +28,15 @@ def register_blueprints(app):
         module = import_module('apps.{}.routes'.format(module_name))
         app.register_blueprint(module.blueprint)
     
-    # RijanAuth blueprints (will be added as we create them)
-    # try:
-    #     from apps.blueprints.admin import admin_bp
-    #     app.register_blueprint(admin_bp, url_prefix='/admin')
-    # except ImportError:
-    #     pass
+    # RijanAuth Admin Blueprint
+    try:
+        from apps.blueprints.admin import admin_bp
+        app.register_blueprint(admin_bp)
+        print('> Admin blueprint registered at /admin')
+    except ImportError as e:
+        print(f'> Warning: Could not load admin blueprint: {e}')
     
+    # RijanAuth OIDC Blueprint (will be added in Phase 3)
     # try:
     #     from apps.blueprints.oidc import oidc_bp
     #     app.register_blueprint(oidc_bp, url_prefix='/auth/realms')

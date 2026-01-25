@@ -1,0 +1,99 @@
+{% extends "layouts/admin_base.html" %}
+
+{% block title %}Create Realm{% endblock %}
+
+{% block content %}
+<div class="pcoded-main-container">
+    <div class="pcoded-wrapper">
+        <div class="pcoded-content">
+            <div class="pcoded-inner-content">
+                <div class="main-body">
+                    <div class="page-wrapper">
+                        <!-- Page Header -->
+                        <div class="page-header">
+                            <div class="page-block">
+                                <div class="row align-items-center">
+                                    <div class="col-md-12">
+                                        <div class="page-header-title">
+                                            <h5 class="m-b-10">Create Realm</h5>
+                                        </div>
+                                        <ul class="breadcrumb">
+                                            <li class="breadcrumb-item"><a href="{{ url_for('admin.index') }}"><i
+                                                        class="feather icon-home"></i></a></li>
+                                            <li class="breadcrumb-item active">Create Realm</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-lg-8">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5><i class="feather icon-plus-circle mr-2"></i>New Realm</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <form method="POST">
+                                            <div class="form-group">
+                                                <label>Realm Name <span class="text-danger">*</span></label>
+                                                <input type="text" class="form-control" name="name" required
+                                                    placeholder="my-realm" pattern="[a-z0-9\-]+"
+                                                    title="Lowercase letters, numbers, and dashes only">
+                                                <small class="form-text text-muted">
+                                                    Unique identifier. Use lowercase letters, numbers, and dashes only.
+                                                </small>
+                                            </div>
+
+                                            <div class="form-group">
+                                                <label>Display Name</label>
+                                                <input type="text" class="form-control" name="display_name"
+                                                    placeholder="My Realm">
+                                                <small class="form-text text-muted">
+                                                    Human-readable name shown to users
+                                                </small>
+                                            </div>
+
+                                            <hr>
+
+                                            <div class="d-flex justify-content-between">
+                                                <a href="{{ url_for('admin.index') }}"
+                                                    class="btn btn-outline-secondary">
+                                                    <i class="feather icon-arrow-left mr-1"></i> Cancel
+                                                </a>
+                                                <button type="submit" class="btn btn-primary">
+                                                    <i class="feather icon-plus mr-1"></i> Create Realm
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-lg-4">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5><i class="feather icon-info mr-2"></i>About Realms</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="text-muted small">
+                                            A <strong>realm</strong> manages a set of users, credentials, roles, and
+                                            groups.
+                                            Realms are isolated from one another - users and applications in one realm
+                                            cannot access data from another realm.
+                                        </p>
+                                        <p class="text-muted small">
+                                            The <strong>master</strong> realm is a special realm used for managing
+                                            RijanAuth itself. Avoid using it for your applications.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>
+        RijanAuth - {% block title %}{% endblock %} | Admin Console
+    </title>
+    <!-- Meta -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=0, minimal-ui">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="description" content="RijanAuth - Open Source Identity and Access Management" />
+    <meta name="keywords" content="keycloak, sso, openid connect, oauth, identity, authentication" />
+    <meta name="author" content="Rijanara Teknologi" />
+
+    <!-- Favicon icon -->
+    <link rel="icon" href="{{ config.ASSETS_ROOT }}/images/favicon.ico" type="image/x-icon">
+    <!-- fontawesome icon -->
+    <link rel="stylesheet" href="{{ config.ASSETS_ROOT }}/fonts/fontawesome/css/fontawesome-all.min.css">
+    <!-- feather icon -->
+    <link rel="stylesheet" href="{{ config.ASSETS_ROOT }}/fonts/feather/css/feather.css">
+    <!-- animation css -->
+    <link rel="stylesheet" href="{{ config.ASSETS_ROOT }}/plugins/animation/css/animate.min.css">
+    <!-- vendor css -->
+    <link rel="stylesheet" href="{{ config.ASSETS_ROOT }}/css/style.css">
+    <!-- dark mode css -->
+    <link rel="stylesheet" href="{{ config.ASSETS_ROOT }}/css/dark.css">
+
+    <!-- RijanAuth Theme Override -->
+    <style>
+        :root {
+            --primary-color: #673ab7;
+            --primary-dark: #512da8;
+            --primary-light: #9575cd;
+        }
+
+        .b-bg {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%) !important;
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            border-color: var(--primary-dark);
+        }
+
+        .pcoded-navbar {
+            background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+        }
+
+        .pcoded-navbar .navbar-content {
+            background: transparent;
+        }
+
+        .card {
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        }
+
+        .card-header {
+            background: transparent;
+            border-bottom: 1px solid #eee;
+        }
+
+        .bg-primary {
+            background: var(--primary-color) !important;
+        }
+
+        .text-primary {
+            color: var(--primary-color) !important;
+        }
+
+        .nav-link.active,
+        .nav-item.active>.nav-link {
+            color: var(--primary-color) !important;
+        }
+
+        .badge-primary {
+            background: var(--primary-color);
+        }
+
+        .realm-selector {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+        }
+
+        .realm-selector:focus {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: var(--primary-light);
+            color: #fff;
+        }
+
+        .stat-card {
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .stat-card.success {
+            border-left-color: #28a745;
+        }
+
+        .stat-card.warning {
+            border-left-color: #ffc107;
+        }
+
+        .stat-card.danger {
+            border-left-color: #dc3545;
+        }
+
+        .stat-card .stat-value {
+            font-size: 2rem;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .stat-card .stat-label {
+            color: #666;
+            font-size: 0.875rem;
+        }
+    </style>
+
+    <!-- Specific CSS goes HERE -->
+    {% block stylesheets %}{% endblock stylesheets %}
+
+</head>
+
+<body>
+
+    <!-- [ Pre-loader ] start -->
+    <div class="loader-bg">
+        <div class="loader-track">
+            <div class="loader-fill"></div>
+        </div>
+    </div>
+    <!-- [ Pre-loader ] End -->
+
+    {% include 'includes/admin_sidebar.html' %}
+
+    {% include 'includes/navigation.html' %}
+
+    {% block content %}{% endblock content %}
+
+    {% include 'includes/scripts.html' %}
+
+    <!-- Specific Page JS goes HERE  -->
+    {% block javascripts %}{% endblock javascripts %}
+
+</body>
+
+</html>

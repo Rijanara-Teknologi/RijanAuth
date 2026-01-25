@@ -1,0 +1,212 @@
+{% extends "layouts/admin_base.html" %}
+
+{% block title %}{{ client.client_id }}{% endblock %}
+
+{% block content %}
+<div class="pcoded-main-container">
+    <div class="pcoded-wrapper">
+        <div class="pcoded-content">
+            <div class="pcoded-inner-content">
+                <div class="main-body">
+                    <div class="page-wrapper">
+                        <!-- Page Header -->
+                        <div class="page-header">
+                            <div class="page-block">
+                                <div class="row align-items-center">
+                                    <div class="col-md-12">
+                                        <div class="page-header-title">
+                                            <h5 class="m-b-10">{{ client.name or client.client_id }}</h5>
+                                        </div>
+                                        <ul class="breadcrumb">
+                                            <li class="breadcrumb-item"><a href="{{ url_for('admin.index') }}"><i
+                                                        class="feather icon-home"></i></a></li>
+                                            <li class="breadcrumb-item"><a
+                                                    href="{{ url_for('admin.dashboard', realm_name=realm.name) }}">{{
+                                                    realm.name }}</a></li>
+                                            <li class="breadcrumb-item"><a
+                                                    href="{{ url_for('admin.clients_list', realm_name=realm.name) }}">Clients</a>
+                                            </li>
+                                            <li class="breadcrumb-item active">{{ client.client_id }}</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Client Detail -->
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <ul class="nav nav-tabs card-header-tabs" role="tablist">
+                                            <li class="nav-item">
+                                                <a class="nav-link active" data-toggle="tab" href="#settings">
+                                                    <i class="feather icon-settings mr-1"></i> Settings
+                                                </a>
+                                            </li>
+                                            <li class="nav-item">
+                                                <a class="nav-link" data-toggle="tab" href="#credentials">
+                                                    <i class="feather icon-key mr-1"></i> Credentials
+                                                </a>
+                                            </li>
+                                            <li class="nav-item">
+                                                <a class="nav-link" data-toggle="tab" href="#roles">
+                                                    <i class="feather icon-shield mr-1"></i> Roles
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="tab-content">
+                                            <!-- Settings Tab -->
+                                            <div class="tab-pane fade show active" id="settings">
+                                                <form method="POST">
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Client ID</label>
+                                                                <input type="text" class="form-control"
+                                                                    value="{{ client.client_id }}" readonly>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Name</label>
+                                                                <input type="text" class="form-control" name="name"
+                                                                    value="{{ client.name or '' }}">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="form-group">
+                                                        <label>Description</label>
+                                                        <textarea class="form-control" name="description"
+                                                            rows="2">{{ client.description or '' }}</textarea>
+                                                    </div>
+
+                                                    <div class="form-group">
+                                                        <label>Root URL</label>
+                                                        <input type="url" class="form-control" name="root_url"
+                                                            value="{{ client.root_url or '' }}"
+                                                            placeholder="https://myapp.example.com">
+                                                    </div>
+
+                                                    <div class="form-group">
+                                                        <label>Valid Redirect URIs</label>
+                                                        <textarea class="form-control" name="redirect_uris" rows="3"
+                                                            placeholder="https://myapp.example.com/callback">{{ (client.redirect_uris or [])|join('\n') }}</textarea>
+                                                        <small class="text-muted">One URI per line</small>
+                                                    </div>
+
+                                                    <h6 class="mt-4 mb-3">Capability Config</h6>
+
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="custom-control custom-switch mb-2">
+                                                                <input type="checkbox" class="custom-control-input"
+                                                                    id="standardFlow" {% if client.standard_flow_enabled
+                                                                    %}checked{% endif %}>
+                                                                <label class="custom-control-label"
+                                                                    for="standardFlow">Standard Flow (Authorization
+                                                                    Code)</label>
+                                                            </div>
+                                                            <div class="custom-control custom-switch mb-2">
+                                                                <input type="checkbox" class="custom-control-input"
+                                                                    id="implicitFlow" {% if client.implicit_flow_enabled
+                                                                    %}checked{% endif %}>
+                                                                <label class="custom-control-label"
+                                                                    for="implicitFlow">Implicit Flow</label>
+                                                            </div>
+                                                            <div class="custom-control custom-switch mb-2">
+                                                                <input type="checkbox" class="custom-control-input"
+                                                                    id="directAccess" {% if
+                                                                    client.direct_access_grants_enabled %}checked{%
+                                                                    endif %}>
+                                                                <label class="custom-control-label"
+                                                                    for="directAccess">Direct Access Grants</label>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="custom-control custom-switch mb-2">
+                                                                <input type="checkbox" class="custom-control-input"
+                                                                    id="serviceAccounts" {% if
+                                                                    client.service_accounts_enabled %}checked{% endif
+                                                                    %}>
+                                                                <label class="custom-control-label"
+                                                                    for="serviceAccounts">Service Accounts</label>
+                                                            </div>
+                                                            <div class="custom-control custom-switch mb-2">
+                                                                <input type="checkbox" class="custom-control-input"
+                                                                    id="publicClient" {% if client.public_client
+                                                                    %}checked{% endif %}>
+                                                                <label class="custom-control-label"
+                                                                    for="publicClient">Public Client</label>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <hr>
+                                                    <button type="submit" class="btn btn-primary">
+                                                        <i class="feather icon-save mr-1"></i> Save
+                                                    </button>
+                                                </form>
+                                            </div>
+
+                                            <!-- Credentials Tab -->
+                                            <div class="tab-pane fade" id="credentials">
+                                                {% if not client.public_client %}
+                                                <div class="form-group">
+                                                    <label>Client Secret</label>
+                                                    <div class="input-group">
+                                                        <input type="text" class="form-control"
+                                                            value="{{ client.secret or '(not set)' }}" readonly
+                                                            id="clientSecret">
+                                                        <div class="input-group-append">
+                                                            <button class="btn btn-outline-secondary"
+                                                                onclick="copySecret()">
+                                                                <i class="feather icon-copy"></i>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <button class="btn btn-warning">
+                                                    <i class="feather icon-refresh-cw mr-1"></i> Regenerate Secret
+                                                </button>
+                                                {% else %}
+                                                <div class="alert alert-info">
+                                                    <i class="feather icon-info mr-2"></i>
+                                                    This is a public client and does not have a client secret.
+                                                </div>
+                                                {% endif %}
+                                            </div>
+
+                                            <!-- Roles Tab -->
+                                            <div class="tab-pane fade" id="roles">
+                                                <p class="text-muted">Client roles can be defined here and assigned to
+                                                    users.</p>
+                                                <button class="btn btn-primary">
+                                                    <i class="feather icon-plus mr-1"></i> Create Role
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function copySecret() {
+        var input = document.getElementById('clientSecret');
+        input.select();
+        document.execCommand('copy');
+        alert('Secret copied to clipboard');
+    }
+</script>
+{% endblock content %}

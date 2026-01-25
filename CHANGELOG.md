@@ -1,5 +1,40 @@
 # Change Log
 
+## [2.1.0] 2026-01-25 - RijanAuth Phase 2.1: Admin UI Foundation
+### New Features
+
+- **Admin Console Blueprint**: Complete admin UI at `/admin/` with 26 routes
+- **Realm Navigation**: Realm selector dropdown with context-aware navigation
+- **Keycloak-style Theme**: Purple (#673ab7) theme with modern card-based design
+- **Admin Dashboard**: Statistics cards, realm info, recent events, quick actions
+- **User Management UI**: List, create, detail pages with tabs (credentials, roles, groups, sessions)
+- **Client Management UI**: List and detail pages with settings, credentials, roles tabs
+- **Role/Group Management**: Listing pages with create modals
+- **Events & Sessions**: Event log viewer and active session management
+
+### New Files
+
+- `apps/blueprints/admin/__init__.py` - Admin blueprint registration
+- `apps/blueprints/admin/routes.py` - 15 web routes for admin pages
+- `apps/blueprints/admin/api.py` - 11 REST API endpoints
+- `apps/templates/layouts/admin_base.html` - Admin theme base layout
+- `apps/templates/includes/admin_sidebar.html` - Realm selector + navigation
+- `apps/templates/admin/dashboard.html` - Admin dashboard
+- `apps/templates/admin/users/` - list.html, create.html, detail.html
+- `apps/templates/admin/clients/` - list.html, detail.html
+- `apps/templates/admin/roles/list.html` - Realm roles listing
+- `apps/templates/admin/groups/list.html` - Groups with hierarchy
+- `apps/templates/admin/events/list.html` - Login events
+- `apps/templates/admin/sessions/list.html` - Active sessions
+- `apps/templates/admin/realms/` - settings.html, create.html
+
+### Changes
+
+- Updated `apps/__init__.py` to register admin blueprint
+- Added `find_by_id()` method to User model
+
+---
+
 ## [2.0.0] 2026-01-25 - RijanAuth Phase 1: Foundation
 ### New Features
 

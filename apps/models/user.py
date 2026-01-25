@@ -69,6 +69,11 @@ class User(RealmScopedModel):
         return ' '.join(p for p in parts if p) or self.username
     
     @classmethod
+    def find_by_id(cls, user_id):
+        """Find user by ID"""
+        return cls.query.get(user_id)
+    
+    @classmethod
     def find_by_username(cls, realm_id, username):
         """Find user by username within a realm"""
         return cls.query.filter_by(realm_id=realm_id, username=username).first()

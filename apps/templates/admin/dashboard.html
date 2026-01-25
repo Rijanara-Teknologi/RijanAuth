@@ -1,0 +1,282 @@
+{% extends "layouts/admin_base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="pcoded-main-container">
+    <div class="pcoded-wrapper">
+        <div class="pcoded-content">
+            <div class="pcoded-inner-content">
+                <div class="main-body">
+                    <div class="page-wrapper">
+                        <!-- Page Header -->
+                        <div class="page-header">
+                            <div class="page-block">
+                                <div class="row align-items-center">
+                                    <div class="col-md-12">
+                                        <div class="page-header-title">
+                                            <h5 class="m-b-10">{{ realm.display_name or realm.name }} Dashboard</h5>
+                                        </div>
+                                        <ul class="breadcrumb">
+                                            <li class="breadcrumb-item"><a href="{{ url_for('admin.index') }}"><i
+                                                        class="feather icon-home"></i></a></li>
+                                            <li class="breadcrumb-item"><a href="#">{{ realm.name }}</a></li>
+                                            <li class="breadcrumb-item active">Dashboard</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Statistics Cards -->
+                        <div class="row">
+                            <!-- Users Card -->
+                            <div class="col-xl-3 col-md-6">
+                                <div class="card stat-card">
+                                    <div class="card-body">
+                                        <div class="row align-items-center">
+                                            <div class="col-8">
+                                                <p class="stat-label mb-0">Total Users</p>
+                                                <h3 class="stat-value mb-0">{{ stats.users }}</h3>
+                                            </div>
+                                            <div class="col-4 text-right">
+                                                <i class="feather icon-users f-36 text-primary"></i>
+                                            </div>
+                                        </div>
+                                        <a href="{{ url_for('admin.users_list', realm_name=realm.name) }}"
+                                            class="mt-3 d-block text-muted small">
+                                            View all users <i class="feather icon-arrow-right"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Clients Card -->
+                            <div class="col-xl-3 col-md-6">
+                                <div class="card stat-card success">
+                                    <div class="card-body">
+                                        <div class="row align-items-center">
+                                            <div class="col-8">
+                                                <p class="stat-label mb-0">Clients</p>
+                                                <h3 class="stat-value mb-0">{{ stats.clients }}</h3>
+                                            </div>
+                                            <div class="col-4 text-right">
+                                                <i class="feather icon-grid f-36 text-success"></i>
+                                            </div>
+                                        </div>
+                                        <a href="{{ url_for('admin.clients_list', realm_name=realm.name) }}"
+                                            class="mt-3 d-block text-muted small">
+                                            View all clients <i class="feather icon-arrow-right"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Groups Card -->
+                            <div class="col-xl-3 col-md-6">
+                                <div class="card stat-card warning">
+                                    <div class="card-body">
+                                        <div class="row align-items-center">
+                                            <div class="col-8">
+                                                <p class="stat-label mb-0">Groups</p>
+                                                <h3 class="stat-value mb-0">{{ stats.groups }}</h3>
+                                            </div>
+                                            <div class="col-4 text-right">
+                                                <i class="feather icon-folder f-36 text-warning"></i>
+                                            </div>
+                                        </div>
+                                        <a href="{{ url_for('admin.groups_list', realm_name=realm.name) }}"
+                                            class="mt-3 d-block text-muted small">
+                                            View all groups <i class="feather icon-arrow-right"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Sessions Card -->
+                            <div class="col-xl-3 col-md-6">
+                                <div class="card stat-card danger">
+                                    <div class="card-body">
+                                        <div class="row align-items-center">
+                                            <div class="col-8">
+                                                <p class="stat-label mb-0">Active Sessions</p>
+                                                <h3 class="stat-value mb-0">{{ stats.sessions }}</h3>
+                                            </div>
+                                            <div class="col-4 text-right">
+                                                <i class="feather icon-monitor f-36 text-danger"></i>
+                                            </div>
+                                        </div>
+                                        <a href="{{ url_for('admin.sessions_list', realm_name=realm.name) }}"
+                                            class="mt-3 d-block text-muted small">
+                                            View sessions <i class="feather icon-arrow-right"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Realm Info & Recent Events -->
+                        <div class="row">
+                            <!-- Realm Info -->
+                            <div class="col-xl-4">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5><i class="feather icon-info mr-2"></i>Realm Info</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <table class="table table-borderless mb-0">
+                                            <tr>
+                                                <td class="text-muted">Name</td>
+                                                <td class="text-right"><strong>{{ realm.name }}</strong></td>
+                                            </tr>
+                                            <tr>
+                                                <td class="text-muted">Display Name</td>
+                                                <td class="text-right">{{ realm.display_name or '-' }}</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="text-muted">Status</td>
+                                                <td class="text-right">
+                                                    {% if realm.enabled %}
+                                                    <span class="badge badge-success">Enabled</span>
+                                                    {% else %}
+                                                    <span class="badge badge-secondary">Disabled</span>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td class="text-muted">Registration</td>
+                                                <td class="text-right">
+                                                    {% if realm.registration_allowed %}
+                                                    <span class="badge badge-primary">Allowed</span>
+                                                    {% else %}
+                                                    <span class="badge badge-secondary">Disabled</span>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td class="text-muted">Login with Email</td>
+                                                <td class="text-right">
+                                                    {% if realm.login_with_email_allowed %}
+                                                    <i class="feather icon-check text-success"></i>
+                                                    {% else %}
+                                                    <i class="feather icon-x text-muted"></i>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                        </table>
+                                        <hr>
+                                        <a href="{{ url_for('admin.realm_settings', realm_name=realm.name) }}"
+                                            class="btn btn-outline-primary btn-block">
+                                            <i class="feather icon-settings mr-1"></i> Configure Realm
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Recent Events -->
+                            <div class="col-xl-8">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5><i class="feather icon-activity mr-2"></i>Recent Events</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        {% if recent_events %}
+                                        <div class="table-responsive">
+                                            <table class="table table-hover mb-0">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Time</th>
+                                                        <th>Type</th>
+                                                        <th>User</th>
+                                                        <th>Client</th>
+                                                        <th>IP</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for event in recent_events %}
+                                                    <tr>
+                                                        <td class="text-muted small">{{ event.time.strftime('%Y-%m-%d
+                                                            %H:%M') }}</td>
+                                                        <td>
+                                                            {% if 'ERROR' in event.type %}
+                                                            <span class="badge badge-danger">{{ event.type }}</span>
+                                                            {% elif 'LOGIN' in event.type %}
+                                                            <span class="badge badge-success">{{ event.type }}</span>
+                                                            {% else %}
+                                                            <span class="badge badge-info">{{ event.type }}</span>
+                                                            {% endif %}
+                                                        </td>
+                                                        <td>{{ event.user_id[:8] if event.user_id else '-' }}...</td>
+                                                        <td>{{ event.client_id or '-' }}</td>
+                                                        <td class="text-muted small">{{ event.ip_address or '-' }}</td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        {% else %}
+                                        <div class="text-center text-muted py-4">
+                                            <i class="feather icon-inbox f-36 mb-3"></i>
+                                            <p class="mb-0">No events recorded yet</p>
+                                        </div>
+                                        {% endif %}
+                                        <hr>
+                                        <a href="{{ url_for('admin.events_list', realm_name=realm.name) }}"
+                                            class="btn btn-outline-primary">
+                                            View All Events <i class="feather icon-arrow-right ml-1"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Quick Actions -->
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5><i class="feather icon-zap mr-2"></i>Quick Actions</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-3 col-6 mb-3">
+                                                <a href="{{ url_for('admin.create_user', realm_name=realm.name) }}"
+                                                    class="btn btn-outline-primary btn-block py-3">
+                                                    <i class="feather icon-user-plus f-24 mb-2 d-block"></i>
+                                                    Create User
+                                                </a>
+                                            </div>
+                                            <div class="col-md-3 col-6 mb-3">
+                                                <a href="{{ url_for('admin.clients_list', realm_name=realm.name) }}"
+                                                    class="btn btn-outline-primary btn-block py-3">
+                                                    <i class="feather icon-plus-square f-24 mb-2 d-block"></i>
+                                                    Create Client
+                                                </a>
+                                            </div>
+                                            <div class="col-md-3 col-6 mb-3">
+                                                <a href="{{ url_for('admin.roles_list', realm_name=realm.name) }}"
+                                                    class="btn btn-outline-primary btn-block py-3">
+                                                    <i class="feather icon-key f-24 mb-2 d-block"></i>
+                                                    Manage Roles
+                                                </a>
+                                            </div>
+                                            <div class="col-md-3 col-6 mb-3">
+                                                <a href="{{ url_for('admin.realm_settings', realm_name=realm.name) }}"
+                                                    class="btn btn-outline-primary btn-block py-3">
+                                                    <i class="feather icon-settings f-24 mb-2 d-block"></i>
+                                                    Realm Settings
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

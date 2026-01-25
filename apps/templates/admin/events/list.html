@@ -1,0 +1,127 @@
+{% extends "layouts/admin_base.html" %}
+
+{% block title %}Events{% endblock %}
+
+{% block content %}
+<div class="pcoded-main-container">
+    <div class="pcoded-wrapper">
+        <div class="pcoded-content">
+            <div class="pcoded-inner-content">
+                <div class="main-body">
+                    <div class="page-wrapper">
+                        <!-- Page Header -->
+                        <div class="page-header">
+                            <div class="page-block">
+                                <div class="row align-items-center">
+                                    <div class="col-md-12">
+                                        <div class="page-header-title">
+                                            <h5 class="m-b-10">Events</h5>
+                                        </div>
+                                        <ul class="breadcrumb">
+                                            <li class="breadcrumb-item"><a href="{{ url_for('admin.index') }}"><i
+                                                        class="feather icon-home"></i></a></li>
+                                            <li class="breadcrumb-item"><a
+                                                    href="{{ url_for('admin.dashboard', realm_name=realm.name) }}">{{
+                                                    realm.name }}</a></li>
+                                            <li class="breadcrumb-item active">Events</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5><i class="feather icon-activity mr-2"></i>Login Events</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        {% if events %}
+                                        <div class="table-responsive">
+                                            <table class="table table-hover">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Time</th>
+                                                        <th>Type</th>
+                                                        <th>User</th>
+                                                        <th>Client</th>
+                                                        <th>IP Address</th>
+                                                        <th>Details</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for event in events %}
+                                                    <tr>
+                                                        <td class="text-muted small">
+                                                            {{ event.time.strftime('%Y-%m-%d %H:%M:%S') if event.time
+                                                            else '-' }}
+                                                        </td>
+                                                        <td>
+                                                            {% if 'ERROR' in event.type %}
+                                                            <span class="badge badge-danger">{{ event.type }}</span>
+                                                            {% elif 'LOGIN' in event.type %}
+                                                            <span class="badge badge-success">{{ event.type }}</span>
+                                                            {% elif 'LOGOUT' in event.type %}
+                                                            <span class="badge badge-warning">{{ event.type }}</span>
+                                                            {% elif 'REGISTER' in event.type %}
+                                                            <span class="badge badge-info">{{ event.type }}</span>
+                                                            {% else %}
+                                                            <span class="badge badge-secondary">{{ event.type }}</span>
+                                                            {% endif %}
+                                                        </td>
+                                                        <td>
+                                                            {% if event.user_id %}
+                                                            <code class="small">{{ event.user_id[:12] }}...</code>
+                                                            {% else %}
+                                                            <span class="text-muted">-</span>
+                                                            {% endif %}
+                                                        </td>
+                                                        <td>{{ event.client_id or '-' }}</td>
+                                                        <td class="text-muted small">{{ event.ip_address or '-' }}</td>
+                                                        <td>
+                                                            {% if event.error %}
+                                                            <span class="text-danger small">{{ event.error }}</span>
+                                                            {% else %}
+                                                            <span class="text-muted">-</span>
+                                                            {% endif %}
+                                                        </td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+
+                                        <!-- Pagination -->
+                                        <nav class="mt-4">
+                                            <ul class="pagination justify-content-center">
+                                                {% if page > 1 %}
+                                                <li class="page-item">
+                                                    <a class="page-link" href="?page={{ page - 1 }}">Previous</a>
+                                                </li>
+                                                {% endif %}
+                                                <li class="page-item disabled">
+                                                    <span class="page-link">Page {{ page }}</span>
+                                                </li>
+                                                <li class="page-item">
+                                                    <a class="page-link" href="?page={{ page + 1 }}">Next</a>
+                                                </li>
+                                            </ul>
+                                        </nav>
+                                        {% else %}
+                                        <div class="text-center text-muted py-5">
+                                            <i class="feather icon-inbox f-48 mb-3"></i>
+                                            <p>No events recorded</p>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

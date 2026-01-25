@@ -1,0 +1,113 @@
+{% extends "layouts/admin_base.html" %}
+
+{% block title %}Sessions{% endblock %}
+
+{% block content %}
+<div class="pcoded-main-container">
+    <div class="pcoded-wrapper">
+        <div class="pcoded-content">
+            <div class="pcoded-inner-content">
+                <div class="main-body">
+                    <div class="page-wrapper">
+                        <!-- Page Header -->
+                        <div class="page-header">
+                            <div class="page-block">
+                                <div class="row align-items-center">
+                                    <div class="col-md-12">
+                                        <div class="page-header-title">
+                                            <h5 class="m-b-10">Sessions</h5>
+                                        </div>
+                                        <ul class="breadcrumb">
+                                            <li class="breadcrumb-item"><a href="{{ url_for('admin.index') }}"><i
+                                                        class="feather icon-home"></i></a></li>
+                                            <li class="breadcrumb-item"><a
+                                                    href="{{ url_for('admin.dashboard', realm_name=realm.name) }}">{{
+                                                    realm.name }}</a></li>
+                                            <li class="breadcrumb-item active">Sessions</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <div class="row align-items-center">
+                                            <div class="col-md-6">
+                                                <h5><i class="feather icon-monitor mr-2"></i>Active Sessions ({{
+                                                    sessions|length }})</h5>
+                                            </div>
+                                            <div class="col-md-6 text-right">
+                                                <button class="btn btn-danger">
+                                                    <i class="feather icon-x-circle mr-1"></i> Sign Out All
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="card-body">
+                                        {% if sessions %}
+                                        <div class="table-responsive">
+                                            <table class="table table-hover">
+                                                <thead>
+                                                    <tr>
+                                                        <th>User</th>
+                                                        <th>IP Address</th>
+                                                        <th>Started</th>
+                                                        <th>Last Access</th>
+                                                        <th>Clients</th>
+                                                        <th>Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for session in sessions %}
+                                                    <tr>
+                                                        <td>
+                                                            <a
+                                                                href="{{ url_for('admin.user_detail', realm_name=realm.name, user_id=session.user_id) }}">
+                                                                {{ session.user.username if session.user else
+                                                                session.user_id[:12] }}
+                                                            </a>
+                                                        </td>
+                                                        <td class="text-muted">{{ session.ip_address or '-' }}</td>
+                                                        <td class="small">
+                                                            {{ session.start_time.strftime('%Y-%m-%d %H:%M') if
+                                                            session.start_time else '-' }}
+                                                        </td>
+                                                        <td class="small">
+                                                            {{ session.last_session_refresh.strftime('%H:%M:%S') if
+                                                            session.last_session_refresh else '-' }}
+                                                        </td>
+                                                        <td>
+                                                            <span class="badge badge-primary">{{ session.clients|length
+                                                                if session.clients else 0 }}</span>
+                                                        </td>
+                                                        <td>
+                                                            <button class="btn btn-sm btn-outline-danger"
+                                                                title="Sign Out">
+                                                                <i class="feather icon-log-out"></i>
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        {% else %}
+                                        <div class="text-center text-muted py-5">
+                                            <i class="feather icon-monitor f-48 mb-3"></i>
+                                            <p>No active sessions</p>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

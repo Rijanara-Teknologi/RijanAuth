@@ -1,0 +1,138 @@
+{% extends "layouts/admin_base.html" %}
+
+{% block title %}Create User{% endblock %}
+
+{% block content %}
+<div class="pcoded-main-container">
+    <div class="pcoded-wrapper">
+        <div class="pcoded-content">
+            <div class="pcoded-inner-content">
+                <div class="main-body">
+                    <div class="page-wrapper">
+                        <!-- Page Header -->
+                        <div class="page-header">
+                            <div class="page-block">
+                                <div class="row align-items-center">
+                                    <div class="col-md-12">
+                                        <div class="page-header-title">
+                                            <h5 class="m-b-10">Create User</h5>
+                                        </div>
+                                        <ul class="breadcrumb">
+                                            <li class="breadcrumb-item"><a href="{{ url_for('admin.index') }}"><i
+                                                        class="feather icon-home"></i></a></li>
+                                            <li class="breadcrumb-item"><a
+                                                    href="{{ url_for('admin.dashboard', realm_name=realm.name) }}">{{
+                                                    realm.name }}</a></li>
+                                            <li class="breadcrumb-item"><a
+                                                    href="{{ url_for('admin.users_list', realm_name=realm.name) }}">Users</a>
+                                            </li>
+                                            <li class="breadcrumb-item active">Create</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Create User Form -->
+                        <div class="row">
+                            <div class="col-lg-8">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5><i class="feather icon-user-plus mr-2"></i>New User</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <form method="POST">
+                                            <div class="form-group">
+                                                <label for="username">Username <span
+                                                        class="text-danger">*</span></label>
+                                                <input type="text" class="form-control" id="username" name="username"
+                                                    required autofocus placeholder="Enter username">
+                                                <small class="form-text text-muted">Unique identifier for the
+                                                    user</small>
+                                            </div>
+
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label for="first_name">First Name</label>
+                                                        <input type="text" class="form-control" id="first_name"
+                                                            name="first_name" placeholder="First name">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label for="last_name">Last Name</label>
+                                                        <input type="text" class="form-control" id="last_name"
+                                                            name="last_name" placeholder="Last name">
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="form-group">
+                                                <label for="email">Email</label>
+                                                <input type="email" class="form-control" id="email" name="email"
+                                                    placeholder="user@example.com">
+                                            </div>
+
+                                            <div class="form-group">
+                                                <label for="password">Initial Password</label>
+                                                <input type="password" class="form-control" id="password"
+                                                    name="password" placeholder="Leave empty to set later">
+                                                <small class="form-text text-muted">User can change this on first
+                                                    login</small>
+                                            </div>
+
+                                            <div class="form-group">
+                                                <div class="custom-control custom-switch">
+                                                    <input type="checkbox" class="custom-control-input" id="enabled"
+                                                        name="enabled" checked>
+                                                    <label class="custom-control-label" for="enabled">User
+                                                        Enabled</label>
+                                                </div>
+                                            </div>
+
+                                            <hr>
+
+                                            <div class="d-flex justify-content-between">
+                                                <a href="{{ url_for('admin.users_list', realm_name=realm.name) }}"
+                                                    class="btn btn-outline-secondary">
+                                                    <i class="feather icon-arrow-left mr-1"></i> Cancel
+                                                </a>
+                                                <button type="submit" class="btn btn-primary">
+                                                    <i class="feather icon-save mr-1"></i> Create User
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Help Card -->
+                            <div class="col-lg-4">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5><i class="feather icon-help-circle mr-2"></i>Help</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="text-muted small">
+                                            <strong>Username</strong> is required and must be unique within the realm.
+                                        </p>
+                                        <p class="text-muted small">
+                                            <strong>Email</strong> can be used for login if enabled in realm settings.
+                                        </p>
+                                        <p class="text-muted small">
+                                            <strong>Password</strong> can be set later. You can also require the user to
+                                            update their password on first login.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

@@ -1,0 +1,267 @@
+{% extends "layouts/admin_base.html" %}
+
+{% block title %}{{ user.username }}{% endblock %}
+
+{% block content %}
+<div class="pcoded-main-container">
+    <div class="pcoded-wrapper">
+        <div class="pcoded-content">
+            <div class="pcoded-inner-content">
+                <div class="main-body">
+                    <div class="page-wrapper">
+                        <!-- Page Header -->
+                        <div class="page-header">
+                            <div class="page-block">
+                                <div class="row align-items-center">
+                                    <div class="col-md-12">
+                                        <div class="page-header-title">
+                                            <h5 class="m-b-10">{{ user.username }}</h5>
+                                        </div>
+                                        <ul class="breadcrumb">
+                                            <li class="breadcrumb-item"><a href="{{ url_for('admin.index') }}"><i
+                                                        class="feather icon-home"></i></a></li>
+                                            <li class="breadcrumb-item"><a
+                                                    href="{{ url_for('admin.dashboard', realm_name=realm.name) }}">{{
+                                                    realm.name }}</a></li>
+                                            <li class="breadcrumb-item"><a
+                                                    href="{{ url_for('admin.users_list', realm_name=realm.name) }}">Users</a>
+                                            </li>
+                                            <li class="breadcrumb-item active">{{ user.username }}</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- User Detail -->
+                        <div class="row">
+                            <!-- User Info Card -->
+                            <div class="col-lg-4">
+                                <div class="card">
+                                    <div class="card-body text-center">
+                                        <div class="mb-3">
+                                            <div class="avatar bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center"
+                                                style="width: 80px; height: 80px; font-size: 2rem;">
+                                                {{ user.username[0]|upper }}
+                                            </div>
+                                        </div>
+                                        <h5 class="mb-1">{{ user.full_name or user.username }}</h5>
+                                        <p class="text-muted mb-2">@{{ user.username }}</p>
+                                        {% if user.enabled %}
+                                        <span class="badge badge-success">Enabled</span>
+                                        {% else %}
+                                        <span class="badge badge-secondary">Disabled</span>
+                                        {% endif %}
+                                        {% if user.email_verified %}
+                                        <span class="badge badge-info">Email Verified</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="card-body border-top">
+                                        <div class="row text-center">
+                                            <div class="col-4">
+                                                <h5 class="mb-0">{{ realm_roles|length }}</h5>
+                                                <small class="text-muted">Roles</small>
+                                            </div>
+                                            <div class="col-4">
+                                                <h5 class="mb-0">{{ groups|length }}</h5>
+                                                <small class="text-muted">Groups</small>
+                                            </div>
+                                            <div class="col-4">
+                                                <h5 class="mb-0">{{ sessions|length }}</h5>
+                                                <small class="text-muted">Sessions</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- User Details Tabs -->
+                            <div class="col-lg-8">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <ul class="nav nav-tabs card-header-tabs" id="userTabs" role="tablist">
+                                            <li class="nav-item">
+                                                <a class="nav-link active" id="details-tab" data-toggle="tab"
+                                                    href="#details" role="tab">
+                                                    <i class="feather icon-user mr-1"></i> Details
+                                                </a>
+                                            </li>
+                                            <li class="nav-item">
+                                                <a class="nav-link" id="credentials-tab" data-toggle="tab"
+                                                    href="#credentials" role="tab">
+                                                    <i class="feather icon-lock mr-1"></i> Credentials
+                                                </a>
+                                            </li>
+                                            <li class="nav-item">
+                                                <a class="nav-link" id="roles-tab" data-toggle="tab" href="#roles"
+                                                    role="tab">
+                                                    <i class="feather icon-key mr-1"></i> Roles
+                                                </a>
+                                            </li>
+                                            <li class="nav-item">
+                                                <a class="nav-link" id="groups-tab" data-toggle="tab" href="#groups"
+                                                    role="tab">
+                                                    <i class="feather icon-folder mr-1"></i> Groups
+                                                </a>
+                                            </li>
+                                            <li class="nav-item">
+                                                <a class="nav-link" id="sessions-tab" data-toggle="tab" href="#sessions"
+                                                    role="tab">
+                                                    <i class="feather icon-monitor mr-1"></i> Sessions
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="tab-content" id="userTabsContent">
+                                            <!-- Details Tab -->
+                                            <div class="tab-pane fade show active" id="details" role="tabpanel">
+                                                <table class="table table-borderless">
+                                                    <tr>
+                                                        <td class="text-muted" style="width: 150px;">ID</td>
+                                                        <td><code>{{ user.id }}</code></td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td class="text-muted">Username</td>
+                                                        <td>{{ user.username }}</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td class="text-muted">Email</td>
+                                                        <td>
+                                                            {{ user.email or '-' }}
+                                                            {% if user.email_verified %}
+                                                            <i class="feather icon-check-circle text-success ml-1"></i>
+                                                            {% endif %}
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td class="text-muted">First Name</td>
+                                                        <td>{{ user.first_name or '-' }}</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td class="text-muted">Last Name</td>
+                                                        <td>{{ user.last_name or '-' }}</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td class="text-muted">Created</td>
+                                                        <td>{{ user.created_at.strftime('%Y-%m-%d %H:%M') if
+                                                            user.created_at else '-' }}</td>
+                                                    </tr>
+                                                </table>
+                                            </div>
+
+                                            <!-- Credentials Tab -->
+                                            <div class="tab-pane fade" id="credentials" role="tabpanel">
+                                                <h6 class="mb-3">Password</h6>
+                                                <form method="POST" action="#">
+                                                    <div class="form-group">
+                                                        <label>New Password</label>
+                                                        <input type="password" class="form-control" name="new_password"
+                                                            placeholder="Enter new password">
+                                                    </div>
+                                                    <div class="form-group">
+                                                        <label>Confirm Password</label>
+                                                        <input type="password" class="form-control"
+                                                            name="confirm_password" placeholder="Confirm password">
+                                                    </div>
+                                                    <button type="submit" class="btn btn-primary">
+                                                        <i class="feather icon-save mr-1"></i> Set Password
+                                                    </button>
+                                                </form>
+                                            </div>
+
+                                            <!-- Roles Tab -->
+                                            <div class="tab-pane fade" id="roles" role="tabpanel">
+                                                <h6 class="mb-3">Realm Roles</h6>
+                                                {% if realm_roles %}
+                                                <ul class="list-group">
+                                                    {% for role in realm_roles %}
+                                                    <li
+                                                        class="list-group-item d-flex justify-content-between align-items-center">
+                                                        <span>
+                                                            <i class="feather icon-key text-primary mr-2"></i>
+                                                            {{ role.name }}
+                                                        </span>
+                                                        <button class="btn btn-sm btn-outline-danger">
+                                                            <i class="feather icon-x"></i>
+                                                        </button>
+                                                    </li>
+                                                    {% endfor %}
+                                                </ul>
+                                                {% else %}
+                                                <p class="text-muted">No roles assigned</p>
+                                                {% endif %}
+                                            </div>
+
+                                            <!-- Groups Tab -->
+                                            <div class="tab-pane fade" id="groups" role="tabpanel">
+                                                <h6 class="mb-3">Group Memberships</h6>
+                                                {% if groups %}
+                                                <ul class="list-group">
+                                                    {% for group in groups %}
+                                                    <li
+                                                        class="list-group-item d-flex justify-content-between align-items-center">
+                                                        <span>
+                                                            <i class="feather icon-folder text-warning mr-2"></i>
+                                                            {{ group.name }}
+                                                        </span>
+                                                        <button class="btn btn-sm btn-outline-danger">
+                                                            <i class="feather icon-x"></i>
+                                                        </button>
+                                                    </li>
+                                                    {% endfor %}
+                                                </ul>
+                                                {% else %}
+                                                <p class="text-muted">Not a member of any groups</p>
+                                                {% endif %}
+                                            </div>
+
+                                            <!-- Sessions Tab -->
+                                            <div class="tab-pane fade" id="sessions" role="tabpanel">
+                                                <h6 class="mb-3">Active Sessions</h6>
+                                                {% if sessions %}
+                                                <div class="table-responsive">
+                                                    <table class="table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>IP Address</th>
+                                                                <th>Started</th>
+                                                                <th>Last Access</th>
+                                                                <th>Actions</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {% for session in sessions %}
+                                                            <tr>
+                                                                <td>{{ session.ip_address or '-' }}</td>
+                                                                <td>{{ session.start_time.strftime('%Y-%m-%d %H:%M') if
+                                                                    session.start_time else '-' }}</td>
+                                                                <td>{{ session.last_session_refresh.strftime('%H:%M') if
+                                                                    session.last_session_refresh else '-' }}</td>
+                                                                <td>
+                                                                    <button class="btn btn-sm btn-outline-danger">
+                                                                        <i class="feather icon-x"></i> Revoke
+                                                                    </button>
+                                                                </td>
+                                                            </tr>
+                                                            {% endfor %}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                                {% else %}
+                                                <p class="text-muted">No active sessions</p>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
