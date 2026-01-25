@@ -87,10 +87,22 @@ class DebugConfig(Config):
     DEBUG = True
     # Fixed key for development to maintain sessions across restarts
     SECRET_KEY = 'Fixed_Debug_Secret_Key_For_RijanAuth_Dev'
+    
+    # Session configuration
     SESSION_COOKIE_SECURE = False
     SESSION_COOKIE_DOMAIN = None
     SESSION_COOKIE_PATH = '/'
     SESSION_COOKIE_SAMESITE = 'Lax'
+    SESSION_COOKIE_NAME = 'rijanauth_session'
+    
+    # Permanent session lifetime (31 days)
+    from datetime import timedelta
+    PERMANENT_SESSION_LIFETIME = timedelta(days=31)
+    
+    # Remember cookie settings
+    REMEMBER_COOKIE_SECURE = False
+    REMEMBER_COOKIE_HTTPONLY = True
+    REMEMBER_COOKIE_SAMESITE = 'Lax'
 
 # Load all possible configurations
 config_dict = {

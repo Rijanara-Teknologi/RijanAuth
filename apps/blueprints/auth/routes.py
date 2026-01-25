@@ -53,9 +53,9 @@ def login():
                 'email_verified': user.email_verified
             })
             
-            # Log credential verification result
+            # Verify password
             password_valid = user.verify_password(password)
-            current_app.logger.debug("PASSWORD VERIFICATION RESULT", extra={
+            current_app.logger.debug("PASSWORD VERIFICATION", extra={
                 'result': 'SUCCESS' if password_valid else 'FAILURE',
                 'user_id': user.id
             })
@@ -72,27 +72,17 @@ def login():
                     'realm': user.realm.name if user.realm else 'None'
                 })
                 
-                # Attempt login
-                login_success = login_user(user)
-                current_app.logger.info("LOGIN RESULT", extra={
-                    'success': login_success,
-                    'user_id': user.id,
-                    'session_id': session.get('_id', 'NOT SET')
-                })
+                # Login user with remember=True for persistent session
+                login_success = login_user(user, remember=True)
                 
                 if login_success:
-                    # Log session details after successful login
-                    current_app.logger.debug("SESSION STATE AFTER LOGIN", extra={
-                        # 'session_data': dict(session), # Careful with sensitive data
-                        'current_user_id': getattr(current_user, 'id', 'NOT SET'),
-                        'current_user_authenticated': current_user.is_authenticated
-                    })
-                    
                     next_url = request.args.get('next')
                     if not next_url or not next_url.startswith('/'):
                         next_url = url_for('admin.index')
                         
-                    current_app.logger.info("REDIRECTING AFTER SUCCESSFUL LOGIN", extra={
+                    current_app.logger.info("LOGIN SUCCESSFUL", extra={
+                        'user_id': user.id,
+                        'username': user.username,
                         'redirect_url': next_url
                     })
                     return redirect(next_url)

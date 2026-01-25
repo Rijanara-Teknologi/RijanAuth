@@ -31,19 +31,14 @@ def user_loader(id):
         current_app.logger.error(f"USER LOADER EXCEPTION: {e}", extra={'stack': True})
         return None
 
-@login_manager.request_loader
-def request_loader(request):
-    username = request.form.get('username')
-    try:
-        from apps.models.user import User
-        from apps.models.realm import Realm
-        
-        master = Realm.get_master_realm()
-        if master:
-            user = User.find_by_username(master.id, username)
-            return user
-    except:
-        pass
-    return None
+# REMOVED: request_loader was incorrectly authenticating users based on form username
+# without verifying password. This was a security vulnerability and also caused
+# login to fail because current_user.is_authenticated was True before password check.
+#
+# The correct flow is:
+# 1. User submits username/password via form
+# 2. Login route manually verifies credentials
+# 3. login_user() is called to set session
+# 4. user_loader loads user from session cookie on subsequent requests
 
 from apps.blueprints.auth import routes

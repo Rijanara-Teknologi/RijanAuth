@@ -1,5 +1,25 @@
 # Change Log
 
+## [2.1.2] 2026-01-25 - Security Fix: Login Authentication Bug
+### Bug Fixes
+
+- **Critical: Login Session Not Persisting**: Fixed bug where login would redirect to admin but session cookie was never set, causing immediate redirect back to login page
+- **Security: Removed Vulnerable `request_loader`**: The `request_loader` function was authenticating users based ONLY on form username without password verification - a critical security vulnerability that allowed bypassing authentication
+- **Root Cause**: `request_loader` in `apps/blueprints/auth/__init__.py` was returning user object when form contained username, causing Flask-Login to mark user as authenticated before password verification in the login route
+
+### Changes
+
+- Removed insecure `request_loader` from `apps/blueprints/auth/__init__.py`
+- Added session cookie configuration in `apps/config.py` (SESSION_COOKIE_NAME, PERMANENT_SESSION_LIFETIME, REMEMBER_COOKIE_* settings)
+- Cleaned up login route with proper Flask-Login flow using `login_user(user, remember=True)`
+
+### Security Impact
+
+Before fix: Any attacker could access admin panel by simply submitting a form with a valid username (no password required)
+After fix: Proper authentication flow requires valid username AND password verification
+
+---
+
 ## [2.1.0] 2026-01-25 - RijanAuth Phase 2.1: Admin UI Foundation
 ### New Features
 
