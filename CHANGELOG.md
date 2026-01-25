@@ -1,5 +1,39 @@
 # Change Log
 
+## [2.5.1] 2026-01-25 - User Role & Group Management
+
+### New Features
+
+- **User Role Management in Admin UI**:
+  - Assign realm roles to users from the user detail page
+  - Remove roles from users with confirmation dialog
+  - Display available roles that can be assigned
+  - Roles automatically appear in JWT `realm_access.roles` claim when `roles` scope is requested
+
+- **User Group Management in Admin UI**:
+  - Add users to groups from the user detail page
+  - Remove users from groups with confirmation dialog
+  - Display available groups that can be joined
+  - Groups appear in JWT `groups` claim when `groups` scope is requested
+
+- **Realm Roles Edit/Delete**:
+  - Edit role name and description via modal form
+  - Delete roles with confirmation (protected system roles cannot be deleted)
+  - System roles (`default-roles-*`, `offline_access`, `uma_authorization`) are protected
+
+### Bug Fixes
+
+- Fixed missing `mapper_form.html` template for client scopes
+- Fixed JavaScript error in dark-mode.js when theme elements are not present
+- Fixed roles scope seeding to include realm role mapper for JWT claims
+
+### Database Migrations
+
+- Added `priority` and `consent_text` columns to `protocol_mappers` table
+- Added `seed_roles_scope()` function to ensure roles scope exists with proper mapper
+
+---
+
 ## [2.5.0] 2026-01-25 - Federated Role Synchronization
 
 ### New Features

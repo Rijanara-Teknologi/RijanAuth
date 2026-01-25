@@ -1,0 +1,343 @@
+{% extends "layouts/admin_base.html" %}
+
+{% block title %}{% if mapper %}Edit{% else %}Add{% endif %} Mapper - {{ scope.name }}{% endblock %}
+
+{% block content %}
+<div class="pcoded-main-container">
+    <div class="pcoded-wrapper">
+        <div class="pcoded-content">
+            <div class="pcoded-inner-content">
+                <div class="main-body">
+                    <div class="page-wrapper">
+                        <!-- Page Header -->
+                        <div class="page-header">
+                            <div class="page-block">
+                                <div class="row align-items-center">
+                                    <div class="col-md-12">
+                                        <div class="page-header-title">
+                                            <h5 class="m-b-10">{% if mapper %}Edit{% else %}Add{% endif %} Protocol Mapper</h5>
+                                        </div>
+                                        <ul class="breadcrumb">
+                                            <li class="breadcrumb-item">
+                                                <a href="{{ url_for('admin.index') }}"><i class="feather icon-home"></i></a>
+                                            </li>
+                                            <li class="breadcrumb-item">
+                                                <a href="{{ url_for('admin.client_scopes_list', realm_name=realm.name) }}">Client Scopes</a>
+                                            </li>
+                                            <li class="breadcrumb-item">
+                                                <a href="{{ url_for('admin.client_scope_detail', realm_name=realm.name, scope_id=scope.id) }}">{{ scope.name }}</a>
+                                            </li>
+                                            <li class="breadcrumb-item active">{% if mapper %}Edit{% else %}Add{% endif %} Mapper</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Form -->
+                        <form method="POST">
+                            <div class="row">
+                                <div class="col-lg-8">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h5>
+                                                <i class="feather icon-code mr-2"></i>
+                                                {{ mapper_types.get(mapper_type, mapper_type) }}
+                                            </h5>
+                                        </div>
+                                        <div class="card-body">
+                                            <!-- Basic Settings -->
+                                            <div class="form-group">
+                                                <label>Name <span class="text-danger">*</span></label>
+                                                <input type="text" class="form-control" name="name" required
+                                                       value="{{ mapper.name if mapper else '' }}"
+                                                       placeholder="e.g., custom-email-mapper">
+                                            </div>
+
+                                            <input type="hidden" name="mapper_type" value="{{ mapper_type }}">
+
+                                            <div class="form-group">
+                                                <label>Priority</label>
+                                                <input type="number" class="form-control" name="priority" 
+                                                       value="{{ mapper.priority if mapper else 0 }}"
+                                                       style="max-width: 150px;">
+                                                <small class="text-muted">Lower values are processed first</small>
+                                            </div>
+
+                                            <hr>
+
+                                            <!-- Mapper Type Specific Fields -->
+                                            {% if mapper_type == 'oidc-usermodel-attribute-mapper' %}
+                                            <h6 class="mb-3">User Attribute Settings</h6>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>User Attribute</label>
+                                                        <input type="text" class="form-control" name="user_attribute"
+                                                               value="{{ mapper.config.get('user.attribute', '') if mapper else '' }}"
+                                                               placeholder="e.g., email, first_name, custom_attr">
+                                                        <small class="text-muted">The user attribute to map</small>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Claim Name</label>
+                                                        <input type="text" class="form-control" name="claim_name"
+                                                               value="{{ mapper.config.get('claim.name', '') if mapper else '' }}"
+                                                               placeholder="e.g., custom_email">
+                                                        <small class="text-muted">Name of the claim in the token</small>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>JSON Type</label>
+                                                        <select class="form-control" name="json_type">
+                                                            <option value="String" {% if mapper and mapper.config.get('jsonType.label') == 'String' %}selected{% endif %}>String</option>
+                                                            <option value="int" {% if mapper and mapper.config.get('jsonType.label') == 'int' %}selected{% endif %}>int</option>
+                                                            <option value="long" {% if mapper and mapper.config.get('jsonType.label') == 'long' %}selected{% endif %}>long</option>
+                                                            <option value="boolean" {% if mapper and mapper.config.get('jsonType.label') == 'boolean' %}selected{% endif %}>boolean</option>
+                                                            <option value="JSON" {% if mapper and mapper.config.get('jsonType.label') == 'JSON' %}selected{% endif %}>JSON</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group pt-4">
+                                                        <div class="custom-control custom-checkbox">
+                                                            <input type="checkbox" class="custom-control-input" id="multivalued" name="multivalued"
+                                                                   {% if mapper and mapper.config.get('multivalued') == 'true' %}checked{% endif %}>
+                                                            <label class="custom-control-label" for="multivalued">Multivalued</label>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {% elif mapper_type == 'oidc-hardcoded-claim-mapper' %}
+                                            <h6 class="mb-3">Hardcoded Claim Settings</h6>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Claim Name <span class="text-danger">*</span></label>
+                                                        <input type="text" class="form-control" name="claim_name" required
+                                                               value="{{ mapper.config.get('claim.name', '') if mapper else '' }}"
+                                                               placeholder="e.g., service_name">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Claim Value <span class="text-danger">*</span></label>
+                                                        <input type="text" class="form-control" name="claim_value" required
+                                                               value="{{ mapper.config.get('claim.value', '') if mapper else '' }}"
+                                                               placeholder="e.g., my-service">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="form-group">
+                                                <label>JSON Type</label>
+                                                <select class="form-control" name="json_type" style="max-width: 200px;">
+                                                    <option value="String" {% if mapper and mapper.config.get('jsonType.label') == 'String' %}selected{% endif %}>String</option>
+                                                    <option value="int" {% if mapper and mapper.config.get('jsonType.label') == 'int' %}selected{% endif %}>int</option>
+                                                    <option value="boolean" {% if mapper and mapper.config.get('jsonType.label') == 'boolean' %}selected{% endif %}>boolean</option>
+                                                    <option value="JSON" {% if mapper and mapper.config.get('jsonType.label') == 'JSON' %}selected{% endif %}>JSON</option>
+                                                </select>
+                                            </div>
+
+                                            {% elif mapper_type in ('oidc-usermodel-realm-role-mapper', 'oidc-usermodel-client-role-mapper') %}
+                                            <h6 class="mb-3">Role Mapper Settings</h6>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Claim Name</label>
+                                                        <input type="text" class="form-control" name="claim_name"
+                                                               value="{{ mapper.config.get('claim.name', 'roles') if mapper else 'roles' }}"
+                                                               placeholder="e.g., roles">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Role Prefix</label>
+                                                        <input type="text" class="form-control" name="role_prefix"
+                                                               value="{{ mapper.config.get('role.prefix', '') if mapper else '' }}"
+                                                               placeholder="e.g., ROLE_">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {% if mapper_type == 'oidc-usermodel-client-role-mapper' %}
+                                            <div class="form-group">
+                                                <label>Client ID (leave empty for current client)</label>
+                                                <input type="text" class="form-control" name="target_client_id"
+                                                       value="{{ mapper.config.get('client.id', '') if mapper else '' }}"
+                                                       placeholder="e.g., another-client">
+                                            </div>
+                                            {% endif %}
+                                            <div class="form-group">
+                                                <div class="custom-control custom-checkbox">
+                                                    <input type="checkbox" class="custom-control-input" id="multivalued" name="multivalued"
+                                                           {% if not mapper or mapper.config.get('multivalued', 'true') == 'true' %}checked{% endif %}>
+                                                    <label class="custom-control-label" for="multivalued">Multivalued</label>
+                                                </div>
+                                            </div>
+
+                                            {% elif mapper_type == 'oidc-group-membership-mapper' %}
+                                            <h6 class="mb-3">Group Membership Settings</h6>
+                                            <div class="form-group">
+                                                <label>Claim Name</label>
+                                                <input type="text" class="form-control" name="claim_name"
+                                                       value="{{ mapper.config.get('claim.name', 'groups') if mapper else 'groups' }}"
+                                                       placeholder="e.g., groups">
+                                            </div>
+                                            <div class="form-group">
+                                                <div class="custom-control custom-checkbox">
+                                                    <input type="checkbox" class="custom-control-input" id="full_path" name="full_path"
+                                                           {% if not mapper or mapper.config.get('full.path', 'true') == 'true' %}checked{% endif %}>
+                                                    <label class="custom-control-label" for="full_path">Full group path</label>
+                                                </div>
+                                                <small class="text-muted">Include full path like /parent/child</small>
+                                            </div>
+
+                                            {% elif mapper_type == 'oidc-audience-mapper' %}
+                                            <h6 class="mb-3">Audience Settings</h6>
+                                            <div class="form-group">
+                                                <label>Included Client Audience</label>
+                                                <input type="text" class="form-control" name="included_client_audience"
+                                                       value="{{ mapper.config.get('included.client.audience', '') if mapper else '' }}"
+                                                       placeholder="e.g., another-client">
+                                                <small class="text-muted">Client ID to add to audience</small>
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Custom Audience</label>
+                                                <input type="text" class="form-control" name="included_custom_audience"
+                                                       value="{{ mapper.config.get('included.custom.audience', '') if mapper else '' }}"
+                                                       placeholder="e.g., https://api.example.com">
+                                                <small class="text-muted">Custom audience value</small>
+                                            </div>
+
+                                            {% elif mapper_type == 'oidc-full-name-mapper' %}
+                                            <h6 class="mb-3">Full Name Settings</h6>
+                                            <div class="form-group">
+                                                <label>Claim Name</label>
+                                                <input type="text" class="form-control" name="claim_name"
+                                                       value="{{ mapper.config.get('claim.name', 'name') if mapper else 'name' }}"
+                                                       placeholder="e.g., name">
+                                            </div>
+
+                                            {% elif mapper_type == 'oidc-address-mapper' %}
+                                            <h6 class="mb-3">Address Settings</h6>
+                                            <div class="form-group">
+                                                <label>Claim Name</label>
+                                                <input type="text" class="form-control" name="claim_name"
+                                                       value="{{ mapper.config.get('claim.name', 'address') if mapper else 'address' }}"
+                                                       placeholder="e.g., address">
+                                            </div>
+
+                                            {% endif %}
+
+                                            <hr>
+
+                                            <!-- Token Type Settings -->
+                                            <h6 class="mb-3">Add to Token Types</h6>
+                                            <div class="row">
+                                                <div class="col-md-4">
+                                                    <div class="custom-control custom-checkbox">
+                                                        <input type="checkbox" class="custom-control-input" id="access_token_claim" name="access_token_claim"
+                                                               {% if not mapper or mapper.config.get('access.token.claim', 'true') == 'true' %}checked{% endif %}>
+                                                        <label class="custom-control-label" for="access_token_claim">Access Token</label>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="custom-control custom-checkbox">
+                                                        <input type="checkbox" class="custom-control-input" id="id_token_claim" name="id_token_claim"
+                                                               {% if not mapper or mapper.config.get('id.token.claim', 'true') == 'true' %}checked{% endif %}>
+                                                        <label class="custom-control-label" for="id_token_claim">ID Token</label>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="custom-control custom-checkbox">
+                                                        <input type="checkbox" class="custom-control-input" id="userinfo_token_claim" name="userinfo_token_claim"
+                                                               {% if not mapper or mapper.config.get('userinfo.token.claim', 'true') == 'true' %}checked{% endif %}>
+                                                        <label class="custom-control-label" for="userinfo_token_claim">UserInfo</label>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="card-footer">
+                                            <button type="submit" class="btn btn-primary">
+                                                <i class="feather icon-save mr-1"></i> Save
+                                            </button>
+                                            <a href="{{ url_for('admin.client_scope_detail', realm_name=realm.name, scope_id=scope.id) }}" class="btn btn-outline-secondary">
+                                                Cancel
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Help Panel -->
+                                <div class="col-lg-4">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h5><i class="feather icon-info mr-2"></i>Help</h5>
+                                        </div>
+                                        <div class="card-body">
+                                            {% if mapper_type == 'oidc-usermodel-attribute-mapper' %}
+                                            <p><strong>User Attribute Mapper</strong></p>
+                                            <p class="text-muted">
+                                                Maps a user attribute to a token claim. You can map built-in attributes 
+                                                (email, first_name, last_name, username) or custom user attributes.
+                                            </p>
+                                            <hr>
+                                            <p><strong>Common Attributes:</strong></p>
+                                            <ul class="text-muted">
+                                                <li><code>email</code> - User's email</li>
+                                                <li><code>first_name</code> - First name</li>
+                                                <li><code>last_name</code> - Last name</li>
+                                                <li><code>username</code> - Username</li>
+                                                <li><code>locale</code> - User's locale</li>
+                                            </ul>
+
+                                            {% elif mapper_type == 'oidc-hardcoded-claim-mapper' %}
+                                            <p><strong>Hardcoded Claim Mapper</strong></p>
+                                            <p class="text-muted">
+                                                Adds a fixed value to the token. Useful for adding service identifiers,
+                                                environment names, or other static values.
+                                            </p>
+
+                                            {% elif mapper_type in ('oidc-usermodel-realm-role-mapper', 'oidc-usermodel-client-role-mapper') %}
+                                            <p><strong>Role Mapper</strong></p>
+                                            <p class="text-muted">
+                                                Maps user roles to token claims. Realm roles are roles not attached to 
+                                                any client, while client roles are specific to a client.
+                                            </p>
+
+                                            {% elif mapper_type == 'oidc-group-membership-mapper' %}
+                                            <p><strong>Group Membership Mapper</strong></p>
+                                            <p class="text-muted">
+                                                Maps user's group memberships to a token claim. Can include full path 
+                                                (/parent/child) or just group names.
+                                            </p>
+
+                                            {% elif mapper_type == 'oidc-audience-mapper' %}
+                                            <p><strong>Audience Mapper</strong></p>
+                                            <p class="text-muted">
+                                                Adds additional audiences to the token. Use this when the token needs 
+                                                to be valid for multiple services.
+                                            </p>
+
+                                            {% else %}
+                                            <p class="text-muted">
+                                                Configure how this claim will be added to your tokens.
+                                            </p>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

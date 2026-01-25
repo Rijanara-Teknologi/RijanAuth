@@ -268,9 +268,19 @@ def user_detail(realm_name, user_id):
         return redirect(url_for('admin.users_list', realm_name=realm_name))
     
     # Get user data
-    realm_roles = UserService.get_user_roles(user)
-    groups = UserService.get_user_groups(user)
+    user_realm_roles = UserService.get_user_roles(user)
+    user_groups = UserService.get_user_groups(user)
     sessions = user.sessions.filter_by(state='ACTIVE').all()
+    
+    # Get all available realm roles (for assigning)
+    all_realm_roles = Role.get_realm_roles(realm.id)
+    user_role_ids = [r.id for r in user_realm_roles]
+    available_roles = [r for r in all_realm_roles if r.id not in user_role_ids]
+    
+    # Get all available groups (for assigning)
+    all_groups = Group.query.filter_by(realm_id=realm.id).all()
+    user_group_ids = [g.id for g in user_groups]
+    available_groups = [g for g in all_groups if g.id not in user_group_ids]
     
     realms = Realm.query.all()
     return render_template(
@@ -278,11 +288,115 @@ def user_detail(realm_name, user_id):
         realm=realm,
         realms=realms,
         user=user,
-        realm_roles=realm_roles,
-        groups=groups,
+        realm_roles=user_realm_roles,
+        available_roles=available_roles,
+        groups=user_groups,
+        available_groups=available_groups,
         sessions=sessions,
         segment='users'
     )
+
+
+@admin_bp.route('/<realm_name>/users/<user_id>/roles/assign', methods=['POST'])
+@login_required
+def user_role_assign(realm_name, user_id):
+    """Assign a role to a user"""
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    user = User.find_by_id(user_id)
+    if not user or user.realm_id != realm.id:
+        flash('User not found', 'error')
+        return redirect(url_for('admin.users_list', realm_name=realm_name))
+    
+    role_id = request.form.get('role_id')
+    if not role_id:
+        flash('Role is required', 'error')
+        return redirect(url_for('admin.user_detail', realm_name=realm_name, user_id=user_id))
+    
+    role = Role.query.filter_by(id=role_id, realm_id=realm.id).first()
+    if not role:
+        flash('Role not found', 'error')
+        return redirect(url_for('admin.user_detail', realm_name=realm_name, user_id=user_id))
+    
+    UserService.assign_role(user, role)
+    flash(f'Role "{role.name}" assigned to {user.username}', 'success')
+    return redirect(url_for('admin.user_detail', realm_name=realm_name, user_id=user_id))
+
+
+@admin_bp.route('/<realm_name>/users/<user_id>/roles/<role_id>/remove', methods=['POST'])
+@login_required
+def user_role_remove(realm_name, user_id, role_id):
+    """Remove a role from a user"""
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    user = User.find_by_id(user_id)
+    if not user or user.realm_id != realm.id:
+        flash('User not found', 'error')
+        return redirect(url_for('admin.users_list', realm_name=realm_name))
+    
+    role = Role.query.filter_by(id=role_id, realm_id=realm.id).first()
+    if not role:
+        flash('Role not found', 'error')
+        return redirect(url_for('admin.user_detail', realm_name=realm_name, user_id=user_id))
+    
+    UserService.remove_role(user, role)
+    flash(f'Role "{role.name}" removed from {user.username}', 'success')
+    return redirect(url_for('admin.user_detail', realm_name=realm_name, user_id=user_id))
+
+
+@admin_bp.route('/<realm_name>/users/<user_id>/groups/assign', methods=['POST'])
+@login_required
+def user_group_assign(realm_name, user_id):
+    """Assign a group to a user"""
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    user = User.find_by_id(user_id)
+    if not user or user.realm_id != realm.id:
+        flash('User not found', 'error')
+        return redirect(url_for('admin.users_list', realm_name=realm_name))
+    
+    group_id = request.form.get('group_id')
+    if not group_id:
+        flash('Group is required', 'error')
+        return redirect(url_for('admin.user_detail', realm_name=realm_name, user_id=user_id))
+    
+    group = Group.query.filter_by(id=group_id, realm_id=realm.id).first()
+    if not group:
+        flash('Group not found', 'error')
+        return redirect(url_for('admin.user_detail', realm_name=realm_name, user_id=user_id))
+    
+    UserService.join_group(user, group)
+    flash(f'User added to group "{group.name}"', 'success')
+    return redirect(url_for('admin.user_detail', realm_name=realm_name, user_id=user_id))
+
+
+@admin_bp.route('/<realm_name>/users/<user_id>/groups/<group_id>/remove', methods=['POST'])
+@login_required
+def user_group_remove(realm_name, user_id, group_id):
+    """Remove a user from a group"""
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    user = User.find_by_id(user_id)
+    if not user or user.realm_id != realm.id:
+        flash('User not found', 'error')
+        return redirect(url_for('admin.users_list', realm_name=realm_name))
+    
+    group = Group.query.filter_by(id=group_id, realm_id=realm.id).first()
+    if not group:
+        flash('Group not found', 'error')
+        return redirect(url_for('admin.user_detail', realm_name=realm_name, user_id=user_id))
+    
+    UserService.leave_group(user, group)
+    flash(f'User removed from group "{group.name}"', 'success')
+    return redirect(url_for('admin.user_detail', realm_name=realm_name, user_id=user_id))
 
 
 # =============================================================================

@@ -217,6 +217,82 @@ def run_migration():
     return error_count == 0
 
 
+def seed_roles_scope():
+    """Seed the 'roles' client scope with mappers for all realms"""
+    print("\nSeeding 'roles' client scope...")
+    
+    try:
+        from apps import create_app, db
+        from apps.config import DebugConfig
+        from apps.models.realm import Realm
+        from apps.models.client import ClientScope, ProtocolMapper, Client
+        
+        app = create_app(DebugConfig)
+        with app.app_context():
+            realms = Realm.query.all()
+            
+            for realm in realms:
+                # Check if 'roles' scope exists
+                roles_scope = ClientScope.query.filter_by(realm_id=realm.id, name='roles').first()
+                
+                if not roles_scope:
+                    # Create roles scope
+                    roles_scope = ClientScope(
+                        realm_id=realm.id,
+                        name='roles',
+                        description='OpenID Connect scope for role mappings',
+                        protocol='openid-connect'
+                    )
+                    db.session.add(roles_scope)
+                    db.session.commit()
+                    print(f"  [OK] Created 'roles' scope for realm: {realm.name}")
+                else:
+                    print(f"  [OK] 'roles' scope already exists for realm: {realm.name}")
+                
+                # Check/create realm roles mapper
+                realm_role_mapper = ProtocolMapper.query.filter_by(
+                    client_scope_id=roles_scope.id,
+                    protocol_mapper='oidc-usermodel-realm-role-mapper'
+                ).first()
+                
+                if not realm_role_mapper:
+                    realm_role_mapper = ProtocolMapper(
+                        name='realm roles',
+                        protocol='openid-connect',
+                        protocol_mapper='oidc-usermodel-realm-role-mapper',
+                        client_scope_id=roles_scope.id,
+                        config={
+                            'claim.name': 'realm_access.roles',
+                            'multivalued': 'true',
+                            'access.token.claim': 'true',
+                            'id.token.claim': 'true',
+                            'userinfo.token.claim': 'false',
+                        },
+                        priority=0
+                    )
+                    db.session.add(realm_role_mapper)
+                    db.session.commit()
+                    print(f"    [OK] Created 'realm roles' mapper for scope")
+                
+                # Add roles scope as default to all clients in this realm
+                clients = Client.query.filter_by(realm_id=realm.id).all()
+                for client in clients:
+                    default_scopes = client.default_client_scopes or []
+                    if roles_scope.id not in default_scopes:
+                        default_scopes.append(roles_scope.id)
+                        client.default_client_scopes = default_scopes
+                        print(f"    [OK] Added 'roles' scope to client: {client.client_id}")
+                
+                db.session.commit()
+            
+            print("\n[OK] Roles scope seeding completed!")
+            return True
+            
+    except Exception as e:
+        print(f"\n[ERROR] Failed to seed roles scope: {e}")
+        return False
+
+
 if __name__ == '__main__':
     print("=" * 60)
     print("RijanAuth Database Migration")
@@ -226,7 +302,11 @@ if __name__ == '__main__':
     success = run_migration()
     
     if success:
-        print("\n[OK] All migrations completed successfully!")
+        print("\n[OK] Database migration completed successfully!")
+        
+        # Also seed roles scope
+        seed_roles_scope()
+        
         print("\nYou can now restart the application.")
     else:
         print("\n[ERROR] Some migrations failed. Please check the errors above.")
