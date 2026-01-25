@@ -151,7 +151,7 @@
                     <span aria-hidden="true">&times;</span>
                 </button>
             </div>
-            <form method="POST" action="#">
+            <form method="POST" action="{{ url_for('admin.create_client', realm_name=realm.name) }}">
                 <div class="modal-body">
                     <div class="form-group">
                         <label>Client ID <span class="text-danger">*</span></label>

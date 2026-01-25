@@ -1,5 +1,66 @@
 # Change Log
 
+## [2.2.0] 2026-01-25 - OpenID Connect Implementation & Admin UI Fixes
+
+### New Features
+
+- **OpenID Connect Protocol**: Full OIDC 1.0 implementation compatible with Keycloak
+  - **Discovery Endpoint**: `/.well-known/openid-configuration` returns provider metadata
+  - **Authorization Endpoint**: `/protocol/openid-connect/auth` with login UI
+  - **Token Endpoint**: `/protocol/openid-connect/token` supporting multiple grant types
+  - **UserInfo Endpoint**: `/protocol/openid-connect/userinfo` returns user claims
+  - **Logout Endpoint**: `/protocol/openid-connect/logout` with redirect support
+  - **JWKS Endpoint**: `/protocol/openid-connect/certs` for token verification
+  - **Introspection Endpoint**: `/protocol/openid-connect/token/introspect` (RFC 7662)
+  - **Revocation Endpoint**: `/protocol/openid-connect/revoke` (RFC 7009)
+
+- **Supported OAuth 2.0 Grant Types**:
+  - Authorization Code (with optional PKCE support)
+  - Password Grant (Direct Access)
+  - Client Credentials Grant
+  - Refresh Token Grant
+
+- **OIDC Login Page**: Modern responsive login form at `/auth/realms/{realm}/protocol/openid-connect/auth`
+
+### Bug Fixes
+
+- **Admin UI Create Operations**: Fixed 405 Method Not Allowed errors
+  - Added POST handler for Create Client (`/<realm_name>/clients/create`)
+  - Added POST handler for Create Role (`/<realm_name>/roles`)
+  - Added POST handler for Create Group (`/<realm_name>/groups`)
+  - Added POST handler for Realm Settings save (`/<realm_name>/settings`)
+  - Fixed form action URLs in all modal forms
+
+- **Sidebar Icon**: Fixed missing icon for "Realm Roles" menu (changed from `icon-key` to `icon-award`)
+
+### New Files
+
+- `apps/blueprints/oidc/__init__.py` - OIDC Blueprint registration
+- `apps/blueprints/oidc/routes.py` - Complete OIDC protocol implementation (800+ lines)
+- `apps/templates/oidc/login.html` - OIDC authorization login page
+
+### Updated Files
+
+- `apps/__init__.py` - Register OIDC blueprint
+- `apps/blueprints/admin/routes.py` - Added POST handlers for admin operations
+- `apps/templates/admin/clients/list.html` - Fixed form action URL
+- `apps/templates/admin/roles/list.html` - Fixed form action URL, updated icons
+- `apps/templates/admin/groups/list.html` - Fixed form action URL
+- `apps/templates/admin/realms/settings.html` - Fixed form action URL
+- `apps/templates/includes/admin_sidebar.html` - Fixed Realm Roles icon
+
+### Documentation
+
+- **Postman Collection**: Comprehensive OIDC testing collection with all grant types
+  - Authorization Code Flow (with and without PKCE)
+  - Password Grant Flow
+  - Client Credentials Flow
+  - Refresh Token Flow
+  - Token operations (UserInfo, Introspect, Revoke)
+- **Environment Variables**: Updated Postman environment with OIDC variables
+
+---
+
 ## [2.1.2] 2026-01-25 - Security Fix: Login Authentication Bug
 ### Bug Fixes
 

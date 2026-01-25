@@ -39,12 +39,9 @@ def register_blueprints(app):
         from flask import redirect, url_for
         return redirect(url_for('admin.index'))
     
-    # RijanAuth OIDC Blueprint (will be added in Phase 3)
-    # try:
-    #     from apps.blueprints.oidc import oidc_bp
-    #     app.register_blueprint(oidc_bp, url_prefix='/auth/realms')
-    # except ImportError:
-    #     pass
+    # 3. OIDC Blueprint (OpenID Connect Protocol)
+    from apps.blueprints.oidc import oidc_bp
+    app.register_blueprint(oidc_bp)
 
 
 def configure_database(app):

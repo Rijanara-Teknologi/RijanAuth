@@ -102,7 +102,7 @@
                 <h5 class="modal-title">Create Group</h5>
                 <button type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
-            <form method="POST">
+            <form method="POST" action="{{ url_for('admin.groups_list', realm_name=realm.name) }}">
                 <div class="modal-body">
                     <div class="form-group">
                         <label>Group Name <span class="text-danger">*</span></label>

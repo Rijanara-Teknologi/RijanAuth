@@ -76,13 +76,68 @@ def dashboard(realm_name):
 # Realm Management
 # =============================================================================
 
-@admin_bp.route('/<realm_name>/settings')
+@admin_bp.route('/<realm_name>/settings', methods=['GET', 'POST'])
 @login_required
 def realm_settings(realm_name):
     """Realm settings page"""
     realm = get_realm_or_404(realm_name)
     if not realm:
         return redirect(url_for('admin.index'))
+    
+    if request.method == 'POST':
+        # General settings
+        realm.display_name = request.form.get('display_name', '').strip() or None
+        realm.enabled = request.form.get('enabled') == 'on'
+        
+        # Login settings
+        realm.registration_allowed = request.form.get('registration_allowed') == 'on'
+        realm.verify_email = request.form.get('verify_email') == 'on'
+        realm.login_with_email_allowed = request.form.get('login_with_email_allowed') == 'on'
+        realm.remember_me = request.form.get('remember_me') == 'on'
+        realm.reset_password_allowed = request.form.get('reset_password_allowed') == 'on'
+        
+        # Email/SMTP settings
+        realm.smtp_server = request.form.get('smtp_host', '').strip() or None
+        realm.smtp_port = request.form.get('smtp_port', '').strip() or None
+        realm.smtp_from = request.form.get('smtp_from', '').strip() or None
+        
+        # Token settings
+        try:
+            realm.access_token_lifespan = int(request.form.get('access_token_lifespan', 300))
+        except (ValueError, TypeError):
+            realm.access_token_lifespan = 300
+            
+        try:
+            realm.sso_session_idle_timeout = int(request.form.get('sso_idle_timeout', 1800))
+        except (ValueError, TypeError):
+            realm.sso_session_idle_timeout = 1800
+            
+        try:
+            realm.sso_session_max_lifespan = int(request.form.get('sso_max', 36000))
+        except (ValueError, TypeError):
+            realm.sso_session_max_lifespan = 36000
+            
+        try:
+            realm.offline_session_idle_timeout = int(request.form.get('offline_idle', 2592000))
+        except (ValueError, TypeError):
+            realm.offline_session_idle_timeout = 2592000
+        
+        # Security settings
+        realm.brute_force_protected = request.form.get('brute_force_protected') == 'on'
+        try:
+            realm.max_login_failures = int(request.form.get('max_login_failures', 30))
+        except (ValueError, TypeError):
+            realm.max_login_failures = 30
+            
+        try:
+            realm.wait_increment_seconds = int(request.form.get('wait_increment', 60))
+        except (ValueError, TypeError):
+            realm.wait_increment_seconds = 60
+        
+        # Save changes
+        realm.save()
+        flash('Realm settings saved successfully', 'success')
+        return redirect(url_for('admin.realm_settings', realm_name=realm_name))
     
     realms = Realm.query.all()
     return render_template(
@@ -256,6 +311,40 @@ def clients_list(realm_name):
     )
 
 
+@admin_bp.route('/<realm_name>/clients/create', methods=['GET', 'POST'])
+@login_required
+def create_client(realm_name):
+    """Create new client"""
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+    
+    if request.method == 'POST':
+        client_id = request.form.get('client_id', '').strip()
+        name = request.form.get('name', '').strip()
+        client_type = request.form.get('client_type', 'confidential')
+        
+        if not client_id:
+            flash('Client ID is required', 'error')
+        elif Client.find_by_client_id(realm.id, client_id):
+            flash(f'Client ID "{client_id}" already exists', 'error')
+        else:
+            # Create client
+            public_client = (client_type == 'public')
+            client = ClientService.create_client(
+                realm_id=realm.id,
+                client_id=client_id,
+                name=name or client_id,
+                public_client=public_client,
+                enabled=True
+            )
+            flash(f'Client "{client_id}" created successfully', 'success')
+            return redirect(url_for('admin.client_detail', realm_name=realm_name, client_id=client.id))
+    
+    # If GET or validation failed, redirect back to clients list
+    return redirect(url_for('admin.clients_list', realm_name=realm_name))
+
+
 @admin_bp.route('/<realm_name>/clients/<client_id>')
 @login_required
 def client_detail(realm_name, client_id):
@@ -283,13 +372,36 @@ def client_detail(realm_name, client_id):
 # Roles Management
 # =============================================================================
 
-@admin_bp.route('/<realm_name>/roles')
+@admin_bp.route('/<realm_name>/roles', methods=['GET', 'POST'])
 @login_required
 def roles_list(realm_name):
     """List roles in a realm"""
     realm = get_realm_or_404(realm_name)
     if not realm:
         return redirect(url_for('admin.index'))
+    
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
+        
+        if not name:
+            flash('Role name is required', 'error')
+        elif Role.find_realm_role(realm.id, name):
+            flash(f'Role "{name}" already exists', 'error')
+        else:
+            # Create realm role
+            role = Role(
+                realm_id=realm.id,
+                name=name,
+                description=description or None,
+                client_id=None,
+                client_role=False,
+                composite=False
+            )
+            role.save()
+            flash(f'Role "{name}" created successfully', 'success')
+        
+        return redirect(url_for('admin.roles_list', realm_name=realm_name))
     
     roles = Role.get_realm_roles(realm.id)
     
@@ -307,13 +419,37 @@ def roles_list(realm_name):
 # Groups Management
 # =============================================================================
 
-@admin_bp.route('/<realm_name>/groups')
+@admin_bp.route('/<realm_name>/groups', methods=['GET', 'POST'])
 @login_required
 def groups_list(realm_name):
     """List groups in a realm"""
     realm = get_realm_or_404(realm_name)
     if not realm:
         return redirect(url_for('admin.index'))
+    
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        
+        if not name:
+            flash('Group name is required', 'error')
+        else:
+            # Create path for top-level group
+            path = f'/{name}'
+            
+            if Group.find_by_path(realm.id, path):
+                flash(f'Group "{name}" already exists', 'error')
+            else:
+                # Create top-level group
+                group = Group(
+                    realm_id=realm.id,
+                    name=name,
+                    path=path,
+                    parent_id=None
+                )
+                group.save()
+                flash(f'Group "{name}" created successfully', 'success')
+        
+        return redirect(url_for('admin.groups_list', realm_name=realm_name))
     
     groups = Group.get_top_level_groups(realm.id)
     

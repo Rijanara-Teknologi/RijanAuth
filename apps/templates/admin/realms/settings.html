@@ -53,7 +53,7 @@
                                         </ul>
                                     </div>
                                     <div class="card-body">
-                                        <form method="POST">
+                                        <form method="POST" action="{{ url_for('admin.realm_settings', realm_name=realm.name) }}">
                                             <div class="tab-content">
                                                 <!-- General Tab -->
                                                 <div class="tab-pane fade show active" id="general">

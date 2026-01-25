@@ -1,12 +1,12 @@
 {
   "info": {
     "name": "RijanAuth API Collection",
-    "description": "Comprehensive API documentation for RijanAuth Identity Server",
+    "description": "Comprehensive API documentation for RijanAuth Identity Server - OpenID Connect / OAuth 2.0",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
-      "name": "0. Setup & Authentication",
+      "name": "0. Setup & Health",
       "item": [
         {
           "name": "System Health",
@@ -15,89 +15,447 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/health",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "health"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Admin Login (Session)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "// Cookie is automatically saved by Postman"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "username",
-                  "value": "{{admin_username}}",
-                  "type": "text"
-                },
-                {
-                  "key": "password",
-                  "value": "{{admin_password}}",
-                  "type": "text"
-                }
-              ]
+              "host": ["{{base_url}}"],
+              "path": ["api", "health"]
             },
-            "url": {
-              "raw": "{{base_url}}/auth/login",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "auth",
-                "login"
-              ]
-            }
+            "description": "Check system health status"
           }
         },
         {
-          "name": "Admin Logout",
+          "name": "OpenID Configuration (Discovery)",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/auth/logout",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "auth",
-                "logout"
-              ]
-            }
+              "raw": "{{base_url}}/auth/realms/{{realm}}/.well-known/openid-configuration",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "realms", "{{realm}}", ".well-known", "openid-configuration"]
+            },
+            "description": "OIDC Discovery endpoint - returns all available endpoints and supported features"
           }
         }
       ]
     },
     {
-      "name": "1. Realm Management",
+      "name": "1. OAuth 2.0 / OIDC Flows",
+      "item": [
+        {
+          "name": "1.1 Authorization Code Flow",
+          "item": [
+            {
+              "name": "Step 1: Get Authorization Code (Browser)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/auth/realms/{{realm}}/protocol/openid-connect/auth?client_id={{client_id}}&redirect_uri={{redirect_uri}}&response_type=code&scope=openid profile email&state={{$randomUUID}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["auth", "realms", "{{realm}}", "protocol", "openid-connect", "auth"],
+                  "query": [
+                    {"key": "client_id", "value": "{{client_id}}"},
+                    {"key": "redirect_uri", "value": "{{redirect_uri}}"},
+                    {"key": "response_type", "value": "code"},
+                    {"key": "scope", "value": "openid profile email"},
+                    {"key": "state", "value": "{{$randomUUID}}"}
+                  ]
+                },
+                "description": "Opens login page. After login, user is redirected to redirect_uri with authorization code"
+              }
+            },
+            {
+              "name": "Step 2: Exchange Code for Tokens",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();",
+                      "if (jsonData.access_token) {",
+                      "    pm.environment.set('access_token', jsonData.access_token);",
+                      "}",
+                      "if (jsonData.refresh_token) {",
+                      "    pm.environment.set('refresh_token', jsonData.refresh_token);",
+                      "}",
+                      "if (jsonData.id_token) {",
+                      "    pm.environment.set('id_token', jsonData.id_token);",
+                      "}",
+                      "",
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Response contains access_token', function () {",
+                      "    pm.expect(jsonData).to.have.property('access_token');",
+                      "});",
+                      "",
+                      "pm.test('Response contains refresh_token', function () {",
+                      "    pm.expect(jsonData).to.have.property('refresh_token');",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {"key": "Content-Type", "value": "application/x-www-form-urlencoded"}
+                ],
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {"key": "grant_type", "value": "authorization_code"},
+                    {"key": "client_id", "value": "{{client_id}}"},
+                    {"key": "client_secret", "value": "{{client_secret}}"},
+                    {"key": "code", "value": "{{authorization_code}}"},
+                    {"key": "redirect_uri", "value": "{{redirect_uri}}"}
+                  ]
+                },
+                "url": {
+                  "raw": "{{base_url}}/auth/realms/{{realm}}/protocol/openid-connect/token",
+                  "host": ["{{base_url}}"],
+                  "path": ["auth", "realms", "{{realm}}", "protocol", "openid-connect", "token"]
+                },
+                "description": "Exchange authorization code for access token, refresh token, and ID token"
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.2 Authorization Code Flow with PKCE",
+          "item": [
+            {
+              "name": "Step 1: Get Authorization Code with PKCE",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "// Generate code_verifier (43-128 characters)",
+                      "var code_verifier = CryptoJS.lib.WordArray.random(32).toString(CryptoJS.enc.Base64url);",
+                      "pm.environment.set('code_verifier', code_verifier);",
+                      "",
+                      "// Generate code_challenge (S256)",
+                      "var code_challenge = CryptoJS.SHA256(code_verifier).toString(CryptoJS.enc.Base64url);",
+                      "pm.environment.set('code_challenge', code_challenge);"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/auth/realms/{{realm}}/protocol/openid-connect/auth?client_id={{client_id}}&redirect_uri={{redirect_uri}}&response_type=code&scope=openid profile email&state={{$randomUUID}}&code_challenge={{code_challenge}}&code_challenge_method=S256",
+                  "host": ["{{base_url}}"],
+                  "path": ["auth", "realms", "{{realm}}", "protocol", "openid-connect", "auth"],
+                  "query": [
+                    {"key": "client_id", "value": "{{client_id}}"},
+                    {"key": "redirect_uri", "value": "{{redirect_uri}}"},
+                    {"key": "response_type", "value": "code"},
+                    {"key": "scope", "value": "openid profile email"},
+                    {"key": "state", "value": "{{$randomUUID}}"},
+                    {"key": "code_challenge", "value": "{{code_challenge}}"},
+                    {"key": "code_challenge_method", "value": "S256"}
+                  ]
+                },
+                "description": "Authorization request with PKCE for public clients (SPAs, mobile apps)"
+              }
+            },
+            {
+              "name": "Step 2: Exchange Code with code_verifier",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();",
+                      "if (jsonData.access_token) {",
+                      "    pm.environment.set('access_token', jsonData.access_token);",
+                      "}",
+                      "if (jsonData.refresh_token) {",
+                      "    pm.environment.set('refresh_token', jsonData.refresh_token);",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {"key": "Content-Type", "value": "application/x-www-form-urlencoded"}
+                ],
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {"key": "grant_type", "value": "authorization_code"},
+                    {"key": "client_id", "value": "{{client_id}}"},
+                    {"key": "code", "value": "{{authorization_code}}"},
+                    {"key": "redirect_uri", "value": "{{redirect_uri}}"},
+                    {"key": "code_verifier", "value": "{{code_verifier}}"}
+                  ]
+                },
+                "url": {
+                  "raw": "{{base_url}}/auth/realms/{{realm}}/protocol/openid-connect/token",
+                  "host": ["{{base_url}}"],
+                  "path": ["auth", "realms", "{{realm}}", "protocol", "openid-connect", "token"]
+                },
+                "description": "Exchange code using code_verifier for PKCE flow"
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.3 Password Grant (Direct Access)",
+          "item": [
+            {
+              "name": "Get Token with Password",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();",
+                      "if (jsonData.access_token) {",
+                      "    pm.environment.set('access_token', jsonData.access_token);",
+                      "}",
+                      "if (jsonData.refresh_token) {",
+                      "    pm.environment.set('refresh_token', jsonData.refresh_token);",
+                      "}",
+                      "",
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Response contains tokens', function () {",
+                      "    pm.expect(jsonData).to.have.property('access_token');",
+                      "    pm.expect(jsonData).to.have.property('refresh_token');",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {"key": "Content-Type", "value": "application/x-www-form-urlencoded"}
+                ],
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {"key": "grant_type", "value": "password"},
+                    {"key": "client_id", "value": "{{client_id}}"},
+                    {"key": "client_secret", "value": "{{client_secret}}"},
+                    {"key": "username", "value": "{{username}}"},
+                    {"key": "password", "value": "{{password}}"},
+                    {"key": "scope", "value": "openid profile email"}
+                  ]
+                },
+                "url": {
+                  "raw": "{{base_url}}/auth/realms/{{realm}}/protocol/openid-connect/token",
+                  "host": ["{{base_url}}"],
+                  "path": ["auth", "realms", "{{realm}}", "protocol", "openid-connect", "token"]
+                },
+                "description": "Direct authentication with username/password - useful for testing and trusted applications"
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.4 Client Credentials Grant",
+          "item": [
+            {
+              "name": "Get Token with Client Credentials",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();",
+                      "if (jsonData.access_token) {",
+                      "    pm.environment.set('service_token', jsonData.access_token);",
+                      "}",
+                      "",
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {"key": "Content-Type", "value": "application/x-www-form-urlencoded"}
+                ],
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {"key": "grant_type", "value": "client_credentials"},
+                    {"key": "client_id", "value": "{{service_client_id}}"},
+                    {"key": "client_secret", "value": "{{service_client_secret}}"},
+                    {"key": "scope", "value": "openid"}
+                  ]
+                },
+                "url": {
+                  "raw": "{{base_url}}/auth/realms/{{realm}}/protocol/openid-connect/token",
+                  "host": ["{{base_url}}"],
+                  "path": ["auth", "realms", "{{realm}}", "protocol", "openid-connect", "token"]
+                },
+                "description": "Machine-to-machine authentication for service accounts"
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.5 Refresh Token",
+          "item": [
+            {
+              "name": "Refresh Access Token",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();",
+                      "if (jsonData.access_token) {",
+                      "    pm.environment.set('access_token', jsonData.access_token);",
+                      "}",
+                      "if (jsonData.refresh_token) {",
+                      "    pm.environment.set('refresh_token', jsonData.refresh_token);",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {"key": "Content-Type", "value": "application/x-www-form-urlencoded"}
+                ],
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {"key": "grant_type", "value": "refresh_token"},
+                    {"key": "client_id", "value": "{{client_id}}"},
+                    {"key": "client_secret", "value": "{{client_secret}}"},
+                    {"key": "refresh_token", "value": "{{refresh_token}}"}
+                  ]
+                },
+                "url": {
+                  "raw": "{{base_url}}/auth/realms/{{realm}}/protocol/openid-connect/token",
+                  "host": ["{{base_url}}"],
+                  "path": ["auth", "realms", "{{realm}}", "protocol", "openid-connect", "token"]
+                },
+                "description": "Get new access token using refresh token"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Token Operations",
+      "item": [
+        {
+          "name": "UserInfo",
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"}
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/realms/{{realm}}/protocol/openid-connect/userinfo",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "realms", "{{realm}}", "protocol", "openid-connect", "userinfo"]
+            },
+            "description": "Get user information using access token"
+          }
+        },
+        {
+          "name": "Token Introspection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/x-www-form-urlencoded"}
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {"key": "token", "value": "{{access_token}}"},
+                {"key": "client_id", "value": "{{client_id}}"},
+                {"key": "client_secret", "value": "{{client_secret}}"}
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/realms/{{realm}}/protocol/openid-connect/token/introspect",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "realms", "{{realm}}", "protocol", "openid-connect", "token", "introspect"]
+            },
+            "description": "Validate token and get token metadata"
+          }
+        },
+        {
+          "name": "Revoke Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/x-www-form-urlencoded"}
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {"key": "token", "value": "{{refresh_token}}"},
+                {"key": "client_id", "value": "{{client_id}}"},
+                {"key": "client_secret", "value": "{{client_secret}}"}
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/realms/{{realm}}/protocol/openid-connect/revoke",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "realms", "{{realm}}", "protocol", "openid-connect", "revoke"]
+            },
+            "description": "Revoke a refresh token"
+          }
+        },
+        {
+          "name": "JWKS (Public Keys)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/realms/{{realm}}/protocol/openid-connect/certs",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "realms", "{{realm}}", "protocol", "openid-connect", "certs"]
+            },
+            "description": "Get public keys for token verification"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/realms/{{realm}}/protocol/openid-connect/logout?post_logout_redirect_uri={{redirect_uri}}",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "realms", "{{realm}}", "protocol", "openid-connect", "logout"],
+              "query": [
+                {"key": "post_logout_redirect_uri", "value": "{{redirect_uri}}"}
+              ]
+            },
+            "description": "End user session"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Admin API - Realms",
       "item": [
         {
           "name": "List Realms",
@@ -106,13 +464,8 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/realms",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "realms"
-              ]
+              "host": ["{{base_url}}"],
+              "path": ["api", "realms"]
             }
           }
         },
@@ -122,22 +475,16 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/api/realms/{{master_realm}}",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "realms",
-                "{{master_realm}}"
-              ]
+              "raw": "{{base_url}}/api/realms/{{realm}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "realms", "{{realm}}"]
             }
           }
         }
       ]
     },
     {
-      "name": "2. User Management",
+      "name": "4. Admin API - Users",
       "item": [
         {
           "name": "List Users",
@@ -145,15 +492,21 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/api/{{master_realm}}/users",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "{{master_realm}}",
-                "users"
-              ]
+              "raw": "{{base_url}}/api/{{realm}}/users",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{realm}}", "users"]
+            }
+          }
+        },
+        {
+          "name": "Get User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{realm}}/users/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{realm}}", "users", "{{user_id}}"]
             }
           }
         },
@@ -162,61 +515,71 @@
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
+              {"key": "Content-Type", "value": "application/json"}
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"{{test_user}}\",\n  \"email\": \"test@example.com\",\n  \"firstName\": \"Test\",\n  \"lastName\": \"User\",\n  \"enabled\": true,\n  \"credentials\": [\n    {\n      \"type\": \"password\",\n      \"value\": \"{{test_user_password}}\"\n    }\n  ]\n}"
+              "raw": "{\n  \"username\": \"newuser\",\n  \"email\": \"newuser@example.com\",\n  \"firstName\": \"New\",\n  \"lastName\": \"User\",\n  \"enabled\": true,\n  \"credentials\": [\n    {\n      \"type\": \"password\",\n      \"value\": \"password123\"\n    }\n  ]\n}"
             },
             "url": {
-              "raw": "{{base_url}}/api/{{master_realm}}/users",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "{{master_realm}}",
-                "users"
-              ]
+              "raw": "{{base_url}}/api/{{realm}}/users",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{realm}}", "users"]
             }
           }
         },
         {
-          "name": "Create Service Account",
+          "name": "Update User",
           "request": {
-            "method": "POST",
+            "method": "PUT",
             "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
+              {"key": "Content-Type", "value": "application/json"}
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"service-account\",\n  \"enabled\": true\n}"
+              "raw": "{\n  \"firstName\": \"Updated\",\n  \"lastName\": \"Name\",\n  \"email\": \"updated@example.com\"\n}"
             },
             "url": {
-              "raw": "{{base_url}}/api/{{master_realm}}/users",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "{{master_realm}}",
-                "users"
-              ]
+              "raw": "{{base_url}}/api/{{realm}}/users/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{realm}}", "users", "{{user_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{realm}}/users/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{realm}}", "users", "{{user_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"password\",\n  \"value\": \"newpassword123\",\n  \"temporary\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{realm}}/users/{{user_id}}/reset-password",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{realm}}", "users", "{{user_id}}", "reset-password"]
             }
           }
         }
       ]
     },
     {
-      "name": "3. Client Management",
+      "name": "5. Admin API - Clients",
       "item": [
         {
           "name": "List Clients",
@@ -224,45 +587,45 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/api/{{master_realm}}/clients",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "{{master_realm}}",
-                "clients"
-              ]
+              "raw": "{{base_url}}/api/{{realm}}/clients",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{realm}}", "clients"]
             }
           }
-        }
-      ]
-    },
-    {
-      "name": "4. Role Management",
-      "item": [
+        },
         {
-          "name": "List Roles",
+          "name": "Get Client",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/api/{{master_realm}}/roles",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "{{master_realm}}",
-                "roles"
-              ]
+              "raw": "{{base_url}}/api/{{realm}}/clients/{{client_db_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{realm}}", "clients", "{{client_db_id}}"]
             }
           }
         }
       ]
     },
     {
-      "name": "5. Group Management",
+      "name": "6. Admin API - Roles",
+      "item": [
+        {
+          "name": "List Realm Roles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{realm}}/roles",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{realm}}", "roles"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Admin API - Groups",
       "item": [
         {
           "name": "List Groups",
@@ -270,15 +633,9 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/api/{{master_realm}}/groups",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "{{master_realm}}",
-                "groups"
-              ]
+              "raw": "{{base_url}}/api/{{realm}}/groups",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{realm}}", "groups"]
             }
           }
         }
