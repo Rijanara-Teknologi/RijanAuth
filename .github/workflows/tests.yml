@@ -48,11 +48,8 @@ jobs:
       - name: Run authentication tests
         env:
           PYTHONPATH: ${{ github.workspace }}
-        run: pytest tests/auth/ \
-             --cov=apps.blueprints.auth \
-             --cov=apps.models.user \
-             --cov-report=xml \
-             --junitxml=auth-tests.xml
+        run: |
+          pytest tests/auth/ --cov=apps.blueprints.auth --cov=apps.models.user --cov-report=xml --junitxml=auth-tests.xml
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
@@ -74,11 +71,8 @@ jobs:
       - name: Run OIDC tests
         env:
           PYTHONPATH: ${{ github.workspace }}
-        run: pytest tests/oidc/ \
-             --cov=apps.blueprints.oidc \
-             --cov=apps.services.mapper_service \
-             --cov-report=xml \
-             -k "not ldap and not mysql and not postgresql"
+        run: |
+          pytest tests/oidc/ --cov=apps.blueprints.oidc --cov=apps.services --cov-report=xml -k "not ldap and not mysql and not postgresql"
       - name: Validate JWT structure
         run: python scripts/validate_jwt_claims.py || true
 
@@ -127,10 +121,8 @@ jobs:
       - name: Run federation tests
         env:
           PYTHONPATH: ${{ github.workspace }}
-        run: pytest tests/federation/ \
-             --cov=apps.services.federation \
-             --cov-report=xml \
-             --junitxml=federation-tests.xml
+        run: |
+          pytest tests/federation/ --cov=apps.services --cov-report=xml --junitxml=federation-tests.xml
 
   customization-tests:
     needs: preflight
@@ -146,10 +138,8 @@ jobs:
       - name: Run customization tests
         env:
           PYTHONPATH: ${{ github.workspace }}
-        run: pytest tests/customization/ \
-             --cov=apps.models \
-             --cov=apps.utils \
-             --cov-report=xml
+        run: |
+          pytest tests/customization/ --cov=apps.utils --cov-report=xml
 
   logging-tests:
     needs: preflight
@@ -165,9 +155,8 @@ jobs:
       - name: Run logging tests
         env:
           PYTHONPATH: ${{ github.workspace }}
-        run: pytest tests/logging/ \
-             --cov=apps \
-             --cov-report=xml
+        run: |
+          pytest tests/logging/ --cov=apps --cov-report=xml
 
   # Final integration test suite
   integration-tests:
@@ -184,11 +173,8 @@ jobs:
       - name: Run full integration tests
         env:
           PYTHONPATH: ${{ github.workspace }}
-        run: pytest tests/integration/ \
-             --cov=apps \
-             --cov-report=html \
-             --cov-report=xml \
-             --junitxml=integration-tests.xml
+        run: |
+          pytest tests/integration/ --cov=apps --cov-report=html --cov-report=xml --junitxml=integration-tests.xml
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
