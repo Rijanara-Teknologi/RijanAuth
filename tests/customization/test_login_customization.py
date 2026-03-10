@@ -162,3 +162,31 @@ class TestRendererOutput:
         }
         style = get_customization_background_style(custom_dict)
         assert expected_fragment in style
+
+
+class TestUIRendering:
+    """Tests that the customization settings are actually rendered into the HTML."""
+
+    def test_login_page_renders_custom_css(self, client, app):
+        """Verify that the login page HTML includes the customized CSS variables."""
+        # Create customization for master realm since /auth/login hardcodes master realm
+        from apps.models.realm import Realm
+        with app.app_context():
+            master_realm = Realm.find_by_name('master')
+            c = RealmPageCustomization.get_or_create(master_realm.id, 'login')
+            c.primary_color = '#673AB7'
+            c.secondary_color = '#3F51B5'
+            c.button_radius = 4
+            c.background_type = 'color'
+            c.background_color = '#0066cc'
+            db.session.commit()
+
+        login_response = client.get('/auth/login', follow_redirects=True)
+        
+        html = login_response.data.decode('utf-8')
+        
+        # The CSS variables should be in a style block
+        assert '--primary-color: #673AB7' in html
+        assert '--secondary-color: #3F51B5' in html
+        assert '--button-radius: 4px' in html
+        assert 'background-color: #0066cc' in html
