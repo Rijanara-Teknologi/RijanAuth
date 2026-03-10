@@ -248,6 +248,12 @@ def _seed_realm_client_scopes(realm: Realm):
             'mappers': []
         },
         {
+            'name': 'web-origins',
+            'description': 'Web origins for CORS',
+            'protocol': 'openid-connect',
+            'mappers': []
+        },
+        {
             'name': 'microprofile-jwt',
             'description': 'Microprofile JWT scope',
             'protocol': 'openid-connect',

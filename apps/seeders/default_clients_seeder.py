@@ -35,11 +35,8 @@ def seed_default_clients(realm):
     # 4. Broker client for identity brokering
     broker = create_broker_client(realm)
     
-    # 5. Internal RijanAuth service client
+    # Internal RijanAuth service client
     internal = create_internal_service_client(realm)
-    
-    # Create default client scopes
-    create_default_client_scopes(realm)
     
     db.session.commit()
     
@@ -225,68 +222,3 @@ def create_internal_service_client(realm):
     db.session.add(client)
     db.session.flush()
     return client
-
-
-def create_default_client_scopes(realm):
-    """Create default client scopes matching Keycloak defaults"""
-    default_scopes = [
-        {
-            'name': 'openid',
-            'description': 'OpenID Connect scope',
-            'protocol': 'openid-connect',
-            'default': True,
-        },
-        {
-            'name': 'profile',
-            'description': 'User profile including name, picture, etc.',
-            'protocol': 'openid-connect',
-            'default': True,
-        },
-        {
-            'name': 'email',
-            'description': 'User email address',
-            'protocol': 'openid-connect',
-            'default': True,
-        },
-        {
-            'name': 'address',
-            'description': 'User address',
-            'protocol': 'openid-connect',
-            'default': False,
-        },
-        {
-            'name': 'phone',
-            'description': 'User phone number',
-            'protocol': 'openid-connect',
-            'default': False,
-        },
-        {
-            'name': 'offline_access',
-            'description': 'Request offline access',
-            'protocol': 'openid-connect',
-            'default': False,
-        },
-        {
-            'name': 'roles',
-            'description': 'User realm and client roles',
-            'protocol': 'openid-connect',
-            'default': True,
-        },
-        {
-            'name': 'web-origins',
-            'description': 'Web origins for CORS',
-            'protocol': 'openid-connect',
-            'default': True,
-        },
-    ]
-    
-    for scope_data in default_scopes:
-        scope = ClientScope(
-            realm_id=realm.id,
-            name=scope_data['name'],
-            description=scope_data['description'],
-            protocol=scope_data['protocol'],
-        )
-        db.session.add(scope)
-    
-    print(f'[SEEDER]   - Created {len(default_scopes)} client scopes')
