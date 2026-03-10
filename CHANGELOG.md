@@ -1,5 +1,30 @@
 # Change Log
 
+## [2.7.1] 2026-03-10 - Test Suite Fixes & Model Enhancement
+
+### Bug Fixes
+
+- **Authentication Test Fixes**:
+  - Fixed `test_session_persistence_after_login` to correctly assert `302` redirect to `/admin/master/dashboard` and restored missing `admin_response` variable.
+  - Fixed `test_login_invalid_credentials` cookie assertion to check for both `session=` and `remember_token=`.
+  - Updated all test functions to use the `admin_user` fixture with deterministic password (`testadmin123!`).
+
+- **Test Collection Errors**:
+  - Fixed `ImportError` across `test_multi_realm.py`, `test_authentication_bypass.py`, and `test_protocol_mappers.py` by correcting `db` import from `apps` instead of `apps.models`.
+  - Fixed `AttributeError` in `test_protocol_mappers.py` by using `Client.secret` instead of `Client.client_secret`.
+  - Added missing `__init__.py` files to all test subdirectories (`integration/`, `security/`, `oidc/`, `federation/`, `customization/`, `logging/`).
+
+- **Integration Test Session Management**:
+  - Fixed `DetachedInstanceError` in `test_cross_realm_isolation` by extracting realm names into local variables before making HTTP client requests.
+  - Used `Credential.create_password()` directly instead of `set_password()` in integration tests to avoid lazy-load issues.
+
+### Enhancements
+
+- **User Model**:
+  - Added `set_password()` convenience method to the `User` model for programmatic password hashing and credential management.
+
+---
+
 ## [2.7.0] 2026-03-10 - Comprehensive Testing Strategy
 
 ### New Features

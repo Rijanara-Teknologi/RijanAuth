@@ -1,6 +1,7 @@
 import pytest
 import jwt
-from apps.models import ProtocolMapper, db
+from apps import db
+from apps.models.client import ProtocolMapper
 
 def test_custom_claim_in_token(client, test_realm, test_client, test_user):
     """Verify custom claims appear in JWT access token"""
@@ -23,7 +24,7 @@ def test_custom_claim_in_token(client, test_realm, test_client, test_user):
     # Get token
     token_response = client.post(f'/auth/realms/{test_realm.name}/protocol/openid-connect/token', data={
         'client_id': test_client.client_id,
-        'client_secret': test_client.client_secret if test_client.client_secret else 'test-secret',
+        'client_secret': test_client.secret if test_client.secret else 'test-secret',
         'username': test_user.username,
         'password': 'testpassword123!',
         'grant_type': 'password'

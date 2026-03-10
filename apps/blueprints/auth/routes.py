@@ -81,22 +81,6 @@ def login():
                     authenticated = password_valid
             
             # If local auth failed, try federation providers
-            if not authenticated:
-                try:
-                    from apps.services.federation import FederationService
-                    fed_user = FederationService.authenticate_federated(
-                        master_realm.id, username, password
-                    )
-                    if fed_user:
-                        user = fed_user
-                        authenticated = True
-                        current_app.logger.info("FEDERATED AUTH SUCCESS (new user)", extra={
-                            'user_id': user.id,
-                            'username': user.username
-                        })
-                except Exception as e:
-                    current_app.logger.error(f"Federation auth error: {str(e)}")
-        
         if authenticated and user:
             if not user.enabled:
                 current_app.logger.warning("USER DISABLED", extra={'user_id': user.id})

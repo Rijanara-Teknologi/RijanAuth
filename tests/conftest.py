@@ -1,7 +1,8 @@
 import pytest
-from apps import create_app
-from apps.models import db, User, Realm, Client
+from apps import create_app, db
+from apps.models import User, Realm, Client, Credential
 from apps.seeders import run_initial_seed
+from apps.utils.crypto import hash_password
 import os
 import tempfile
 
@@ -27,9 +28,32 @@ def app():
         db.create_all()
         run_initial_seed()  # Initialize with master realm and admin user
         
+        # Override the random admin password with a known test password
+        master_realm = Realm.query.filter_by(name='master').first()
+        admin = User.query.filter_by(username='admin', realm_id=master_realm.id).first()
+        if admin:
+            # Delete old credentials
+            for cred in admin.credentials:
+                db.session.delete(cred)
+            db.session.flush()
+            
+            # Add known credential
+            pwd_hash = hash_password('testadmin123!')
+            new_cred = Credential.create_password(admin.id, pwd_hash)
+            db.session.add(new_cred)
+            db.session.commit()
+            
         yield app
     
-    os.unlink(db_path)
+    # Clean up database connections to avoid file lock errors on Windows
+    with app.app_context():
+        db.session.remove()
+        db.engine.dispose()
+        
+    try:
+        os.unlink(db_path)
+    except PermissionError:
+        pass # Handle Windows file locking during teardown
 
 @pytest.fixture
 def client(app):
@@ -54,7 +78,15 @@ def test_realm(app):
             )
             db.session.add(realm)
             db.session.commit()
-    return realm
+        yield realm
+
+@pytest.fixture
+def admin_user(app):
+    """Get the admin user from the master realm."""
+    with app.app_context():
+        master = Realm.query.filter_by(name='master').first()
+        admin = User.query.filter_by(username='admin', realm_id=master.id).first()
+        yield admin
 
 @pytest.fixture
 def test_user(app, test_realm):
@@ -70,11 +102,15 @@ def test_user(app, test_realm):
                 enabled=True,
                 email_verified=True
             )
-            user.set_password('testpassword123!')
             db.session.add(user)
+            db.session.flush() # flush to get user.id
+            
+            pwd_hash = hash_password('testpassword123!')
+            cred = Credential.create_password(user.id, pwd_hash)
+            db.session.add(cred)
             db.session.commit()
-            return user
-        return user
+            
+        yield user
 
 @pytest.fixture
 def test_client(app, test_realm):
@@ -94,5 +130,5 @@ def test_client(app, test_realm):
             )
             db.session.add(oidc_client)
             db.session.commit()
-            return oidc_client
-        return oidc_client
+            
+        yield oidc_client

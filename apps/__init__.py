@@ -176,7 +176,10 @@ def create_app(config):
         Configured Flask application
     """
     app = Flask(__name__)
-    app.config.from_object(config)
+    if isinstance(config, dict):
+        app.config.from_mapping(config)
+    else:
+        app.config.from_object(config)
     
     # Configure logging
     configure_logging(app)

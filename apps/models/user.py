@@ -131,6 +131,26 @@ class User(RealmScopedModel, UserMixin):
         # If legacy hash, handle it (future proofing)
         # For now, we only use bcrypt
         return verify_hash(password, cred.secret_data)
+
+    def set_password(self, password):
+        """Hash and set user's password credential"""
+        from apps.utils.crypto import hash_password
+        from apps.models.user import Credential
+        
+        # Ensure user is in session so we can access dynamic relationships
+        if self not in db.session:
+            db.session.add(self)
+            
+        hashed = hash_password(password)
+        cred = self.get_password_credential()
+        if cred:
+            cred.secret_data = hashed
+            cred.created_at = datetime.utcnow()
+        else:
+            # Create new credential for this user
+            cred = Credential.create_password(self.id, hashed)
+            db.session.add(cred)
+        # We don't commit here - let the caller decide
         
     def to_dict(self, include_attributes=False):
         """Serialize user to dictionary"""
