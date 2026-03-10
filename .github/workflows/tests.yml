@@ -26,9 +26,9 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-cov pytest-mock pytest-asyncio
       - name: Database schema validation
-        run: python -c "from apps import create_app; app = create_app(); from apps.models import db; db.create_all()"
+        run: python -c "from apps import create_app; from apps.config import config_dict; app = create_app(config_dict['Debug']); app.app_context().push(); from apps.models import db; db.create_all()"
       - name: Seeding validation
-        run: python -c "from apps.seeders import run_initial_seed; run_initial_seed()"
+        run: python -c "from apps import create_app; from apps.config import config_dict; app = create_app(config_dict['Debug']); app.app_context().push(); from apps.seeders import run_initial_seed; run_initial_seed()"
 
   # Parallel test suites by feature area
   authentication-tests:
