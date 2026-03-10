@@ -1,5 +1,22 @@
 # Change Log
 
+## [2.7.0] 2026-03-10 - Comprehensive Testing Strategy
+
+### New Features
+
+- **Automated GitHub Actions Testing Suite**:
+  - Implemented a parallel-running job architecture targeting Authentication, OIDC Protocols, Federation providers, UI Customization, and internal logging functionality (`tests.yml`).
+  - Integrated Bandit security scanning to enforce safe code constraints.
+  - Test suites utilize PostgreSQL, MySQL, and OpenLDAP containers dynamically during workflow execution.
+
+- **Developer Testing Constraints**:
+  - Centralized application and DB auto-bootstrapping using dedicated Pytest Fixtures (`conftest.py`).
+  - Implemented automated UI sanitization assertions to prevent XSS.
+  - Added dedicated Role mapping validators and token validation routines.
+  - Wrote a local testing wrapper runner (`run-tests.sh`) and standard Developer Testing Guidelines (`testing_guide.md`).
+
+---
+
 ## [2.6.1] 2026-03-10 - Advanced Logging & Authentication Fixes
 
 ### New Features

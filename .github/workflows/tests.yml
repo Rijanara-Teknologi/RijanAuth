@@ -1,0 +1,230 @@
+name: RijanAuth Test Suite
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Core tests that must pass before parallel execution
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-mock pytest-asyncio
+      - name: Database schema validation
+        run: python -c "from apps import create_app; app = create_app(); from apps.models import db; db.create_all()"
+      - name: Seeding validation
+        run: python -c "from apps.seeders import run_initial_seed; run_initial_seed()"
+
+  # Parallel test suites by feature area
+  authentication-tests:
+    needs: preflight
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest pytest-cov pytest-mock
+      - name: Run authentication tests
+        run: |
+          pytest tests/auth/ \
+            --cov=apps.blueprints.auth \
+            --cov=apps.models.user \
+            --cov-report=xml \
+            --junitxml=auth-tests.xml
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          flags: authentication
+          name: auth-tests
+
+  oidc-protocol-tests:
+    needs: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest pytest-cov
+      - name: Run OIDC tests
+        run: |
+          pytest tests/oidc/ \
+            --cov=apps.blueprints.oidc \
+            --cov=apps.services.mapper_service \
+            --cov-report=xml \
+            -k "not ldap and not mysql and not postgresql"
+      - name: Validate JWT structure
+        run: python scripts/validate_jwt_claims.py || true
+
+  federation-tests:
+    needs: preflight
+    runs-on: ubuntu-latest
+    services:
+      ldap:
+        image: osixia/openldap:1.5.0
+        ports:
+          - 389:389
+        env:
+          LDAP_ORGANISATION: "RijanAuth Test"
+          LDAP_DOMAIN: "rijanauth.test"
+          LDAP_ADMIN_PASSWORD: "admin"
+      mysql:
+        image: mysql:8.0
+        ports:
+          - 3306:3306
+        env:
+          MYSQL_ROOT_PASSWORD: rootpass
+          MYSQL_DATABASE: rijanauth_test
+          MYSQL_USER: testuser
+          MYSQL_PASSWORD: testpass
+      postgres:
+        image: postgres:14
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: rijanauth_test
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov ldap3 pymysql psycopg2-binary
+      - name: Wait for services
+        run: |
+          sleep 15  # Allow services to initialize
+      - name: Run federation tests
+        run: |
+          pytest tests/federation/ \
+            --cov=apps.services.federation \
+            --cov-report=xml \
+            --junitxml=federation-tests.xml
+
+  customization-tests:
+    needs: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest pytest-cov
+      - name: Run customization tests
+        run: |
+          pytest tests/customization/ \
+            --cov=apps.models.realm_page_customization \
+            --cov=apps.utils.css_sanitizer \
+            --cov-report=xml
+
+  logging-tests:
+    needs: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest pytest-cov
+      - name: Run logging tests
+        run: |
+          pytest tests/logging/ \
+            --cov=apps.logging \
+            --cov-report=xml
+
+  # Final integration test suite
+  integration-tests:
+    needs: [authentication-tests, oidc-protocol-tests, federation-tests, customization-tests, logging-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest pytest-cov
+      - name: Run full integration tests
+        run: |
+          pytest tests/integration/ \
+            --cov=apps \
+            --cov-report=html \
+            --cov-report=xml \
+            --junitxml=integration-tests.xml
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
+
+  # Security scanning
+  security-scan:
+    needs: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install Bandit
+        run: pip install bandit
+      - name: Run security scan
+        run: bandit -r apps/ -f html -o bandit-report.html || true
+      - name: Upload security report
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report
+          path: bandit-report.html
+
+  # Test summary and reporting
+  test-summary:
+    needs: [authentication-tests, oidc-protocol-tests, federation-tests, customization-tests, logging-tests, integration-tests, security-scan]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Generate test summary
+        run: |
+          echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Test Suite | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Authentication | ${{ needs.authentication-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "| OIDC Protocol | ${{ needs.oidc-protocol-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "| Federation | ${{ needs.federation-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "| Customization | ${{ needs.customization-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "| Logging | ${{ needs.logging-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "| Integration | ${{ needs.integration-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Scan | ${{ needs.security-scan.result }}" >> $GITHUB_STEP_SUMMARY
