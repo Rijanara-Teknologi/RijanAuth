@@ -2,17 +2,23 @@
 Logo Customization Tests
 Validate logo and background upload handlers, position persistence, and model constraints.
 """
+import os
 import io
 import pytest
 from apps import db
 from apps.models.customization import RealmPageCustomization, MediaAsset
+from apps.utils.media_handler import MediaHandler
 
 
 def get_test_image():
-    """Returns a valid 1x1 transparent PNG in-memory file for testing uploads."""
-    # 1x1 transparent PNG
-    png_data = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82'
-    return io.BytesIO(png_data)
+    """Returns a valid PNG or JPEG in-memory file for testing uploads. Uses fake API image if available."""
+    try:
+        with open('test_fake_api_img.jpg', 'rb') as f:
+            return io.BytesIO(f.read())
+    except FileNotFoundError:
+        # 1x1 transparent PNG fallback
+        png_data = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82'
+        return io.BytesIO(png_data)
 
 
 def test_logo_position_options(app, test_realm):
@@ -47,7 +53,7 @@ class TestLogoUploads:
             realm_id = test_realm.id
 
         data = {
-            'logo': (get_test_image(), 'test_logo.png'),
+            'logo': (get_test_image(), 'test_logo.jpg'),
             'page_type': 'login'
         }
 
@@ -64,7 +70,14 @@ class TestLogoUploads:
             asset = MediaAsset.find_by_id(c.logo_id)
             assert asset is not None
             assert asset.asset_type == 'logo'
-            assert asset.original_filename == 'test_logo.png'
+            assert asset.original_filename == 'test_logo.jpg'
+            
+            # Verify media endpoint
+            media_url = MediaHandler.get_file_url(asset)
+            
+        res = authenticated_client.get(media_url)
+        assert res.status_code == 200
+        assert len(res.data) > 0
 
     def test_remove_logo(self, authenticated_client, app, test_realm):
         """Removing a logo should clear the logo_id and delete the asset."""
@@ -110,7 +123,7 @@ class TestBackgroundUploads:
             realm_id = test_realm.id
 
         data = {
-            'background': (get_test_image(), 'bg.png'),
+            'background': (get_test_image(), 'bg.jpg'),
             'page_type': 'login'
         }
 
@@ -128,6 +141,13 @@ class TestBackgroundUploads:
             asset = MediaAsset.find_by_id(c.background_image_id)
             assert asset is not None
             assert asset.asset_type == 'background'
+            
+            # Verify media endpoint
+            media_url = MediaHandler.get_file_url(asset)
+            
+        res = authenticated_client.get(media_url)
+        assert res.status_code == 200
+        assert len(res.data) > 0
 
     def test_remove_background(self, authenticated_client, app, test_realm):
         """Removing background should reset background_type to 'color'."""

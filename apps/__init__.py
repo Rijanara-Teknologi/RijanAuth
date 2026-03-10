@@ -71,7 +71,8 @@ def register_blueprints(app):
             abort(404)
         
         upload_dir = MediaHandler.get_upload_directory()
-        return send_from_directory(upload_dir, asset.stored_path, mimetype=asset.content_type)
+        absolute_dir = os.path.abspath(upload_dir)
+        return send_from_directory(absolute_dir, asset.stored_path, mimetype=asset.content_type)
 
 
 def configure_database(app):
