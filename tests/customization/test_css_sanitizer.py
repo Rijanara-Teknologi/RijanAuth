@@ -1,42 +1,52 @@
+"""
+CSS Sanitizer Tests
+Tests for the real CSSSanitizer from apps.utils.css_sanitizer.
+"""
 import pytest
+from apps.utils.css_sanitizer import CSSSanitizer
 
-class CSSSanitizer:
-    def sanitize(self, css):
-        if not css: return ""
-        
-        safe_lines = []
-        for line in css.split('\n'):
-            line_lower = line.lower()
-            if 'javascript:' in line_lower:
-                safe_lines.append("/* REMOVED: dangerous pattern */")
-            elif 'expression(' in line_lower:
-                safe_lines.append("/* REMOVED: dangerous pattern */")
-            else:
-                # Add prefix for safe patterns
-                if '{' in line:
-                    selector, rules = line.split('{', 1)
-                    selector = selector.strip()
-                    if selector.startswith('div') and 'position: fixed' in rules:
-                        rules = rules.replace('position: fixed;', '').replace('position: fixed', '')
-                    safe_lines.append(f".custom-page {selector} {{{rules}")
-                else:
-                    safe_lines.append(line)
-        return '\n'.join(safe_lines)
 
-@pytest.mark.parametrize("unsafe_css,expected_safe", [
-    ("body { background: url('javascript:alert(1)') }", "/* REMOVED: dangerous pattern */"),
-    ("div { position: fixed; top: 0; }", ".custom-page div { top: 0; }"),  # position removed
-    ("button:hover { color: red; }", ".custom-page button:hover { color: red; }"),
+@pytest.mark.parametrize("unsafe_css,should_be_absent", [
+    ("body { background: url('javascript:alert(1)') }", "javascript:"),
+    ("div { -moz-binding: url('evil.xml') }", "-moz-binding"),
+    ("a { background: expression(alert(1)) }", "expression("),
+    ("<script>alert(1)</script> body { color: red; }", "<script>"),
+    ("@import url('https://evil.com/hack.css');", "@import"),
 ])
-def test_css_sanitization(unsafe_css, expected_safe):
-    """Verify CSS sanitizer removes dangerous patterns (v2.6.0 security)"""
-    sanitizer = CSSSanitizer()
-    safe_css = sanitizer.sanitize(unsafe_css)
-    
-    # Verify dangerous patterns removed
-    assert 'javascript:' not in safe_css
-    assert 'expression(' not in safe_css.lower()
-    
-    # Verify expected outputs
-    if 'button:hover' in unsafe_css:
-        assert '.custom-page button:hover' in safe_css
+def test_css_sanitization(unsafe_css, should_be_absent):
+    """Verify CSSSanitizer removes dangerous patterns (v2.6.0 security)."""
+    sanitized, warnings = CSSSanitizer.sanitize(unsafe_css)
+    assert should_be_absent.lower() not in sanitized.lower()
+    # HTML tags are stripped silently, so we don't always get warnings
+    if should_be_absent != '<script>':
+        assert len(warnings) > 0
+
+
+def test_safe_css_preserved():
+    """Safe CSS rules should pass through with .custom-page prefix."""
+    safe_css = "button:hover { color: red; }"
+    sanitized, warnings = CSSSanitizer.sanitize(safe_css, add_prefix=True)
+    assert '.custom-page' in sanitized
+    assert 'color: red' in sanitized
+
+
+def test_restricted_properties_warned():
+    """Restricted properties (position, z-index) should produce warnings."""
+    css = ".box { position: absolute; z-index: 999; }"
+    sanitized, warnings = CSSSanitizer.sanitize(css)
+    warning_text = ' '.join(warnings)
+    assert 'position' in warning_text.lower() or 'z-index' in warning_text.lower()
+
+
+def test_empty_css():
+    """Empty input returns empty string and no warnings."""
+    sanitized, warnings = CSSSanitizer.sanitize('')
+    assert sanitized == ''
+    assert warnings == []
+
+
+def test_process_custom_css_no_prefix():
+    """process_custom_css sanitizes without adding prefix."""
+    css = "body { color: blue; }"
+    result = CSSSanitizer.process_custom_css(css)
+    assert 'color: blue' in result

@@ -1,5 +1,18 @@
 # Change Log
 
+## [2.7.2] 2026-03-10 - Login Page Customization Test Suite
+
+### New Features
+
+- **Customization Test Suite**:
+  - Implemented comprehensive `tests/customization/` suite covering `RealmPageCustomization` model and `CSSSanitizer`.
+  - Added test coverage for background colors, gradients, image uploads, and logo positioning.
+  - Added security boundary validations (XSS prevention via `CSSSanitizer`, realm identity protection, and access control).
+  - Used in-memory mock images for strict testing of `MediaHandler` upload/delete flows without external dependencies.
+  - Fixed test issues with `DetachedInstanceError` by managing SQLAlchemy scope lifetimes correctly.
+
+---
+
 ## [2.7.1] 2026-03-10 - Test Suite Fixes & Model Enhancement
 
 ### Bug Fixes
