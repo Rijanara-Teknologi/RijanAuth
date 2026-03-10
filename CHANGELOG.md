@@ -1,5 +1,34 @@
 # Change Log
 
+## [2.6.1] 2026-03-10 - Advanced Logging & Authentication Fixes
+
+### New Features
+
+- **Advanced Logging System**:
+  - Complete Laravel-style logging architecture configured via `apps/config.py`
+  - Daily log rotation, JSON formatting, and extensive runtime context injection
+  - Request performance tracking and UUID generation via `LoggingMiddleware`
+  - Automatic masking of sensitive fields (e.g., passwords, tokens)
+  - Action auditing in Admin API using the `@log_action` decorator
+  - Log viewer utility script (`scripts/log-viewer.py`) for easy terminal debugging
+  - Comprehensive logging documentation (`docs/logging_configuration.md`)
+
+- **Diagnostic Tools**:
+  - Added `debug_login.py` script to independently test database connections, role mapping, credential validation, and session lifecycle.
+  - Enabled detailed SQLAlchemy echo and query recording in the Debug environment.
+
+### Bug Fixes
+
+- **Authentication Loop / Session Persistence**:
+  - Fixed critical persistence issue where login succeeded internally but browser disregarded the session cookie.
+  - Adjusted `DebugConfig` defaults by removing global `SameSite` constraints and explicitly forcing `SESSION_COOKIE_SAMESITE = 'Lax'`, `SESSION_COOKIE_DOMAIN = None`, and `SESSION_COOKIE_PATH = '/'` for predictable local development.
+- **Middleware Restoration**: 
+  - Restored unintentionally removed `configure_realm_middleware` initialization in the application factory to ensure realm multitenancy routes function correctly.
+- **Improved Logging Output**: 
+  - Substituted crude `print()` debugging statements in `auth/routes.py` and `auth/__init__.py` with proper `current_app.logger` methods.
+
+---
+
 ## [2.6.0] 2026-01-25 - Page Customization System
 
 ### New Features
