@@ -44,7 +44,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
-        run: pip install -r requirements.txt pytest pytest-cov pytest-mock
+        run: pip install -r requirements.txt pytest pytest-cov pytest-mock pytest-flask Flask-Dance
       - name: Run authentication tests
         env:
           PYTHONPATH: ${{ github.workspace }}
@@ -70,7 +70,7 @@ jobs:
         with:
           python-version: '3.10'
       - name: Install dependencies
-        run: pip install -r requirements.txt pytest pytest-cov
+        run: pip install -r requirements.txt pytest pytest-cov pytest-flask Flask-Dance PyJWT
       - name: Run OIDC tests
         env:
           PYTHONPATH: ${{ github.workspace }}
@@ -120,7 +120,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install pytest pytest-cov ldap3 pymysql psycopg2-binary
+          pip install pytest pytest-cov pytest-flask Flask-Dance ldap3 pymysql psycopg2-binary
       - name: Wait for services
         run: |
           sleep 15  # Allow services to initialize
@@ -142,13 +142,13 @@ jobs:
         with:
           python-version: '3.10'
       - name: Install dependencies
-        run: pip install -r requirements.txt pytest pytest-cov
+        run: pip install -r requirements.txt pytest pytest-cov pytest-mock pytest-asyncio pytest-flask Flask-Dance
       - name: Run customization tests
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: pytest tests/customization/ \
-             --cov=apps.models.realm_page_customization \
-             --cov=apps.utils.css_sanitizer \
+             --cov=apps.models \
+             --cov=apps.utils \
              --cov-report=xml
 
   logging-tests:
@@ -161,12 +161,12 @@ jobs:
         with:
           python-version: '3.10'
       - name: Install dependencies
-        run: pip install -r requirements.txt pytest pytest-cov
+        run: pip install -r requirements.txt pytest pytest-cov pytest-mock pytest-asyncio pytest-flask Flask-Dance
       - name: Run logging tests
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: pytest tests/logging/ \
-             --cov=apps.logging \
+             --cov=apps \
              --cov-report=xml
 
   # Final integration test suite
@@ -180,7 +180,7 @@ jobs:
         with:
           python-version: '3.10'
       - name: Install dependencies
-        run: pip install -r requirements.txt pytest pytest-cov
+        run: pip install -r requirements.txt pytest pytest-cov pytest-flask Flask-Dance
       - name: Run full integration tests
         env:
           PYTHONPATH: ${{ github.workspace }}
