@@ -42,52 +42,12 @@ class Config(object):
     SQLALCHEMY_ECHO = True
     SQLALCHEMY_RECORD_QUERIES = True
 
-    DB_ENGINE   = os.getenv('DB_ENGINE'   , None)
-    DB_USERNAME = os.getenv('DB_USERNAME' , None)
-    DB_PASS     = os.getenv('DB_PASS'     , None)
-    DB_HOST     = os.getenv('DB_HOST'     , None)
-    DB_PORT     = os.getenv('DB_PORT'     , None)
-    DB_NAME     = os.getenv('DB_NAME'     , None)
-
-    USE_SQLITE  = True 
-
-    # try to set up a Relational DBMS
-    if DB_ENGINE and DB_NAME and DB_USERNAME:
-
-        try:
-
-            # Normalize MySQL engine to use the PyMySQL driver.
-            # Accepting both "mysql" and "mysql+pymysql" from the environment
-            # so that users only need to set DB_ENGINE=mysql in their .env file.
-            _engine = DB_ENGINE
-            if _engine.lower() in ('mysql', 'mysql+pymysql'):
-                _engine = 'mysql+pymysql'
-
-            # Build the SQLAlchemy connection URI
-            SQLALCHEMY_DATABASE_URI = '{}://{}:{}@{}:{}/{}'.format(
-                _engine,
-                DB_USERNAME,
-                DB_PASS,
-                DB_HOST,
-                DB_PORT,
-                DB_NAME
-            )
-
-            USE_SQLITE  = False
-
-        except Exception as e:
-
-            print('> Error: DBMS Exception: ' + str(e) )
-            print('> Fallback to SQLite ')    
-
-    if USE_SQLITE:
-
-        # Default location is inside the app package folder, but can be
-        # overridden with the DB_PATH environment variable so that the file
-        # can be placed on a Docker volume (or any host-mounted directory)
-        # and survive container rebuilds.
-        _sqlite_path = os.getenv('DB_PATH', os.path.join(basedir, 'db.sqlite3'))
-        SQLALCHEMY_DATABASE_URI = 'sqlite:///' + _sqlite_path
+    # Default location is inside the app package folder, but can be
+    # overridden with the DB_PATH environment variable so that the file
+    # can be placed on a Docker volume (or any host-mounted directory)
+    # and survive container rebuilds.
+    _sqlite_path = os.getenv('DB_PATH', os.path.join(basedir, 'db.sqlite3'))
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///' + _sqlite_path
     
 class ProductionConfig(Config):
     DEBUG = False
