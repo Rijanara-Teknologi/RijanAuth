@@ -18,11 +18,12 @@ ENV TIMEOUT=600
 ENV DB_PATH=/data/db.sqlite3
 RUN mkdir -p /data
 
-COPY requirements.txt .
+WORKDIR /app
 
-# install python dependencies
-RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy requirements first so Docker can cache the pip install layer.
+# pip install only re-runs when requirements.txt actually changes.
+COPY requirements.txt .
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 COPY env.sample .env
 
