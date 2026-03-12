@@ -1,0 +1,297 @@
+{% extends "layouts/admin_base.html" %}
+
+{% block title %}Backup{% endblock %}
+
+{% block stylesheets %}
+<style>
+    .provider-card {
+        border: 2px solid #e9ecef;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .provider-card:hover,
+    .provider-card.selected {
+        border-color: var(--primary-color);
+        background: rgba(103, 58, 183, 0.05);
+    }
+    .provider-card.selected .provider-check {
+        display: inline-block !important;
+    }
+    .instructions-box {
+        background: #f8f9fa;
+        border-left: 4px solid var(--primary-color);
+        padding: 1rem 1.25rem;
+        border-radius: 0 4px 4px 0;
+    }
+    .instructions-box ol, .instructions-box ul { padding-left: 1.2rem; margin-bottom: 0; }
+    .instructions-box li { margin-bottom: .4rem; }
+    .cred-fields { display: none; }
+    .backup-status-success { color: #28a745; }
+    .backup-status-failed  { color: #dc3545; }
+    .backup-status-in_progress { color: #ffc107; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="pcoded-main-container">
+    <div class="pcoded-wrapper">
+        <div class="pcoded-content">
+            <div class="pcoded-inner-content">
+                <div class="main-body">
+                    <div class="page-wrapper">
+
+                        <!-- Page Header -->
+                        <div class="page-header">
+                            <div class="page-block">
+                                <div class="row align-items-center">
+                                    <div class="col-md-12">
+                                        <div class="page-header-title">
+                                            <h5 class="m-b-10"><i class="feather icon-archive mr-2"></i>Backup</h5>
+                                        </div>
+                                        <ul class="breadcrumb">
+                                            <li class="breadcrumb-item"><a href="{{ url_for('admin.index') }}"><i class="feather icon-home"></i></a></li>
+                                            <li class="breadcrumb-item"><a href="{{ url_for('admin.dashboard', realm_name=realm.name) }}">{{ realm.name }}</a></li>
+                                            <li class="breadcrumb-item active">Backup</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Flash Messages -->
+                        {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                        {% for category, message in messages %}
+                        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible" role="alert">
+                            {{ message }}
+                            <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
+                        </div>
+                        {% endfor %}
+                        {% endif %}
+                        {% endwith %}
+
+                        <div class="row">
+                            <!-- Left column: Config & Manual Backup -->
+                            <div class="col-xl-8">
+
+                                <!-- Cloud Provider Selection -->
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5><i class="feather icon-cloud mr-2"></i>Cloud Storage Provider</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <form method="POST" id="configForm">
+                                            <input type="hidden" name="action" value="save_config">
+
+                                            <!-- Provider selector cards -->
+                                            <div class="row mb-4">
+                                                {% for key, info in provider_info.items() %}
+                                                <div class="col-md-3 col-6 mb-3">
+                                                    <div class="provider-card p-3 text-center {% if config and config.storage_provider == key %}selected{% endif %}"
+                                                         onclick="selectProvider('{{ key }}')">
+                                                        <i class="fab {{ info.icon }} fa-2x mb-2 text-primary"></i>
+                                                        <div class="font-weight-bold small">{{ info.label }}</div>
+                                                        <i class="feather icon-check-circle text-primary provider-check mt-1"
+                                                           style="display:{{ 'inline-block' if config and config.storage_provider == key else 'none' }}"></i>
+                                                    </div>
+                                                </div>
+                                                {% endfor %}
+                                            </div>
+
+                                            <input type="hidden" name="storage_provider" id="storage_provider_input"
+                                                   value="{{ config.storage_provider if config else '' }}">
+
+                                            <!-- Credentials fields (shown per provider) -->
+                                            {% for key, info in provider_info.items() %}
+                                            <div class="cred-fields" id="fields_{{ key }}">
+                                                <h6 class="mb-3 text-muted">{{ info.label }} Credentials</h6>
+                                                {% for field in info.fields %}
+                                                <div class="form-group">
+                                                    <label for="{{ field.key }}">{{ field.label }}</label>
+                                                    {% if field.type == 'textarea' %}
+                                                    <textarea class="form-control" id="{{ field.key }}"
+                                                              name="{{ field.key }}" rows="5"
+                                                              placeholder="Paste here..."
+                                                              >{{ stored_creds.get(field.key, '') }}</textarea>
+                                                    {% else %}
+                                                    <input type="{{ field.type }}" class="form-control"
+                                                           id="{{ field.key }}" name="{{ field.key }}"
+                                                           value="{{ stored_creds.get(field.key, '') }}"
+                                                           placeholder="{% if field.type == 'password' %}(unchanged){% endif %}">
+                                                    {% endif %}
+                                                    <small class="form-text text-muted">{{ field.help }}</small>
+                                                </div>
+                                                {% endfor %}
+
+                                                <!-- Instructions box -->
+                                                <div class="instructions-box mb-4">
+                                                    <p class="font-weight-bold mb-2">
+                                                        <i class="feather icon-info mr-1"></i>
+                                                        How to get your {{ info.label }} credentials
+                                                        &mdash;
+                                                        <a href="{{ info.dev_url }}" target="_blank" rel="noopener noreferrer">
+                                                            Open {{ info.dev_label }} <i class="feather icon-external-link ml-1"></i>
+                                                        </a>
+                                                    </p>
+                                                    <ol>
+                                                        {% for step in info.instructions %}
+                                                        <li>{{ step | safe }}</li>
+                                                        {% endfor %}
+                                                    </ol>
+                                                </div>
+                                            </div>
+                                            {% endfor %}
+
+                                            <!-- Auto-backup interval -->
+                                            <div class="form-group">
+                                                <label for="auto_backup_interval">Auto-Backup Interval</label>
+                                                <select class="form-control" id="auto_backup_interval" name="auto_backup_interval">
+                                                    <option value="" {% if not config or not config.auto_backup_interval %}selected{% endif %}>Disabled (manual only)</option>
+                                                    <option value="daily"   {% if config and config.auto_backup_interval == 'daily'   %}selected{% endif %}>Every Day</option>
+                                                    <option value="weekly"  {% if config and config.auto_backup_interval == 'weekly'  %}selected{% endif %}>Every Week</option>
+                                                    <option value="monthly" {% if config and config.auto_backup_interval == 'monthly' %}selected{% endif %}>Every Month</option>
+                                                </select>
+                                                <small class="form-text text-muted">
+                                                    When auto-backup is active, the password set below is used automatically.
+                                                </small>
+                                            </div>
+
+                                            <!-- ZIP Password -->
+                                            <div class="form-group">
+                                                <label for="zip_password">ZIP Encryption Password</label>
+                                                <input type="password" class="form-control" id="zip_password"
+                                                       name="zip_password" autocomplete="new-password"
+                                                       placeholder="Set password to protect the backup archive">
+                                                <small class="form-text text-muted">
+                                                    AES-256 encryption. You will need this password to restore the backup.
+                                                    Leave blank to keep the existing password.
+                                                </small>
+                                            </div>
+
+                                            <button type="submit" class="btn btn-primary">
+                                                <i class="feather icon-save mr-1"></i> Save Configuration
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+
+                                <!-- Manual Backup Trigger -->
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5><i class="feather icon-play-circle mr-2"></i>Run Backup Now</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="text-muted">
+                                            Backs up the entire RijanAuth database (all realms) and uploaded media files
+                                            into a single AES-256 encrypted ZIP and uploads it to the configured provider.
+                                        </p>
+                                        <form method="POST">
+                                            <input type="hidden" name="action" value="manual_backup">
+                                            <div class="form-group">
+                                                <label for="backup_password">ZIP Password</label>
+                                                <input type="password" class="form-control" id="backup_password"
+                                                       name="backup_password" required
+                                                       placeholder="Enter ZIP password for this backup">
+                                            </div>
+                                            <button type="submit" class="btn btn-success"
+                                                    onclick="return confirm('Start backup now?')">
+                                                <i class="feather icon-upload-cloud mr-1"></i> Start Backup
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+
+                            </div><!-- /col-xl-8 -->
+
+                            <!-- Right column: recent history & status -->
+                            <div class="col-xl-4">
+                                <div class="card">
+                                    <div class="card-header d-flex justify-content-between align-items-center">
+                                        <h5 class="mb-0"><i class="feather icon-clock mr-2"></i>Recent Backups</h5>
+                                        <a href="{{ url_for('admin.backup_restore', realm_name=realm.name) }}"
+                                           class="btn btn-sm btn-outline-primary">
+                                            <i class="feather icon-refresh-cw mr-1"></i> Restore
+                                        </a>
+                                    </div>
+                                    <div class="card-body p-0">
+                                        {% if history %}
+                                        <div class="list-group list-group-flush">
+                                            {% for rec in history %}
+                                            <div class="list-group-item">
+                                                <div class="d-flex justify-content-between">
+                                                    <small class="font-weight-bold text-truncate" style="max-width:160px;"
+                                                           title="{{ rec.filename }}">{{ rec.filename }}</small>
+                                                    <span class="badge badge-{{ 'success' if rec.status == 'success' else ('danger' if rec.status == 'failed' else 'warning') }} ml-1">
+                                                        {{ rec.status }}
+                                                    </span>
+                                                </div>
+                                                <div class="d-flex justify-content-between mt-1">
+                                                    <small class="text-muted">{{ rec.backed_up_at.strftime('%Y-%m-%d %H:%M') if rec.backed_up_at else '-' }}</small>
+                                                    <small class="text-muted">{{ rec.storage_provider or '-' }}</small>
+                                                </div>
+                                                {% if rec.error_message %}
+                                                <small class="text-danger d-block mt-1">{{ rec.error_message[:80] }}</small>
+                                                {% endif %}
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                        {% else %}
+                                        <div class="text-center text-muted py-4">
+                                            <i class="feather icon-inbox f-36 mb-2"></i>
+                                            <p class="mb-0 small">No backups yet</p>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                    {% if config %}
+                                    <div class="card-footer small text-muted">
+                                        <i class="feather icon-info mr-1"></i>
+                                        Provider: <strong>{{ provider_info[config.storage_provider].label if config.storage_provider in provider_info else config.storage_provider or 'Not set' }}</strong>
+                                        &nbsp;|&nbsp;
+                                        Auto: <strong>{{ config.auto_backup_interval or 'Disabled' }}</strong>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div><!-- /col-xl-4 -->
+
+                        </div><!-- /row -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block javascripts %}
+<script>
+    const PROVIDER_INFO = {{ provider_info | tojson }};
+    const currentProvider = {{ (config.storage_provider if config and config.storage_provider else '') | tojson }};
+
+    function selectProvider(key) {
+        document.getElementById('storage_provider_input').value = key;
+
+        // Update card highlight
+        document.querySelectorAll('.provider-card').forEach(c => {
+            c.classList.remove('selected');
+            c.querySelector('.provider-check').style.display = 'none';
+        });
+        const cards = document.querySelectorAll('.provider-card');
+        const idx = Object.keys(PROVIDER_INFO).indexOf(key);
+        if (idx >= 0) {
+            cards[idx].classList.add('selected');
+            cards[idx].querySelector('.provider-check').style.display = 'inline-block';
+        }
+
+        // Show/hide credential fields
+        document.querySelectorAll('.cred-fields').forEach(f => f.style.display = 'none');
+        const target = document.getElementById('fields_' + key);
+        if (target) target.style.display = 'block';
+    }
+
+    // Init on page load
+    if (currentProvider) {
+        selectProvider(currentProvider);
+    }
+</script>
+{% endblock %}

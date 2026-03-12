@@ -120,6 +120,28 @@
                     <label>Account</label>
                 </li>
 
+                <!-- Backup menu: master realm only -->
+                {% if realm and realm.name == master_realm_name %}
+                <li class="nav-item pcoded-hasmenu {% if segment == 'backup' %}active pcoded-trigger{% endif %}">
+                    <a href="#" class="nav-link">
+                        <span class="pcoded-micon"><i class="feather icon-archive"></i></span>
+                        <span class="pcoded-mtext">Backup</span>
+                    </a>
+                    <ul class="pcoded-submenu">
+                        <li class="{% if segment == 'backup' and request.endpoint == 'admin.backup_index' %}active{% endif %}">
+                            <a href="{{ url_for('admin.backup_index', realm_name=realm.name) }}" class="nav-link">
+                                <span class="pcoded-mtext">Backup</span>
+                            </a>
+                        </li>
+                        <li class="{% if segment == 'backup' and request.endpoint == 'admin.backup_restore' %}active{% endif %}">
+                            <a href="{{ url_for('admin.backup_restore', realm_name=realm.name) }}" class="nav-link">
+                                <span class="pcoded-mtext">Restore</span>
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+                {% endif %}
+
                 <li data-username="create realm" class="nav-item">
                     <a href="{{ url_for('admin.create_realm') }}" class="nav-link">
                         <span class="pcoded-micon"><i class="feather icon-plus-circle"></i></span>

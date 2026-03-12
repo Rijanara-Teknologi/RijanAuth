@@ -1,0 +1,236 @@
+{% extends "layouts/admin_base.html" %}
+
+{% block title %}Restore{% endblock %}
+
+{% block stylesheets %}
+<style>
+    .backup-row { cursor: pointer; }
+    .backup-row:hover td { background: rgba(103, 58, 183, 0.05); }
+    .backup-row.selected td { background: rgba(103, 58, 183, 0.12) !important; }
+    .badge-success  { background: #28a745; }
+    .badge-danger   { background: #dc3545; }
+    .badge-warning  { background: #ffc107; color: #212529; }
+    .badge-secondary{ background: #6c757d; }
+    #restore-panel  { display: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="pcoded-main-container">
+    <div class="pcoded-wrapper">
+        <div class="pcoded-content">
+            <div class="pcoded-inner-content">
+                <div class="main-body">
+                    <div class="page-wrapper">
+
+                        <!-- Page Header -->
+                        <div class="page-header">
+                            <div class="page-block">
+                                <div class="row align-items-center">
+                                    <div class="col-md-12">
+                                        <div class="page-header-title">
+                                            <h5 class="m-b-10"><i class="feather icon-refresh-cw mr-2"></i>Restore</h5>
+                                        </div>
+                                        <ul class="breadcrumb">
+                                            <li class="breadcrumb-item"><a href="{{ url_for('admin.index') }}"><i class="feather icon-home"></i></a></li>
+                                            <li class="breadcrumb-item"><a href="{{ url_for('admin.dashboard', realm_name=realm.name) }}">{{ realm.name }}</a></li>
+                                            <li class="breadcrumb-item"><a href="{{ url_for('admin.backup_index', realm_name=realm.name) }}">Backup</a></li>
+                                            <li class="breadcrumb-item active">Restore</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Flash Messages -->
+                        {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                        {% for category, message in messages %}
+                        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible" role="alert">
+                            {{ message }}
+                            <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
+                        </div>
+                        {% endfor %}
+                        {% endif %}
+                        {% endwith %}
+
+                        <!-- Warning banner -->
+                        <div class="alert alert-warning d-flex align-items-start">
+                            <i class="feather icon-alert-triangle mr-3 mt-1 f-20"></i>
+                            <div>
+                                <strong>Warning:</strong> Restoring a backup will <strong>overwrite all current data</strong>
+                                in the RijanAuth database and media files. This action cannot be undone.
+                                Make sure you have a fresh backup of the current state before proceeding.
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <!-- Backup history table -->
+                            <div class="col-xl-8">
+                                <div class="card">
+                                    <div class="card-header d-flex justify-content-between align-items-center">
+                                        <h5 class="mb-0">
+                                            <i class="feather icon-clock mr-2"></i>Backup History
+                                        </h5>
+                                        <a href="{{ url_for('admin.backup_index', realm_name=realm.name) }}"
+                                           class="btn btn-sm btn-outline-primary">
+                                            <i class="feather icon-archive mr-1"></i> New Backup
+                                        </a>
+                                    </div>
+                                    <div class="card-body p-0">
+                                        {% if history %}
+                                        <div class="table-responsive">
+                                            <table class="table table-hover mb-0">
+                                                <thead>
+                                                    <tr>
+                                                        <th style="width:20px;"></th>
+                                                        <th>Date</th>
+                                                        <th>Filename</th>
+                                                        <th>Provider</th>
+                                                        <th>Size</th>
+                                                        <th>Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for rec in history %}
+                                                    {% if rec.status == 'success' %}
+                                                    <tr class="backup-row" data-id="{{ rec.id }}"
+                                                        data-name="{{ rec.filename }}"
+                                                        onclick="selectBackup('{{ rec.id }}', '{{ rec.filename }}')">
+                                                        <td>
+                                                            <input type="radio" name="selected_backup"
+                                                                   id="rb_{{ rec.id }}" value="{{ rec.id }}">
+                                                        </td>
+                                                    {% else %}
+                                                    <tr>
+                                                        <td></td>
+                                                    {% endif %}
+                                                        <td class="text-muted small">
+                                                            {{ rec.backed_up_at.strftime('%Y-%m-%d %H:%M:%S') if rec.backed_up_at else '-' }}
+                                                        </td>
+                                                        <td class="small">
+                                                            <span title="{{ rec.filename }}">
+                                                                {{ rec.filename }}
+                                                            </span>
+                                                            {% if rec.remote_file_path %}
+                                                            <a href="{{ rec.remote_file_path }}" target="_blank"
+                                                               rel="noopener noreferrer" class="ml-1"
+                                                               title="Open in cloud storage">
+                                                                <i class="feather icon-external-link"></i>
+                                                            </a>
+                                                            {% endif %}
+                                                        </td>
+                                                        <td class="small">{{ rec.storage_provider or '-' }}</td>
+                                                        <td class="small text-muted">
+                                                            {% if rec.size_bytes %}
+                                                            {{ '%.1f KB' % (rec.size_bytes / 1024) }}
+                                                            {% else %}-{% endif %}
+                                                        </td>
+                                                        <td>
+                                                            {% if rec.status == 'success' %}
+                                                            <span class="badge badge-success">success</span>
+                                                            {% elif rec.status == 'failed' %}
+                                                            <span class="badge badge-danger" title="{{ rec.error_message }}">failed</span>
+                                                            {% else %}
+                                                            <span class="badge badge-warning">{{ rec.status }}</span>
+                                                            {% endif %}
+                                                        </td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        {% else %}
+                                        <div class="text-center text-muted py-5">
+                                            <i class="feather icon-inbox f-48 mb-3"></i>
+                                            <p>No backup records found.</p>
+                                            <a href="{{ url_for('admin.backup_index', realm_name=realm.name) }}"
+                                               class="btn btn-outline-primary">
+                                                Create First Backup
+                                            </a>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Restore panel -->
+                            <div class="col-xl-4">
+                                <div class="card" id="restore-panel">
+                                    <div class="card-header">
+                                        <h5><i class="feather icon-unlock mr-2"></i>Restore Selected Backup</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <form method="POST" id="restoreForm">
+                                            <input type="hidden" name="record_id" id="restore_record_id">
+
+                                            <div class="form-group">
+                                                <label class="text-muted small">Selected backup</label>
+                                                <p id="restore_filename" class="font-weight-bold mb-0 small"></p>
+                                            </div>
+
+                                            <div class="form-group">
+                                                <label for="zip_password">ZIP Password</label>
+                                                <input type="password" class="form-control" id="zip_password"
+                                                       name="zip_password" required
+                                                       placeholder="Enter the password used when creating this backup">
+                                                <small class="form-text text-muted">
+                                                    Required to decrypt the backup archive.
+                                                </small>
+                                            </div>
+
+                                            <div class="alert alert-danger small py-2">
+                                                <i class="feather icon-alert-circle mr-1"></i>
+                                                All existing data will be <strong>replaced</strong> by this backup.
+                                            </div>
+
+                                            <button type="submit" class="btn btn-danger btn-block"
+                                                    onclick="return confirm('Are you sure? This will overwrite ALL current data!')">
+                                                <i class="feather icon-refresh-cw mr-1"></i> Restore This Backup
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+
+                                <!-- Placeholder when nothing selected -->
+                                <div class="card text-center text-muted py-4" id="restore-hint">
+                                    <div class="card-body">
+                                        <i class="feather icon-mouse-pointer f-36 mb-2"></i>
+                                        <p class="mb-0">Click a successful backup row in the table to select it for restore.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block javascripts %}
+<script>
+    function selectBackup(id, name) {
+        // Deselect all rows
+        document.querySelectorAll('.backup-row').forEach(r => r.classList.remove('selected'));
+
+        // Select clicked row and its radio
+        const row = document.querySelector('.backup-row[data-id="' + id + '"]');
+        if (row) {
+            row.classList.add('selected');
+            const radio = document.getElementById('rb_' + id);
+            if (radio) radio.checked = true;
+        }
+
+        // Populate restore panel
+        document.getElementById('restore_record_id').value = id;
+        document.getElementById('restore_filename').textContent = name;
+
+        // Show restore panel, hide hint
+        document.getElementById('restore-panel').style.display = 'block';
+        document.getElementById('restore-hint').style.display = 'none';
+    }
+</script>
+{% endblock %}

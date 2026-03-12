@@ -1801,3 +1801,240 @@ def _build_mapper_config(mapper_type: str, form) -> dict:
         pass  # Uses default claim.name
     
     return config
+
+
+# =============================================================================
+# Backup & Restore  (master realm only)
+# =============================================================================
+
+from apps.models.backup import BackupConfig, BackupRecord
+from apps.services.backup_service import BackupService
+
+# Cloud provider metadata used in templates
+PROVIDER_INFO = {
+    'google_drive': {
+        'label': 'Google Drive',
+        'icon': 'fa-google-drive',
+        'dev_url': 'https://console.cloud.google.com/',
+        'dev_label': 'Google Cloud Console',
+        'fields': [
+            {'key': 'service_account_json', 'label': 'Service Account JSON Key', 'type': 'textarea',
+             'help': 'Paste the full JSON content of your Service Account key file.'},
+            {'key': 'folder_id', 'label': 'Drive Folder ID (optional)', 'type': 'text',
+             'help': 'ID of the Google Drive folder to store backups in. Leave blank for root.'},
+        ],
+        'instructions': [
+            '1. Open <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer">Google Cloud Console</a> and create a project (or select an existing one).',
+            '2. Go to <strong>APIs &amp; Services → Library</strong> and enable the <strong>Google Drive API</strong>.',
+            '3. Go to <strong>APIs &amp; Services → Credentials</strong> and click <strong>Create Credentials → Service Account</strong>.',
+            '4. Fill in the service account details and click <strong>Create</strong>. Skip optional permission steps.',
+            '5. Click the service account email you just created, then open the <strong>Keys</strong> tab.',
+            '6. Click <strong>Add Key → Create new key → JSON</strong>. A JSON file will download — paste its contents in the field above.',
+            '7. (Optional) Create a folder in Google Drive and share it with the service account email (the "client_email" in the JSON). Copy the folder ID from the URL.',
+        ],
+    },
+    'mega': {
+        'label': 'Mega.nz',
+        'icon': 'fa-cloud',
+        'dev_url': 'https://mega.nz/',
+        'dev_label': 'Mega.nz',
+        'fields': [
+            {'key': 'email', 'label': 'Mega Account Email', 'type': 'email', 'help': 'Your Mega.nz login email.'},
+            {'key': 'password', 'label': 'Mega Account Password', 'type': 'password', 'help': 'Your Mega.nz login password.'},
+            {'key': 'folder', 'label': 'Folder Name (optional)', 'type': 'text',
+             'help': 'Name of the folder inside Mega where backups will be stored. Defaults to "RijanAuth Backups".'},
+        ],
+        'instructions': [
+            '1. Register or log in at <a href="https://mega.nz/" target="_blank" rel="noopener noreferrer">Mega.nz</a>.',
+            '2. Enter your Mega account email and password in the fields above.',
+            '3. Backups will be stored in a folder called <strong>RijanAuth Backups</strong> (or the name you specify).',
+            '<strong>Note:</strong> Mega.nz does not have a separate API key — authentication uses your account credentials.',
+        ],
+    },
+    'dropbox': {
+        'label': 'Dropbox',
+        'icon': 'fa-dropbox',
+        'dev_url': 'https://www.dropbox.com/developers/apps',
+        'dev_label': 'Dropbox App Console',
+        'fields': [
+            {'key': 'app_key', 'label': 'App Key', 'type': 'text', 'help': 'Your Dropbox app key.'},
+            {'key': 'app_secret', 'label': 'App Secret', 'type': 'password', 'help': 'Your Dropbox app secret.'},
+            {'key': 'refresh_token', 'label': 'OAuth2 Refresh Token', 'type': 'password',
+             'help': 'Long-lived refresh token for your Dropbox app.'},
+        ],
+        'instructions': [
+            '1. Go to <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener noreferrer">Dropbox App Console</a> and click <strong>Create app</strong>.',
+            '2. Choose <strong>Scoped access</strong> → <strong>Full Dropbox</strong>. Give your app a name.',
+            '3. Under the <strong>Permissions</strong> tab, enable: <code>files.content.write</code>, <code>files.content.read</code>, <code>sharing.write</code>.',
+            '4. Copy the <strong>App key</strong> and <strong>App secret</strong> from the <strong>Settings</strong> tab.',
+            '5. To get a refresh token, follow the <a href="https://developers.dropbox.com/oauth-guide" target="_blank" rel="noopener noreferrer">Dropbox OAuth guide</a> and complete the OAuth2 PKCE flow, then save the refresh_token.',
+        ],
+    },
+    'box': {
+        'label': 'Box',
+        'icon': 'fa-box',
+        'dev_url': 'https://developer.box.com/',
+        'dev_label': 'Box Developer Console',
+        'fields': [
+            {'key': 'client_id', 'label': 'Client ID', 'type': 'text', 'help': 'Your Box app Client ID.'},
+            {'key': 'client_secret', 'label': 'Client Secret', 'type': 'password', 'help': 'Your Box app Client Secret.'},
+            {'key': 'developer_token', 'label': 'Developer Token', 'type': 'password',
+             'help': 'Short-lived developer token for testing, or a long-lived token from your OAuth2 flow.'},
+        ],
+        'instructions': [
+            '1. Go to <a href="https://developer.box.com/" target="_blank" rel="noopener noreferrer">Box Developer Console</a> and log in.',
+            '2. Click <strong>Create New App</strong> → <strong>Custom App</strong> → <strong>Server Authentication (with OAuth 2.0)</strong>.',
+            '3. After creating, open the app and copy the <strong>Client ID</strong> and <strong>Client Secret</strong>.',
+            '4. For quick testing, click <strong>Generate Developer Token</strong> (valid for 60 min). For production, implement the full OAuth2 flow to obtain a long-lived access token.',
+            '5. Paste the token in the <strong>Developer Token</strong> field above.',
+        ],
+    },
+}
+
+
+def _require_master_realm(realm_name):
+    """Return True if we are in the master realm, otherwise redirect."""
+    from config.seeding import SeedingConfig
+    return realm_name == SeedingConfig.MASTER_REALM_NAME
+
+
+@admin_bp.route('/<realm_name>/backup', methods=['GET', 'POST'])
+@login_required
+def backup_index(realm_name):
+    """Backup configuration & manual trigger page (master realm only)."""
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+
+    if not _require_master_realm(realm_name):
+        flash('The backup feature is only available in the master realm.', 'warning')
+        return redirect(url_for('admin.dashboard', realm_name=realm_name))
+
+    realms = Realm.query.all()
+    config = BackupConfig.get_config()
+    history = BackupRecord.get_history(limit=20)
+
+    if request.method == 'POST':
+        action = request.form.get('action', '')
+
+        if action == 'save_config':
+            provider = request.form.get('storage_provider', '').strip()
+            interval = request.form.get('auto_backup_interval', '') or None
+            zip_password = request.form.get('zip_password', '').strip()
+
+            # Build credentials dict
+            creds: dict = {}
+            if zip_password:
+                creds['zip_password'] = zip_password
+
+            if provider and provider in PROVIDER_INFO:
+                for field in PROVIDER_INFO[provider]['fields']:
+                    val = request.form.get(field['key'], '').strip()
+                    if val:
+                        creds[field['key']] = val
+
+            if not config:
+                config = BackupConfig()
+                db.session.add(config)
+
+            config.storage_provider = provider or None
+            config.auto_backup_interval = interval
+            config.credentials_json = json.dumps(creds) if creds else None
+            db.session.commit()
+
+            BackupService.apply_config()
+            flash('Backup configuration saved.', 'success')
+            return redirect(url_for('admin.backup_index', realm_name=realm_name))
+
+        elif action == 'manual_backup':
+            zip_password = request.form.get('backup_password', '').strip()
+            if not zip_password:
+                flash('A ZIP password is required to create a backup.', 'error')
+            else:
+                try:
+                    record = BackupService.create_backup(
+                        zip_password,
+                        triggered_by_user_id=str(current_user.id),
+                    )
+                    if record.status == 'success':
+                        flash(f'Backup created successfully: {record.filename}', 'success')
+                    else:
+                        flash(f'Backup failed: {record.error_message}', 'error')
+                except Exception as exc:
+                    flash(f'Backup error: {exc}', 'error')
+
+            return redirect(url_for('admin.backup_index', realm_name=realm_name))
+
+    # Decode stored credentials for display (omit secrets)
+    stored_creds: dict = {}
+    if config and config.credentials_json:
+        try:
+            raw = json.loads(config.credentials_json)
+            # Expose non-secret fields for pre-fill; mask passwords/tokens
+            secret_keys = {'password', 'app_secret', 'refresh_token',
+                           'developer_token', 'service_account_json', 'zip_password'}
+            for k, v in raw.items():
+                stored_creds[k] = '' if k in secret_keys else v
+        except Exception:
+            pass
+
+    return render_template(
+        'admin/backup/backup.html',
+        realm=realm,
+        realms=realms,
+        config=config,
+        history=history,
+        stored_creds=stored_creds,
+        provider_info=PROVIDER_INFO,
+        segment='backup',
+    )
+
+
+@admin_bp.route('/<realm_name>/backup/restore', methods=['GET', 'POST'])
+@login_required
+def backup_restore(realm_name):
+    """Restore from a previous backup (master realm only)."""
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+
+    if not _require_master_realm(realm_name):
+        flash('The restore feature is only available in the master realm.', 'warning')
+        return redirect(url_for('admin.dashboard', realm_name=realm_name))
+
+    realms = Realm.query.all()
+    history = BackupRecord.get_history(limit=50)
+
+    if request.method == 'POST':
+        record_id = request.form.get('record_id', '').strip()
+        zip_password = request.form.get('zip_password', '').strip()
+
+        if not record_id:
+            flash('Please select a backup to restore.', 'error')
+        elif not zip_password:
+            flash('A ZIP password is required to restore a backup.', 'error')
+        else:
+            try:
+                stats = BackupService.restore_from_record(record_id, zip_password)
+                flash(
+                    f'Restore completed: {stats["tables_restored"]} tables, '
+                    f'{stats["rows_restored"]} rows restored.',
+                    'success',
+                )
+                if stats.get('errors'):
+                    flash(
+                        'Some non-fatal errors occurred: ' + '; '.join(stats['errors'][:5]),
+                        'warning',
+                    )
+            except Exception as exc:
+                flash(f'Restore failed: {exc}', 'error')
+
+        return redirect(url_for('admin.backup_restore', realm_name=realm_name))
+
+    return render_template(
+        'admin/backup/restore.html',
+        realm=realm,
+        realms=realms,
+        history=history,
+        segment='backup',
+    )

@@ -17,6 +17,7 @@ from apps.models.federation import (
     UserFederationProvider, UserFederationMapper, UserFederationLink, FederationSyncLog,
     FederationRoleMapping, FederationRoleFormatConfig, FederatedRoleSync
 )
+from apps.models.backup import BackupConfig, BackupRecord
 
 __all__ = [
     # Realm
@@ -40,4 +41,6 @@ __all__ = [
     # User Federation
     'UserFederationProvider', 'UserFederationMapper', 'UserFederationLink', 'FederationSyncLog',
     'FederationRoleMapping', 'FederationRoleFormatConfig', 'FederatedRoleSync',
+    # Backup
+    'BackupConfig', 'BackupRecord',
 ]

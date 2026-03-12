@@ -28,3 +28,12 @@ ldap3>=2.9.1           # LDAP/Active Directory support
 pymysql>=1.1.0         # MySQL/MariaDB federation provider (user sync only)
 psycopg2-binary>=2.9   # PostgreSQL federation provider (user sync only)
 APScheduler>=3.10.0    # Background sync scheduler
+
+# Backup feature dependencies (optional - install as needed)
+pyzipper>=0.3.6                        # AES-256 encrypted ZIP archives
+google-api-python-client>=2.100.0      # Google Drive upload/download
+google-auth-httplib2>=0.1.0            # Google auth transport
+google-auth-oauthlib>=1.0.0            # Google OAuth2
+dropbox>=11.36.0                       # Dropbox upload/download
+boxsdk>=3.9.0                          # Box upload/download
+mega.py>=1.0.8                         # Mega.nz upload/download
