@@ -15,6 +15,9 @@ __pycache__/
 env
 venv
 
+# environment variables (never commit real credentials)
+.env
+
 # other
 .DS_Store
 

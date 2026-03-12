@@ -5,25 +5,25 @@ services:
     restart: always
     build: .
     ports:
-      - "5085:5085"
+      - "${APP_PORT:-5085}:5085"
     networks:
       - db_network
     # ----------------------------------------------------------------
     # MySQL connection settings.
-    # These environment variables tell the app to use the MySQL service
-    # defined below.  Change DB_PASS (and MYSQL_ROOT_PASSWORD /
-    # MYSQL_PASSWORD in the mysql service) before running in production.
+    # All values are read from the .env file (or shell environment).
+    # Copy env.sample to .env and fill in the values before running.
     # ----------------------------------------------------------------
     depends_on:
       mysql:
         condition: service_healthy
     environment:
-      - DB_ENGINE=mysql
-      - DB_HOST=mysql
-      - DB_PORT=3306
-      - DB_NAME=rijanauth
-      - DB_USERNAME=rijanauth_user
-      - DB_PASS=rijanauth_password_change_me
+      - DB_ENGINE=${DB_ENGINE:-mysql}
+      - DB_HOST=${DB_HOST:-mysql}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_NAME=${DB_NAME:-rijanauth}
+      - DB_USERNAME=${DB_USERNAME:-rijanauth_user}
+      # Required: set DB_PASS in your .env file
+      - DB_PASS=${DB_PASS:?DB_PASS must be set in .env}
 
   # ------------------------------------------------------------------
   # MySQL 8.0 Database Service.
@@ -48,12 +48,13 @@ services:
     image: mysql:8.0
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: root_password_change_me
-      MYSQL_DATABASE: rijanauth
-      MYSQL_USER: rijanauth_user
-      MYSQL_PASSWORD: rijanauth_password_change_me
+      # Required: set MYSQL_ROOT_PASSWORD and DB_PASS in your .env file
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set in .env}
+      MYSQL_DATABASE: ${DB_NAME:-rijanauth}
+      MYSQL_USER: ${DB_USERNAME:-rijanauth_user}
+      MYSQL_PASSWORD: ${DB_PASS:?DB_PASS must be set in .env}
     ports:
-      - "0.0.0.0:3306:3306"
+      - "${MYSQL_BIND_HOST:-0.0.0.0}:${MYSQL_PORT:-3306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./mysql/my.cnf:/etc/mysql/conf.d/rijanauth.cnf:ro
