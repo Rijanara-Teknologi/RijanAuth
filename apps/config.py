@@ -82,8 +82,12 @@ class Config(object):
 
     if USE_SQLITE:
 
-        # This will create a file in <app> FOLDER
-        SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(basedir, 'db.sqlite3')
+        # Default location is inside the app package folder, but can be
+        # overridden with the DB_PATH environment variable so that the file
+        # can be placed on a Docker volume (or any host-mounted directory)
+        # and survive container rebuilds.
+        _sqlite_path = os.getenv('DB_PATH', os.path.join(basedir, 'db.sqlite3'))
+        SQLALCHEMY_DATABASE_URI = 'sqlite:///' + _sqlite_path
     
 class ProductionConfig(Config):
     DEBUG = False
