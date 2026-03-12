@@ -33,6 +33,21 @@ services:
   #      'appseed-app' service above.
   #   3. Change the default passwords before running in production.
   #   4. Run: docker compose up -d
+  #
+  # Remote access (VPN – Zerotier / Tailscale):
+  #   • mysql/my.cnf sets bind-address = 0.0.0.0 so MySQL listens on
+  #     all interfaces, including the VPN interface.
+  #   • mysql/init/01-remote-access.sql grants rijanauth_user@'%' so
+  #     the app user can connect from any host on the VPN.
+  #   • Port 3306 is published to the Docker host (0.0.0.0:3306:3306).
+  #
+  # ⚠  SECURITY: binding 0.0.0.0 exposes port 3306 on every host
+  #     interface. Protect it with firewall rules that allow TCP 3306
+  #     ONLY from the VPN subnet before starting the service:
+  #       Zerotier  – allow from 10.147.0.0/16
+  #       Tailscale – allow from 100.64.0.0/10
+  #     See mysql/my.cnf and mysql/init/01-remote-access.sql for
+  #     subnet-restricted alternatives.
   # ------------------------------------------------------------------
   # mysql:
   #   container_name: rijanauth_mysql
@@ -44,9 +59,11 @@ services:
   #     MYSQL_USER: rijanauth_user
   #     MYSQL_PASSWORD: rijanauth_password_change_me
   #   ports:
-  #     - "3306:3306"
+  #     - "0.0.0.0:3306:3306"
   #   volumes:
   #     - mysql_data:/var/lib/mysql
+  #     - ./mysql/my.cnf:/etc/mysql/conf.d/rijanauth.cnf:ro
+  #     - ./mysql/init:/docker-entrypoint-initdb.d:ro
   #   networks:
   #     - db_network
   #   healthcheck:
