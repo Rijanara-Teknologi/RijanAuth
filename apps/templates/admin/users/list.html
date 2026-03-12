@@ -41,6 +41,10 @@
                                                 </h5>
                                             </div>
                                             <div class="col-md-6 text-right">
+                                                <button type="button" class="btn btn-outline-primary mr-2"
+                                                    data-toggle="modal" data-target="#importUsersModal">
+                                                    <i class="feather icon-upload-cloud mr-1"></i> Import Users
+                                                </button>
                                                 <a href="{{ url_for('admin.create_user', realm_name=realm.name) }}"
                                                     class="btn btn-primary">
                                                     <i class="feather icon-plus mr-1"></i> Add User
@@ -163,4 +167,117 @@
         </div>
     </div>
 </div>
+
+<!-- Import Users Modal -->
+<div class="modal fade" id="importUsersModal" tabindex="-1" role="dialog" aria-labelledby="importUsersModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="importUsersModalLabel">
+                    <i class="feather icon-upload-cloud mr-2"></i>Import Users
+                </h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">
+                    Upload a CSV file to bulk-import users. The file must contain at least a
+                    <code>username</code> column. Supported columns:
+                    <code>username</code>, <code>email</code>, <code>password</code>,
+                    <code>first_name</code>, <code>last_name</code>, <code>name</code>.
+                    Any additional columns are stored as custom attributes.
+                </p>
+                <div class="mb-3">
+                    <a href="{{ url_for('admin.download_import_template', realm_name=realm.name) }}"
+                        class="btn btn-sm btn-outline-secondary">
+                        <i class="feather icon-download mr-1"></i> Download CSV Template
+                    </a>
+                </div>
+                <form id="importUsersForm" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="importFile">CSV File <span class="text-danger">*</span></label>
+                        <div class="custom-file">
+                            <input type="file" class="custom-file-input" id="importFile" accept=".csv" required>
+                            <label class="custom-file-label" for="importFile">Choose CSV file...</label>
+                        </div>
+                    </div>
+                </form>
+                <div id="importResult" class="mt-3" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="importSubmitBtn">
+                    <i class="feather icon-upload-cloud mr-1"></i> Import
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock content %}
+
+{% block javascripts %}
+<script>
+(function () {
+    // Show selected filename in the custom-file input label
+    document.getElementById('importFile').addEventListener('change', function () {
+        var fileName = this.files.length ? this.files[0].name : 'Choose CSV file...';
+        this.nextElementSibling.textContent = fileName;
+    });
+
+    document.getElementById('importSubmitBtn').addEventListener('click', function () {
+        var fileInput = document.getElementById('importFile');
+        var resultDiv = document.getElementById('importResult');
+
+        if (!fileInput.files.length) {
+            resultDiv.innerHTML = '<div class="alert alert-warning">Please select a CSV file.</div>';
+            resultDiv.style.display = 'block';
+            return;
+        }
+
+        var formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+
+        var btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm mr-1" role="status"></span> Importing...';
+        resultDiv.style.display = 'none';
+
+        fetch('{{ url_for("admin.api_import_users", realm_name=realm.name) }}', {
+            method: 'POST',
+            body: formData
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            var html = '<div class="alert alert-success">' +
+                '<strong>Import complete:</strong> ' +
+                data.imported + ' imported, ' + data.skipped + ' skipped.' +
+                '</div>';
+            if (data.errors && data.errors.length) {
+                html += '<ul class="list-unstyled small text-danger mb-0">';
+                data.errors.forEach(function (e) {
+                    html += '<li><i class="feather icon-alert-circle mr-1"></i>Row ' + e.row +
+                        (e.username ? ' (' + e.username + ')' : '') + ': ' + e.error + '</li>';
+                });
+                html += '</ul>';
+            }
+            resultDiv.innerHTML = html;
+            resultDiv.style.display = 'block';
+            if (data.imported > 0) {
+                // Reload page after a short delay so the user list updates
+                setTimeout(function () { window.location.reload(); }, 1500);
+            }
+        })
+        .catch(function (err) {
+            resultDiv.innerHTML = '<div class="alert alert-danger">Network error: could not reach the server. Please check your connection and try again.</div>';
+            resultDiv.style.display = 'block';
+        })
+        .finally(function () {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="feather icon-upload-cloud mr-1"></i> Import';
+        });
+    });
+})();
+</script>
+{% endblock javascripts %}
