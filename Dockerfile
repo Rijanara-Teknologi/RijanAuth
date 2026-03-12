@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 FROM python:3.9
 
 # set environment variables
@@ -21,9 +22,11 @@ RUN mkdir -p /data
 WORKDIR /app
 
 # Copy requirements first so Docker can cache the pip install layer.
-# pip install only re-runs when requirements.txt actually changes.
+# The --mount=type=cache keeps pip's download cache across rebuilds,
+# so packages are not re-downloaded even when requirements.txt changes.
 COPY requirements.txt .
-RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip && pip install -r requirements.txt
 
 COPY env.sample .env
 
