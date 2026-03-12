@@ -103,8 +103,30 @@ def configure_database(app):
             
         except Exception as e:
             print('> Error: DBMS Exception: ' + str(e))
-            
-            # Fallback to SQLite
+
+            # When an external database (e.g. MySQL) is explicitly configured,
+            # do NOT silently fall back to SQLite.  The SQLAlchemy engine is
+            # cached after the first connection attempt, so a second
+            # db.create_all() call inside this except block would reuse the
+            # same broken engine and raise another uncaught exception, causing
+            # gunicorn to crash with a confusing "above exception was the
+            # direct cause" chain.  Surface the problem clearly instead so the
+            # operator knows exactly what to fix.
+            current_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+            if current_uri.lower().startswith('mysql'):
+                raise RuntimeError(
+                    'Cannot connect to the configured MySQL database.\n'
+                    f'Error: {e}\n'
+                    'Please verify DB_HOST, DB_PORT, DB_NAME, DB_USERNAME, '
+                    'and DB_PASS, and ensure the MySQL server is running and '
+                    'the user has the required access privileges (error 1130 '
+                    'means the MySQL user lacks a grant for the connecting '
+                    'host – re-create the volume or run: '
+                    "GRANT ALL PRIVILEGES ON rijanauth.* TO "
+                    "'rijanauth_user'@'%'; FLUSH PRIVILEGES;)."
+                ) from e
+
+            # Fallback to SQLite only when no external DB was configured
             basedir = os.path.abspath(os.path.dirname(__file__))
             app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'db.sqlite3')
             

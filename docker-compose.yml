@@ -9,30 +9,24 @@ services:
     networks:
       - db_network
     # ----------------------------------------------------------------
-    # MySQL connection settings (optional).
-    # Uncomment the 'environment' block below and the 'depends_on'
-    # section to connect this service to the MySQL database defined
-    # further down in this file.
+    # MySQL connection settings.
+    # These environment variables tell the app to use the MySQL service
+    # defined below.  Change DB_PASS (and MYSQL_ROOT_PASSWORD /
+    # MYSQL_PASSWORD in the mysql service) before running in production.
     # ----------------------------------------------------------------
-    # depends_on:
-    #   mysql:
-    #     condition: service_healthy
-    # environment:
-    #   - DB_ENGINE=mysql
-    #   - DB_HOST=mysql
-    #   - DB_PORT=3306
-    #   - DB_NAME=rijanauth
-    #   - DB_USERNAME=rijanauth_user
-    #   - DB_PASS=rijanauth_password_change_me
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      - DB_ENGINE=mysql
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_NAME=rijanauth
+      - DB_USERNAME=rijanauth_user
+      - DB_PASS=rijanauth_password_change_me
 
   # ------------------------------------------------------------------
-  # MySQL 8.0 Database Service (optional).
-  # To enable MySQL support:
-  #   1. Uncomment this entire service block (remove the leading '#').
-  #   2. Uncomment the 'depends_on' and 'environment' blocks in the
-  #      'appseed-app' service above.
-  #   3. Change the default passwords before running in production.
-  #   4. Run: docker compose up -d
+  # MySQL 8.0 Database Service.
   #
   # Remote access (VPN – Zerotier / Tailscale):
   #   • mysql/my.cnf sets bind-address = 0.0.0.0 so MySQL listens on
@@ -49,33 +43,32 @@ services:
   #     See mysql/my.cnf and mysql/init/01-remote-access.sql for
   #     subnet-restricted alternatives.
   # ------------------------------------------------------------------
-  # mysql:
-  #   container_name: rijanauth_mysql
-  #   image: mysql:8.0
-  #   restart: always
-  #   environment:
-  #     MYSQL_ROOT_PASSWORD: root_password_change_me
-  #     MYSQL_DATABASE: rijanauth
-  #     MYSQL_USER: rijanauth_user
-  #     MYSQL_PASSWORD: rijanauth_password_change_me
-  #   ports:
-  #     - "0.0.0.0:3306:3306"
-  #   volumes:
-  #     - mysql_data:/var/lib/mysql
-  #     - ./mysql/my.cnf:/etc/mysql/conf.d/rijanauth.cnf:ro
-  #     - ./mysql/init:/docker-entrypoint-initdb.d:ro
-  #   networks:
-  #     - db_network
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD 2>/dev/null"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
+  mysql:
+    container_name: rijanauth_mysql
+    image: mysql:8.0
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password_change_me
+      MYSQL_DATABASE: rijanauth
+      MYSQL_USER: rijanauth_user
+      MYSQL_PASSWORD: rijanauth_password_change_me
+    ports:
+      - "0.0.0.0:3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/my.cnf:/etc/mysql/conf.d/rijanauth.cnf:ro
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - db_network
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD 2>/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 networks:
   db_network:
     driver: bridge
 
-# Uncomment the volumes section below when the MySQL service is enabled.
-# volumes:
-#   mysql_data:
+volumes:
+  mysql_data:
