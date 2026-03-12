@@ -3,8 +3,13 @@
 Copyright (c) 2019 - present AppSeed.us
 """
 
-bind = '0.0.0.0:5005'
-workers = 1
+import os
+
+bind = '0.0.0.0:' + os.environ.get('PORT', '5085')
+workers = int(os.environ.get('WORKERS', '1'))
+worker_class = 'gthread'
+threads = int(os.environ.get('THREADS', '4'))
+timeout = int(os.environ.get('TIMEOUT', '600'))
 accesslog = '-'
 loglevel = 'debug'
 capture_output = True
