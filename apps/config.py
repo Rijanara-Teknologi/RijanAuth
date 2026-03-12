@@ -55,16 +55,23 @@ class Config(object):
     if DB_ENGINE and DB_NAME and DB_USERNAME:
 
         try:
-            
-            # Relational DBMS: PSQL, MySql
+
+            # Normalize MySQL engine to use the PyMySQL driver.
+            # Accepting both "mysql" and "mysql+pymysql" from the environment
+            # so that users only need to set DB_ENGINE=mysql in their .env file.
+            _engine = DB_ENGINE
+            if _engine.lower() in ('mysql', 'mysql+pymysql'):
+                _engine = 'mysql+pymysql'
+
+            # Build the SQLAlchemy connection URI
             SQLALCHEMY_DATABASE_URI = '{}://{}:{}@{}:{}/{}'.format(
-                DB_ENGINE,
+                _engine,
                 DB_USERNAME,
                 DB_PASS,
                 DB_HOST,
                 DB_PORT,
                 DB_NAME
-            ) 
+            )
 
             USE_SQLITE  = False
 
