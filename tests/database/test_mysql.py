@@ -238,3 +238,50 @@ class TestAppWithMySQLConfig:
         assert url.host == "db_host"
         assert url.port == 3306
         assert url.database == "rijanauth"
+
+    def test_configure_database_raises_on_mysql_connection_failure(self):
+        """
+        When a MySQL URI is configured and the database is unreachable,
+        configure_database must raise RuntimeError instead of silently falling
+        back to SQLite.
+
+        Background: the SQLAlchemy engine is cached after the first connection
+        attempt.  If configure_database caught the error and retried
+        db.create_all() with a changed config URI, the cached MySQL engine
+        would be reused, raising the same OperationalError again – this time
+        uncaught – which caused gunicorn to crash with a confusing
+        "above exception was the direct cause" chain (error 1130).
+        """
+        from apps import create_app
+        from unittest.mock import patch
+
+        mysql_uri = "mysql+pymysql://rijanauth_user:pass@nonexistent-mysql-host:3306/rijanauth"
+
+        config = {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": mysql_uri,
+            "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+            "SECRET_KEY": "test-mysql-fail-key",
+            "WTF_CSRF_ENABLED": False,
+            "SESSION_COOKIE_SAMESITE": "Lax",
+            "SESSION_COOKIE_SECURE": False,
+        }
+
+        # Simulate a MySQL OperationalError (e.g. error 1130 – host not allowed,
+        # which is the error reported in the original bug report when the app
+        # container's IP is not in the MySQL user's host grant list).
+        import pymysql
+        from sqlalchemy.exc import OperationalError as SAOperationalError
+
+        fake_cause = pymysql.err.OperationalError(
+            1130, "Host 'app-container-ip' is not allowed to connect to this MySQL server"
+        )
+        fake_sa_error = SAOperationalError(
+            statement=None, params=None, orig=fake_cause
+        )
+
+        with patch("flask_sqlalchemy.SQLAlchemy.create_all", side_effect=fake_sa_error):
+            with pytest.raises(RuntimeError) as exc_info:
+                create_app(config)
+
+        assert "Cannot connect to the configured MySQL database" in str(exc_info.value)
