@@ -12,6 +12,12 @@ ENV WORKERS=1
 ENV THREADS=4
 ENV TIMEOUT=600
 
+# Directory used to persist the SQLite database across container rebuilds.
+# Mount a Docker volume or a host bind-mount at this path so the data
+# survives `docker-compose up --build` cycles.
+ENV DB_PATH=/data/db.sqlite3
+RUN mkdir -p /data
+
 COPY requirements.txt .
 
 # install python dependencies

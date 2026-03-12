@@ -6,6 +6,14 @@ services:
     ports:
       - "${APP_PORT:-5085}:5085"
     # ----------------------------------------------------------------
+    # SQLite persistence: the named volume below keeps db.sqlite3 alive
+    # across container rebuilds.  To use a host bind-mount instead,
+    # replace "sqlite_data:/data" with "./data:/data" (and create the
+    # ./data directory on the host first).
+    # ----------------------------------------------------------------
+    volumes:
+      - sqlite_data:/data
+    # ----------------------------------------------------------------
     # Default database: SQLite (no external service needed).
     # To use MySQL instead, uncomment the networks/depends_on blocks
     # below, uncomment the mysql and mysql-setup services further
@@ -101,5 +109,7 @@ services:
 #   db_network:
 #     driver: bridge
 
-# volumes:
-#   mysql_data:
+volumes:
+  sqlite_data:
+  # Uncomment mysql_data when enabling the MySQL service above:
+  # mysql_data:
