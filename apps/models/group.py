@@ -25,7 +25,10 @@ class Group(RealmScopedModel):
     parent_id = Column(String(36), db.ForeignKey('groups.id', ondelete='CASCADE'), nullable=True, index=True)
     
     # Full path including parent groups (e.g., "/parent/child/grandchild")
-    path = Column(String(1024), nullable=False, index=True)
+    # Limited to 500 chars so the composite UNIQUE index (realm_id, path) stays
+    # within MySQL InnoDB's 3072-byte key limit when using utf8mb4 (4 bytes/char):
+    #   36 * 4 + 500 * 4 = 2144 bytes < 3072 bytes
+    path = Column(String(500), nullable=False, index=True)
     
     # Relationships
     realm = relationship('Realm', back_populates='groups')
