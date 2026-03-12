@@ -93,6 +93,7 @@ def configure_database(app):
         from apps.models.event import Event, AdminEvent
         from apps.models.federation import UserFederationProvider, UserFederationMapper, UserFederationLink, FederationSyncLog
         from apps.models.customization import RealmPageCustomization, MediaAsset
+        from apps.models.backup import BackupConfig, BackupRecord
         
         try:
             db.create_all()
@@ -189,13 +190,22 @@ def create_app(config):
     # Configure realm middleware
     configure_realm_middleware(app)
     
+    # Start backup auto-scheduler
+    try:
+        from apps.services.backup_service import BackupService
+        BackupService.init_scheduler(app)
+    except Exception as _e:
+        pass
+    
     # Add RijanAuth context
     @app.context_processor
     def inject_rijanauth_context():
+        from config.seeding import SeedingConfig
         return {
             'rijanauth_version': '0.1.0',
             'current_realm': g.get('realm'),
             'current_realm_name': g.get('realm_name'),
+            'master_realm_name': SeedingConfig.MASTER_REALM_NAME,
         }
     
     return app
