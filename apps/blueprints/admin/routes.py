@@ -4,7 +4,7 @@ RijanAuth - Admin Routes
 Web routes for the administration console
 """
 
-from flask import render_template, redirect, url_for, request, flash, g
+from flask import render_template, redirect, url_for, request, flash, g, Response
 from flask_login import login_required, current_user
 from apps.blueprints.admin import admin_bp
 from apps.models.realm import Realm
@@ -447,6 +447,22 @@ def create_user(realm_name):
         realm=realm,
         realms=realms,
         segment='users'
+    )
+
+
+@admin_bp.route('/<realm_name>/users/import-template')
+@login_required
+def download_import_template(realm_name):
+    """Download a minimal CSV template for bulk user import."""
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+
+    csv_content = 'username,email,password,first_name,last_name\nexample_user,user@example.com,secret123,John,Doe\n'
+    return Response(
+        csv_content,
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=users_import_template.csv'}
     )
 
 
