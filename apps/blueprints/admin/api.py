@@ -4,8 +4,12 @@ RijanAuth - Admin API
 REST API endpoints for admin console
 """
 
+import csv
+import io
+
 from flask import jsonify, request
 from flask_login import login_required
+from sqlalchemy.exc import SQLAlchemyError
 from apps.blueprints.admin import admin_bp
 from apps.models.realm import Realm
 from apps.models.user import User
@@ -135,20 +139,35 @@ def api_create_user(realm_name):
 @login_required
 @log_action(action="update_user", resource_type="user")
 def api_update_user(realm_name, user_id):
-    """Update a user"""
+    """Update a user.
+
+    Standard fields (all optional):
+        email, firstName, lastName, enabled, emailVerified
+
+    Custom attributes are supplied under the ``attributes`` key as a
+    JSON object whose values may be a string or a list of strings::
+
+        {
+            "firstName": "Alice",
+            "attributes": {
+                "phone": "+62811...",
+                "department": ["Engineering"]
+            }
+        }
+    """
     realm = Realm.find_by_name(realm_name)
     if not realm:
         return jsonify({'error': 'Realm not found'}), 404
-    
+
     user = User.find_by_id(user_id)
     if not user or user.realm_id != realm.id:
         return jsonify({'error': 'User not found'}), 404
-    
+
     data = request.get_json()
     if not data:
         return jsonify({'error': 'No data provided'}), 400
-    
-    # Update allowed fields
+
+    # Update standard fields
     if 'email' in data:
         user.email = data['email']
     if 'firstName' in data:
@@ -159,9 +178,23 @@ def api_update_user(realm_name, user_id):
         user.enabled = data['enabled']
     if 'emailVerified' in data:
         user.email_verified = data['emailVerified']
-    
+
+    # Update custom attributes
+    if 'attributes' in data:
+        attrs = data['attributes']
+        if not isinstance(attrs, dict):
+            return jsonify({'error': 'attributes must be a JSON object'}), 400
+        # Normalise values to lists of strings
+        normalised = {}
+        for key, val in attrs.items():
+            if isinstance(val, list):
+                normalised[key] = [str(v) for v in val]
+            else:
+                normalised[key] = [str(val)]
+        UserService.set_attributes(user, normalised)
+
     db.session.commit()
-    return jsonify(user.to_dict())
+    return jsonify(user.to_dict(include_attributes=True))
 
 
 @admin_bp.route('/api/<realm_name>/users/<user_id>', methods=['DELETE'])
@@ -200,6 +233,120 @@ def api_reset_password(realm_name, user_id):
     
     UserService.set_password(user, data['value'])
     return '', 204
+
+
+@admin_bp.route('/api/<realm_name>/users/import', methods=['POST'])
+@login_required
+@log_action(action="import_users", resource_type="user")
+def api_import_users(realm_name):
+    """Import users from a CSV file.
+
+    The CSV must contain at minimum a ``username`` column.  All other
+    columns are optional but recognised:
+
+    * ``email``    – user e-mail address
+    * ``password`` – plain-text password (will be hashed on import)
+    * ``name``     – full name; split on the first space into
+                     first_name / last_name
+    * ``first_name`` / ``firstName`` – first name
+    * ``last_name``  / ``lastName``  – last name
+
+    Any additional column is stored as a custom user attribute.
+
+    Upload the file using ``multipart/form-data`` with the field name
+    ``file``, or send raw CSV text with ``Content-Type: text/csv``.
+
+    Returns a JSON summary::
+
+        {
+            "imported": 3,
+            "skipped": 1,
+            "errors": [
+                {"row": 2, "username": "alice", "error": "Username already exists"}
+            ]
+        }
+    """
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+
+    # Obtain CSV content from either a file upload or raw body
+    if 'file' in request.files:
+        file = request.files['file']
+        raw = file.read().decode('utf-8-sig')
+    elif request.content_type and 'text/csv' in request.content_type:
+        raw = request.data.decode('utf-8-sig')
+    else:
+        return jsonify({'error': 'Provide a CSV file via multipart/form-data (field "file") or raw CSV with Content-Type: text/csv'}), 400
+
+    reader = csv.DictReader(io.StringIO(raw))
+
+    # Normalise header names to lowercase-with-underscores
+    FIELD_ALIASES = {
+        'firstname': 'first_name',
+        'lastname': 'last_name',
+    }
+
+    imported = 0
+    skipped = 0
+    errors = []
+
+    for row_num, row in enumerate(reader, start=2):
+        # Normalise keys
+        normalised_row = {}
+        for k, v in row.items():
+            if k is None:
+                continue
+            key = k.strip().lower().replace(' ', '_')
+            key = FIELD_ALIASES.get(key, key)
+            normalised_row[key] = (v or '').strip()
+
+        username = normalised_row.get('username')
+        if not username:
+            errors.append({'row': row_num, 'error': 'Missing username'})
+            skipped += 1
+            continue
+
+        if User.find_by_username(realm.id, username):
+            errors.append({'row': row_num, 'username': username, 'error': 'Username already exists'})
+            skipped += 1
+            continue
+
+        # Resolve first/last name
+        first_name = normalised_row.get('first_name') or ''
+        last_name = normalised_row.get('last_name') or ''
+        if not first_name and not last_name:
+            full_name = normalised_row.get('name', '')
+            if full_name:
+                parts = full_name.split(' ', 1)
+                first_name = parts[0]
+                last_name = parts[1] if len(parts) > 1 else ''
+
+        email = normalised_row.get('email') or None
+        password = normalised_row.get('password') or None
+
+        # Collect extra columns as custom attributes
+        KNOWN_FIELDS = {'username', 'email', 'password', 'name', 'first_name', 'last_name'}
+        extra_attrs = {k: v for k, v in normalised_row.items() if k not in KNOWN_FIELDS and v}
+
+        try:
+            user = UserService.create_user(
+                realm_id=realm.id,
+                username=username,
+                email=email,
+                password=password,
+                first_name=first_name or None,
+                last_name=last_name or None,
+            )
+            if extra_attrs:
+                UserService.set_attributes(user, {k: [v] for k, v in extra_attrs.items()})
+            imported += 1
+        except (SQLAlchemyError, ValueError) as exc:
+            db.session.rollback()
+            errors.append({'row': row_num, 'username': username, 'error': str(exc)})
+            skipped += 1
+
+    return jsonify({'imported': imported, 'skipped': skipped, 'errors': errors}), 200
 
 
 # =============================================================================
