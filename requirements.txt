@@ -25,6 +25,6 @@ cryptography==41.0.7
 
 # User Federation providers (optional - install as needed)
 ldap3>=2.9.1           # LDAP/Active Directory support
-pymysql>=1.1.0         # MySQL/MariaDB support
-psycopg2-binary>=2.9   # PostgreSQL support
+pymysql>=1.1.0         # MySQL/MariaDB federation provider (user sync only)
+psycopg2-binary>=2.9   # PostgreSQL federation provider (user sync only)
 APScheduler>=3.10.0    # Background sync scheduler
