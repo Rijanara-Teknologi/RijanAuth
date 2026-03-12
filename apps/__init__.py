@@ -119,11 +119,17 @@ def configure_database(app):
                     f'Error: {e}\n'
                     'Please verify DB_HOST, DB_PORT, DB_NAME, DB_USERNAME, '
                     'and DB_PASS, and ensure the MySQL server is running and '
-                    'the user has the required access privileges (error 1130 '
-                    'means the MySQL user lacks a grant for the connecting '
-                    'host – re-create the volume or run: '
-                    "GRANT ALL PRIVILEGES ON rijanauth.* TO "
-                    "'rijanauth_user'@'%'; FLUSH PRIVILEGES;)."
+                    'the user has the required access privileges.\n'
+                    'Error 1045 (Access Denied) or error 1130 (Host not '
+                    'allowed) both indicate the MySQL user lacks the correct '
+                    'grants for the connecting host.  To fix a pre-existing '
+                    'volume, re-create it (docker compose down -v && docker '
+                    'compose up -d), or connect as root and run:\n'
+                    "  CREATE USER IF NOT EXISTS 'rijanauth_user'@'%' "
+                    "IDENTIFIED BY '<your DB_PASS value>';\n"
+                    "  GRANT ALL PRIVILEGES ON rijanauth.* TO "
+                    "'rijanauth_user'@'%';\n"
+                    '  FLUSH PRIVILEGES;'
                 ) from e
 
             # Fallback to SQLite only when no external DB was configured

@@ -16,6 +16,8 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      mysql-setup:
+        condition: service_completed_successfully
     environment:
       - DB_ENGINE=${DB_ENGINE:-mysql}
       - DB_HOST=${DB_HOST:-mysql}
@@ -65,7 +67,39 @@ services:
       test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD 2>/dev/null"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 30s
+
+  # ------------------------------------------------------------------
+  # One-shot service that ensures the app user exists and has the
+  # correct grants.  This runs after MySQL is healthy, so it also
+  # fixes pre-existing volumes where the init script was never run
+  # (the init scripts in docker-entrypoint-initdb.d only execute on
+  # a fresh, empty volume).  CREATE USER IF NOT EXISTS and GRANT are
+  # idempotent, so this is always safe to run.
+  # ------------------------------------------------------------------
+  mysql-setup:
+    container_name: rijanauth_mysql_setup
+    image: mysql:8.0
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set in .env}
+      MYSQL_USER: ${DB_USERNAME:-rijanauth_user}
+      MYSQL_PASSWORD: ${DB_PASS:?DB_PASS must be set in .env}
+      MYSQL_DATABASE: ${DB_NAME:-rijanauth}
+    networks:
+      - db_network
+    entrypoint:
+      - sh
+      - -c
+      - >-
+          mysql -h mysql -uroot -p$$MYSQL_ROOT_PASSWORD
+          -e "CREATE USER IF NOT EXISTS '$$MYSQL_USER'@'%' IDENTIFIED BY '$$MYSQL_PASSWORD';
+          GRANT ALL PRIVILEGES ON $$MYSQL_DATABASE.* TO '$$MYSQL_USER'@'%';
+          FLUSH PRIVILEGES;"
+    restart: "no"
 
 networks:
   db_network:
