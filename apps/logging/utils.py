@@ -54,7 +54,7 @@ def log_action(action, resource_type):
                             'action': action,
                             'resource_type': resource_type,
                             'status': 'success',
-                            'args': kwargs
+                            'route_args': kwargs
                         }
                     )
                 

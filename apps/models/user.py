@@ -167,9 +167,12 @@ class User(RealmScopedModel, UserMixin):
             'requiredActions': self.required_actions or [],
         }
         if include_attributes:
-            data['attributes'] = {
-                attr.name: [attr.value] for attr in self.attributes
-            }
+            attrs = {}
+            for attr in self.attributes:
+                if attr.name not in attrs:
+                    attrs[attr.name] = []
+                attrs[attr.name].append(attr.value)
+            data['attributes'] = attrs
         return data
 
 
