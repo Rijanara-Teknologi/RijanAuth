@@ -41,6 +41,13 @@
                                                 <h5><i class="feather icon-award mr-2"></i>Realm Roles</h5>
                                             </div>
                                             <div class="col-md-6 text-right">
+                                                <a href="{{ url_for('admin.api_export_roles', realm_name=realm.name) }}" class="btn btn-outline-secondary mr-1">
+                                                    <i class="feather icon-download mr-1"></i> Export CSV
+                                                </a>
+                                                <button class="btn btn-outline-primary mr-1" data-toggle="modal"
+                                                    data-target="#importRolesModal">
+                                                    <i class="feather icon-upload mr-1"></i> Import CSV
+                                                </button>
                                                 <button class="btn btn-primary" data-toggle="modal"
                                                     data-target="#createRoleModal">
                                                     <i class="feather icon-plus mr-1"></i> Create Role
@@ -132,6 +139,37 @@
     </div>
 </div>
 
+<!-- Import Roles Modal -->
+<div class="modal fade" id="importRolesModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Import Roles from CSV</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <form id="importRolesForm" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="feather icon-info mr-2"></i>
+                        Role names are automatically formatted: converted to lowercase and spaces replaced with underscores (e.g. <code>Guru Quran</code> → <code>guru_quran</code>).
+                        Roles that already exist in the realm are skipped.
+                        <a href="{{ url_for('admin.download_roles_import_template', realm_name=realm.name) }}" class="alert-link">Download template</a>
+                    </div>
+                    <div class="form-group">
+                        <label>CSV File <span class="text-danger">*</span></label>
+                        <input type="file" class="form-control-file" name="file" accept=".csv" required>
+                    </div>
+                    <div id="importRolesResult" class="mt-2" style="display:none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Import</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <!-- Create Role Modal -->
 <div class="modal fade" id="createRoleModal" tabindex="-1">
     <div class="modal-dialog">
@@ -218,6 +256,39 @@
 {% block javascripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    var RELOAD_DELAY_MS = 1500;
+
+    // Import Roles Form
+    var importRolesForm = document.getElementById('importRolesForm');
+    if (importRolesForm) {
+        importRolesForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var formData = new FormData(this);
+            var resultDiv = document.getElementById('importRolesResult');
+            resultDiv.style.display = 'none';
+            fetch('{{ url_for("admin.api_import_roles", realm_name=realm.name) }}', {
+                method: 'POST',
+                body: formData
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var html = '<div class="alert alert-success">Imported: <strong>' + data.imported + '</strong>, Skipped: <strong>' + data.skipped + '</strong></div>';
+                if (data.errors && data.errors.length) {
+                    html += '<ul class="list-unstyled small text-danger">';
+                    data.errors.forEach(function(err) { html += '<li>Row ' + err.row + ': ' + (err.name ? err.name + ' – ' : '') + err.error + '</li>'; });
+                    html += '</ul>';
+                }
+                resultDiv.innerHTML = html;
+                resultDiv.style.display = 'block';
+                if (data.imported > 0) { setTimeout(function() { location.reload(); }, RELOAD_DELAY_MS); }
+            })
+            .catch(function() {
+                resultDiv.innerHTML = '<div class="alert alert-danger">Import failed. Please check the file and try again.</div>';
+                resultDiv.style.display = 'block';
+            });
+        });
+    }
+
     // Edit Role Modal
     document.querySelectorAll('.btn-edit-role').forEach(function(btn) {
         btn.addEventListener('click', function() {
