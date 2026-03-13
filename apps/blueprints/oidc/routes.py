@@ -640,6 +640,32 @@ def _handle_client_credentials_grant(realm):
 # Token Generation Helpers
 # =============================================================================
 
+def _apply_standard_oidc_claims_fallback(payload, user, scope):
+    """
+    Ensure standard OIDC claims are present for the requested scopes.
+    Called after protocol mappers run so that any claim already added by a
+    mapper is never overwritten.
+    """
+    scope_list = scope.split() if scope else []
+    if 'profile' in scope_list:
+        if 'preferred_username' not in payload:
+            payload['preferred_username'] = user.username
+        if 'name' not in payload:
+            full_name = f"{user.first_name or ''} {user.last_name or ''}".strip()
+            if full_name:
+                payload['name'] = full_name
+        if 'given_name' not in payload and user.first_name:
+            payload['given_name'] = user.first_name
+        if 'family_name' not in payload and user.last_name:
+            payload['family_name'] = user.last_name
+    if 'email' in scope_list:
+        if 'email' not in payload and user.email:
+            payload['email'] = user.email
+        if 'email_verified' not in payload:
+            payload['email_verified'] = bool(user.email_verified)
+    return payload
+
+
 def _generate_access_token(realm, client, user, scope):
     """Generate JWT access token with protocol mapper processing"""
     from apps.services.mapper_service import MapperService
@@ -668,14 +694,10 @@ def _generate_access_token(realm, client, user, scope):
         payload = MapperService.apply_mappers(payload, user, client, 'access', scope)
     except Exception as e:
         current_app.logger.error(f"Error applying mappers to access token: {str(e)}")
-        # Fallback to basic claims if mapper fails
-        payload['preferred_username'] = user.username
-        payload['email'] = user.email
-        payload['email_verified'] = user.email_verified
-        payload['name'] = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username
-        payload['given_name'] = user.first_name
-        payload['family_name'] = user.last_name
-    
+
+    # Fallback: add standard OIDC claims for requested scopes when no mapper added them
+    payload = _apply_standard_oidc_claims_fallback(payload, user, scope)
+
     return create_jwt(payload, current_app.config.get('SECRET_KEY', 'secret'))
 
 
@@ -728,14 +750,10 @@ def _generate_id_token(realm, client, user, nonce, scope='openid'):
         payload = MapperService.apply_mappers(payload, user, client, 'id', scope)
     except Exception as e:
         current_app.logger.error(f"Error applying mappers to ID token: {str(e)}")
-        # Fallback to basic claims if mapper fails
-        payload['preferred_username'] = user.username
-        payload['email'] = user.email
-        payload['email_verified'] = user.email_verified
-        payload['name'] = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username
-        payload['given_name'] = user.first_name
-        payload['family_name'] = user.last_name
-    
+
+    # Fallback: add standard OIDC claims for requested scopes when no mapper added them
+    payload = _apply_standard_oidc_claims_fallback(payload, user, scope)
+
     return create_jwt(payload, current_app.config.get('SECRET_KEY', 'secret'))
 
 
@@ -805,32 +823,26 @@ def userinfo(realm_name):
     user = User.find_by_id(user_id)
     if not user:
         return jsonify({'error': 'invalid_token', 'error_description': 'User not found'}), 401
-    
-    # Filter out protected/system claims that shouldn't be in userinfo response
-    # These are the same claims that appear when you decode the JWT on jwt.io
-    protected_claims = {
-        'iss',      # Issuer
-        'aud',      # Audience
-        'exp',      # Expiration time
-        'iat',      # Issued at
-        'jti',      # JWT ID
-        'auth_time', # Authentication time
-        'nonce',    # Nonce
-        'acr',      # Authentication context class reference
-        'azp',      # Authorized party
-        'typ',      # Token type
-        'scope'     # Scope
-    }
-    
-    # Extract user claims from token payload (these match what's in the decoded JWT)
-    userinfo_data = {}
-    for key, value in token_payload.items():
-        if key not in protected_claims and value is not None:
-            userinfo_data[key] = value
-    
-    # Ensure 'sub' is always present (required by OIDC spec)
-    userinfo_data['sub'] = user.id
-    
+
+    # Get scope and client from token to drive mapper selection
+    scope = token_payload.get('scope', 'openid')
+    client_id = token_payload.get('azp')
+    token_client = Client.find_by_client_id(realm.id, client_id) if client_id else None
+
+    # Build userinfo using protocol mappers (token_type='userinfo')
+    from apps.services.mapper_service import MapperService
+    userinfo_data = {'sub': str(user.id)}
+    if token_client:
+        try:
+            userinfo_data = MapperService.apply_mappers(
+                userinfo_data, user, token_client, 'userinfo', scope
+            )
+        except Exception as e:
+            current_app.logger.error(f"Error applying mappers to userinfo: {str(e)}")
+
+    # Fallback: add standard OIDC claims for requested scopes when no mapper added them
+    userinfo_data = _apply_standard_oidc_claims_fallback(userinfo_data, user, scope)
+
     return jsonify(userinfo_data)
 
 

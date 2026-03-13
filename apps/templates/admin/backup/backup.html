@@ -47,7 +47,7 @@
                                 <div class="row align-items-center">
                                     <div class="col-md-12">
                                         <div class="page-header-title">
-                                            <h5 class="m-b-10"><i class="feather icon-archive mr-2"></i>Backup</h5>
+                                            <h5 class="m-b-10"><i class="feather icon-server mr-2"></i>Backup</h5>
                                         </div>
                                         <ul class="breadcrumb">
                                             <li class="breadcrumb-item"><a href="{{ url_for('admin.index') }}"><i class="feather icon-home"></i></a></li>
@@ -90,7 +90,7 @@
                                                 <div class="col-md-3 col-6 mb-3">
                                                     <div class="provider-card p-3 text-center {% if config and config.storage_provider == key %}selected{% endif %}"
                                                          onclick="selectProvider('{{ key }}')">
-                                                        <i class="fab {{ info.icon }} fa-2x mb-2 text-primary"></i>
+                                                        <i class="{{ info.icon_prefix }} {{ info.icon }} fa-2x mb-2 text-primary"></i>
                                                         <div class="font-weight-bold small">{{ info.label }}</div>
                                                         <i class="feather icon-check-circle text-primary provider-check mt-1"
                                                            style="display:{{ 'inline-block' if config and config.storage_provider == key else 'none' }}"></i>

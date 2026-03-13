@@ -167,3 +167,193 @@ def test_new_realm_token_contains_standard_claims(client, app):
             if realm_obj:
                 db.session.delete(realm_obj)
                 db.session.commit()
+
+
+def test_userinfo_returns_profile_and_email_claims(client, app):
+    """
+    Regression test: /userinfo must return standard OIDC profile and email claims
+    (preferred_username, name, email, email_verified, etc.) when the access token
+    was requested with 'profile email' scopes.  This must work even for clients
+    that have no explicit protocol mapper configuration.
+    """
+    from apps.services.realm_service import RealmService
+    from apps.services.client_service import ClientService
+    from apps.models.user import User, Credential
+    from apps.utils.crypto import hash_password
+
+    with app.app_context():
+        realm = RealmService.create_realm('userinfo-test-realm', 'UserInfo Test Realm')
+        realm_id = realm.id
+        realm_name = realm.name
+
+        oidc_client = ClientService.create_client(
+            realm_id=realm_id,
+            client_id='userinfo-test-client',
+            name='UserInfo Test Client',
+            direct_access_grants_enabled=True,
+        )
+        client_id_str = oidc_client.client_id
+        client_secret = oidc_client.secret
+
+        user = User(
+            realm_id=realm_id,
+            username='uiuser',
+            email='uiuser@example.com',
+            first_name='UI',
+            last_name='User',
+            enabled=True,
+            email_verified=True,
+        )
+        db.session.add(user)
+        db.session.flush()
+        cred = Credential.create_password(user.id, hash_password('testpass123!'))
+        db.session.add(cred)
+        db.session.commit()
+
+    try:
+        # Get an access token via password grant with profile + email scopes
+        token_response = client.post(
+            f'/auth/realms/{realm_name}/protocol/openid-connect/token',
+            data={
+                'grant_type': 'password',
+                'client_id': client_id_str,
+                'client_secret': client_secret,
+                'username': 'uiuser',
+                'password': 'testpass123!',
+                'scope': 'openid profile email',
+            },
+        )
+        assert token_response.status_code == 200, (
+            f"Token request failed: {token_response.get_data(as_text=True)}"
+        )
+        access_token = token_response.json['access_token']
+
+        # Call the userinfo endpoint
+        userinfo_response = client.get(
+            f'/auth/realms/{realm_name}/protocol/openid-connect/userinfo',
+            headers={'Authorization': f'Bearer {access_token}'},
+        )
+        assert userinfo_response.status_code == 200, (
+            f"UserInfo request failed: {userinfo_response.get_data(as_text=True)}"
+        )
+        info = userinfo_response.json
+
+        assert 'sub' in info, "sub must always be present in userinfo response"
+        assert 'preferred_username' in info, (
+            "preferred_username must be present when 'profile' scope was requested"
+        )
+        assert info['preferred_username'] == 'uiuser'
+        assert 'email' in info, (
+            "email must be present when 'email' scope was requested"
+        )
+        assert info['email'] == 'uiuser@example.com'
+        assert 'email_verified' in info
+        assert info['email_verified'] is True
+        assert 'name' in info
+        assert info['name'] == 'UI User'
+        assert 'given_name' in info
+        assert info['given_name'] == 'UI'
+        assert 'family_name' in info
+        assert info['family_name'] == 'User'
+    finally:
+        with app.app_context():
+            from apps.models.realm import Realm
+            realm_obj = Realm.find_by_name(realm_name)
+            if realm_obj:
+                db.session.delete(realm_obj)
+                db.session.commit()
+
+
+def test_userinfo_fallback_when_no_mappers_configured(client, app):
+    """
+    When a client has no scope mappings at all (no default_client_scopes,
+    no ClientScopeMapping records), the userinfo endpoint must still return
+    standard OIDC claims for 'profile' and 'email' scopes via the built-in
+    fallback in the userinfo handler.
+    """
+    from apps.models.user import User, Credential
+    from apps.models.client import Client as OIDCClient
+    from apps.models.realm import Realm
+    from apps.utils.crypto import hash_password
+
+    with app.app_context():
+        # Minimal realm — no RealmService so we skip scope seeding
+        bare_realm = Realm(name='bare-realm', display_name='Bare Realm', enabled=True)
+        db.session.add(bare_realm)
+        db.session.flush()
+        realm_id = bare_realm.id
+        realm_name = bare_realm.name
+
+        # Client with NO scope mappings and direct access grants enabled
+        bare_client = OIDCClient(
+            realm_id=realm_id,
+            client_id='bare-client',
+            name='Bare Client',
+            enabled=True,
+            direct_access_grants_enabled=True,
+            protocol='openid-connect',
+        )
+        db.session.add(bare_client)
+        db.session.flush()
+        bare_client_id = bare_client.client_id
+        bare_client_secret = bare_client.secret
+
+        user = User(
+            realm_id=realm_id,
+            username='bareuser',
+            email='bareuser@example.com',
+            first_name='Bare',
+            last_name='User',
+            enabled=True,
+            email_verified=True,
+        )
+        db.session.add(user)
+        db.session.flush()
+        cred = Credential.create_password(user.id, hash_password('testpass123!'))
+        db.session.add(cred)
+        db.session.commit()
+
+    try:
+        token_response = client.post(
+            f'/auth/realms/{realm_name}/protocol/openid-connect/token',
+            data={
+                'grant_type': 'password',
+                'client_id': bare_client_id,
+                'client_secret': bare_client_secret,
+                'username': 'bareuser',
+                'password': 'testpass123!',
+                'scope': 'openid profile email',
+            },
+        )
+        assert token_response.status_code == 200, (
+            f"Token request failed: {token_response.get_data(as_text=True)}"
+        )
+        access_token = token_response.json['access_token']
+
+        userinfo_response = client.get(
+            f'/auth/realms/{realm_name}/protocol/openid-connect/userinfo',
+            headers={'Authorization': f'Bearer {access_token}'},
+        )
+        assert userinfo_response.status_code == 200, (
+            f"UserInfo request failed: {userinfo_response.get_data(as_text=True)}"
+        )
+        info = userinfo_response.json
+
+        # Core fix: even with zero mappers, standard claims must be returned
+        assert 'sub' in info
+        assert 'preferred_username' in info, (
+            "preferred_username must appear via fallback when no mappers are configured"
+        )
+        assert info['preferred_username'] == 'bareuser'
+        assert 'email' in info
+        assert info['email'] == 'bareuser@example.com'
+        assert 'email_verified' in info
+        assert info['email_verified'] is True
+        assert 'name' in info
+        assert info['name'] == 'Bare User'
+    finally:
+        with app.app_context():
+            realm_obj = Realm.find_by_name(realm_name)
+            if realm_obj:
+                db.session.delete(realm_obj)
+                db.session.commit()

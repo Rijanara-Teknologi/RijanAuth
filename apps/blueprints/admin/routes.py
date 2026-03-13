@@ -1999,6 +1999,7 @@ PROVIDER_INFO = {
     'google_drive': {
         'label': 'Google Drive',
         'icon': 'fa-google-drive',
+        'icon_prefix': 'fab',
         'dev_url': 'https://console.cloud.google.com/',
         'dev_label': 'Google Cloud Console',
         'fields': [
@@ -2020,6 +2021,7 @@ PROVIDER_INFO = {
     'mega': {
         'label': 'Mega.nz',
         'icon': 'fa-cloud',
+        'icon_prefix': 'fas',
         'dev_url': 'https://mega.nz/',
         'dev_label': 'Mega.nz',
         'fields': [
@@ -2038,6 +2040,7 @@ PROVIDER_INFO = {
     'dropbox': {
         'label': 'Dropbox',
         'icon': 'fa-dropbox',
+        'icon_prefix': 'fab',
         'dev_url': 'https://www.dropbox.com/developers/apps',
         'dev_label': 'Dropbox App Console',
         'fields': [
@@ -2057,6 +2060,7 @@ PROVIDER_INFO = {
     'box': {
         'label': 'Box',
         'icon': 'fa-box',
+        'icon_prefix': 'fas',
         'dev_url': 'https://developer.box.com/',
         'dev_label': 'Box Developer Console',
         'fields': [
@@ -2076,6 +2080,7 @@ PROVIDER_INFO = {
     's3': {
         'label': 'S3 Object Storage',
         'icon': 'fa-aws',
+        'icon_prefix': 'fab',
         'dev_url': 'https://aws.amazon.com/s3/',
         'dev_label': 'AWS Console',
         'fields': [
