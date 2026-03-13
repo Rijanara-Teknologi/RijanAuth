@@ -2250,21 +2250,18 @@ def backup_index(realm_name):
             return redirect(url_for('admin.backup_index', realm_name=realm_name))
 
         elif action == 'manual_backup':
-            zip_password = request.form.get('backup_password', '').strip()
-            if not zip_password:
-                flash('A ZIP password is required to create a backup.', 'error')
-            else:
-                try:
-                    record = BackupService.create_backup(
-                        zip_password,
-                        triggered_by_user_id=str(current_user.id),
-                    )
-                    if record.status == 'success':
-                        flash(f'Backup created successfully: {record.filename}', 'success')
-                    else:
-                        flash(f'Backup failed: {record.error_message}', 'error')
-                except Exception as exc:
-                    flash(f'Backup error: {exc}', 'error')
+            zip_password = request.form.get('backup_password', '').strip() or None
+            try:
+                record = BackupService.create_backup(
+                    zip_password,
+                    triggered_by_user_id=str(current_user.id),
+                )
+                if record.status == 'success':
+                    flash(f'Backup created successfully: {record.filename}', 'success')
+                else:
+                    flash(f'Backup failed: {record.error_message}', 'error')
+            except Exception as exc:
+                flash(f'Backup error: {exc}', 'error')
 
             return redirect(url_for('admin.backup_index', realm_name=realm_name))
 
@@ -2315,11 +2312,9 @@ def backup_restore(realm_name):
 
         if not record_id:
             flash('Please select a backup to restore.', 'error')
-        elif not zip_password:
-            flash('A ZIP password is required to restore a backup.', 'error')
         else:
             try:
-                stats = BackupService.restore_from_record(record_id, zip_password)
+                stats = BackupService.restore_from_record(record_id, zip_password or None)
                 flash(
                     f'Restore completed: {stats["tables_restored"]} tables, '
                     f'{stats["rows_restored"]} rows restored.',

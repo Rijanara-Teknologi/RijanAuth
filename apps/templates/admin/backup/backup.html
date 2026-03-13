@@ -159,13 +159,13 @@
 
                                             <!-- ZIP Password -->
                                             <div class="form-group">
-                                                <label for="zip_password">ZIP Encryption Password</label>
+                                                <label for="zip_password">ZIP Encryption Password <span class="text-muted">(optional)</span></label>
                                                 <input type="password" class="form-control" id="zip_password"
                                                        name="zip_password" autocomplete="new-password"
-                                                       placeholder="Set password to protect the backup archive">
+                                                       placeholder="Leave blank for no encryption">
                                                 <small class="form-text text-muted">
                                                     AES-256 encryption. You will need this password to restore the backup.
-                                                    Leave blank to keep the existing password.
+                                                    Leave blank to keep the existing password (or create an unencrypted backup).
                                                 </small>
                                             </div>
 
@@ -189,10 +189,10 @@
                                         <form method="POST">
                                             <input type="hidden" name="action" value="manual_backup">
                                             <div class="form-group">
-                                                <label for="backup_password">ZIP Password</label>
+                                                <label for="backup_password">ZIP Password <span class="text-muted">(optional)</span></label>
                                                 <input type="password" class="form-control" id="backup_password"
-                                                       name="backup_password" required
-                                                       placeholder="Enter ZIP password for this backup">
+                                                       name="backup_password"
+                                                       placeholder="Leave blank for an unencrypted backup">
                                             </div>
                                             <button type="submit" class="btn btn-success"
                                                     onclick="return confirm('Start backup now?')">
