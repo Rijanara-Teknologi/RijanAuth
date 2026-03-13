@@ -125,19 +125,52 @@ class TestImportUsers:
         result = resp.get_json()
         assert result['imported'] == 1
 
-    def test_import_skips_duplicate(self, app, client, admin_user, test_realm, test_user):
-        """Import skips users whose username already exists."""
+    def test_import_updates_existing_user(self, app, client, admin_user, test_realm, test_user):
+        """Import updates a user whose username already exists instead of reporting an error."""
         url = self._import_url(test_realm.name)
+        realm_id = test_realm.id
         existing_username = test_user.username
         _login(client)
 
-        csv_content = f'username,email,password\n{existing_username},dup@example.com,pass\n'
-        resp = client.post(url, data={'file': (io.BytesIO(csv_content.encode()), 'dup.csv')},
+        csv_content = (
+            f'username,first_name,last_name,email\n'
+            f'{existing_username},UpdatedFirst,UpdatedLast,updated@example.com\n'
+        )
+        resp = client.post(url, data={'file': (io.BytesIO(csv_content.encode()), 'update.csv')},
                            content_type='multipart/form-data')
         result = resp.get_json()
-        assert result['skipped'] == 1
+        assert result['updated'] == 1
         assert result['imported'] == 0
-        assert len(result['errors']) == 1
+        assert result['skipped'] == 0
+        assert result['errors'] == []
+
+        with app.app_context():
+            u = User.find_by_username(realm_id, existing_username)
+            assert u is not None
+            assert u.first_name == 'UpdatedFirst'
+            assert u.last_name == 'UpdatedLast'
+            assert u.email == 'updated@example.com'
+
+    def test_import_existing_user_preserves_id_and_username(self, app, client, admin_user, test_realm, test_user):
+        """Import never changes id or username for an existing user."""
+        url = self._import_url(test_realm.name)
+        realm_id = test_realm.id
+        existing_username = test_user.username
+        original_id = test_user.id
+        _login(client)
+
+        csv_content = (
+            f'username,first_name,last_name\n'
+            f'{existing_username},NewFirst,NewLast\n'
+        )
+        resp = client.post(url, data={'file': (io.BytesIO(csv_content.encode()), 'id_check.csv')},
+                           content_type='multipart/form-data')
+        assert resp.get_json()['updated'] == 1
+
+        with app.app_context():
+            u = User.find_by_username(realm_id, existing_username)
+            assert u.id == original_id
+            assert u.username == existing_username
 
     def test_import_skips_missing_username(self, app, client, admin_user, test_realm):
         """Row with no username is reported as an error."""

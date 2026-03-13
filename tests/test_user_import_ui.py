@@ -122,13 +122,14 @@ class TestUIImportUsers:
         assert result['imported'] == 2
         assert result['skipped'] == 0
 
-    def test_ui_import_reports_duplicate(self, app, client, admin_user, test_realm, test_user):
-        """Import via the UI reports duplicates without crashing."""
+    def test_ui_import_updates_duplicate(self, app, client, admin_user, test_realm, test_user):
+        """Import via the UI updates existing users instead of reporting them as errors."""
         realm_name = test_realm.name
+        realm_id = test_realm.id
         existing_username = test_user.username  # capture before session closes
         _login(client)
 
-        csv_content = f'username,email\n{existing_username},dup@example.com\n'
+        csv_content = f'username,first_name,last_name\n{existing_username},UIFirst,UILast\n'
         data = {'file': (io.BytesIO(csv_content.encode()), 'dup.csv')}
         resp = client.post(
             self._import_url(realm_name),
@@ -137,9 +138,15 @@ class TestUIImportUsers:
         )
         assert resp.status_code == 200
         result = resp.get_json()
-        assert result['skipped'] == 1
+        assert result['updated'] == 1
         assert result['imported'] == 0
-        assert len(result['errors']) == 1
+        assert result['skipped'] == 0
+        assert result['errors'] == []
+
+        with app.app_context():
+            u = User.find_by_username(realm_id, existing_username)
+            assert u.first_name == 'UIFirst'
+            assert u.last_name == 'UILast'
 
     def test_ui_import_no_file_returns_400(self, client, admin_user, test_realm):
         """Missing file in the multipart request returns 400."""
