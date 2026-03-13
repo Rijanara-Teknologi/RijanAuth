@@ -7,7 +7,9 @@ What gets backed up:
   1. Database  – full JSON dump of every table
   2. Media     – apps/static/media/ (uploaded logos / backgrounds)
 
-The archive is a password-protected AES-256 ZIP (via pyzipper).
+The archive is a ZIP file (via pyzipper).  When a password is supplied, it is
+protected with AES-256 encryption; without a password the archive is created
+without encryption.
 Cloud providers: Google Drive, Mega.nz, Dropbox, Box
 """
 
@@ -110,9 +112,11 @@ def _collect_media_files() -> Dict[str, bytes]:
 # Build ZIP archive
 # =============================================================================
 
-def _build_zip(password: str) -> Tuple[bytes, int]:
+def _build_zip(password: Optional[str]) -> Tuple[bytes, int]:
     """
-    Build a password-protected AES-256 ZIP and return (bytes, size).
+    Build a ZIP archive and return (bytes, size).
+    If a password is provided, the archive is AES-256 encrypted.
+    If password is empty or None, a plain (unencrypted) ZIP is created.
     Raises RuntimeError if pyzipper is not available.
     """
     if not PYZIPPER_AVAILABLE:
@@ -121,12 +125,18 @@ def _build_zip(password: str) -> Tuple[bytes, int]:
         )
 
     buf = io.BytesIO()
-    pwd_bytes = password.encode('utf-8')
 
-    with pyzipper.AESZipFile(buf, 'w',
-                             compression=pyzipper.ZIP_DEFLATED,
-                             encryption=pyzipper.WZ_AES) as zf:
-        zf.setpassword(pwd_bytes)
+    if password:
+        pwd_bytes = password.encode('utf-8')
+        zip_ctx = pyzipper.AESZipFile(buf, 'w',
+                                      compression=pyzipper.ZIP_DEFLATED,
+                                      encryption=pyzipper.WZ_AES)
+        zip_ctx.setpassword(pwd_bytes)
+    else:
+        zip_ctx = pyzipper.ZipFile(buf, 'w',
+                                   compression=pyzipper.ZIP_DEFLATED)
+
+    with zip_ctx as zf:
 
         # 1. Database JSON
         db_dump = _get_db_dump()
@@ -362,7 +372,7 @@ class BackupService:
     # ── Create backup ─────────────────────────────────────────────────────────
 
     @classmethod
-    def create_backup(cls, password: str,
+    def create_backup(cls, password: Optional[str] = None,
                       triggered_by_user_id: Optional[str] = None) -> BackupRecord:
         """
         Build a ZIP archive of the database + media files and upload it
@@ -377,9 +387,6 @@ class BackupService:
                 "No backup configuration found. "
                 "Please configure a cloud storage provider first."
             )
-        if not password:
-            raise ValueError("A ZIP password is required for backup.")
-
         timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
         filename = f"rijanauth_backup_{timestamp}.zip"
 
@@ -445,7 +452,7 @@ class BackupService:
 
     @classmethod
     def restore_from_record(cls, record_id: str,
-                            password: str) -> Dict[str, Any]:
+                            password: Optional[str] = None) -> Dict[str, Any]:
         """
         Download a backup ZIP by its BackupRecord ID, decrypt it
         and restore the database from the embedded db_export.json.
@@ -487,7 +494,7 @@ class BackupService:
         raise ValueError(f"Unknown storage provider: {provider}")
 
     @classmethod
-    def _restore_zip(cls, zip_data: bytes, password: str) -> Dict[str, Any]:
+    def _restore_zip(cls, zip_data: bytes, password: Optional[str]) -> Dict[str, Any]:
         if not PYZIPPER_AVAILABLE:
             raise RuntimeError("pyzipper is not installed.")
 
@@ -496,7 +503,8 @@ class BackupService:
 
         try:
             zf_ctx = pyzipper.AESZipFile(buf, 'r')
-            zf_ctx.setpassword(password.encode('utf-8'))
+            if password:
+                zf_ctx.setpassword(password.encode('utf-8'))
             # Test decryption early by reading the file list
             zf_ctx.testzip()
         except (RuntimeError, Exception) as exc:
