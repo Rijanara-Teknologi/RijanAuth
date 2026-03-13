@@ -671,7 +671,7 @@ def create_client(realm_name):
     return redirect(url_for('admin.clients_list', realm_name=realm_name))
 
 
-@admin_bp.route('/<realm_name>/clients/<client_id>')
+@admin_bp.route('/<realm_name>/clients/<client_id>', methods=['GET', 'POST'])
 @login_required
 def client_detail(realm_name, client_id):
     """Client detail page"""
@@ -684,6 +684,27 @@ def client_detail(realm_name, client_id):
         flash('Client not found', 'error')
         return redirect(url_for('admin.clients_list', realm_name=realm_name))
     
+    if request.method == 'POST':
+        # Parse redirect URIs - one per line
+        redirect_uris_raw = request.form.get('redirect_uris', '')
+        redirect_uris = [u.strip() for u in redirect_uris_raw.splitlines() if u.strip()]
+
+        ClientService.update_client(client,
+            # Use the submitted name, or fall back to client_id to keep it non-empty
+            name=request.form.get('name', '').strip() or client.client_id,
+            description=request.form.get('description', '').strip(),
+            # Treat empty string as NULL so the column remains nullable
+            root_url=request.form.get('root_url', '').strip() if request.form.get('root_url', '').strip() else None,
+            redirect_uris=redirect_uris,
+            standard_flow_enabled='standard_flow_enabled' in request.form,
+            implicit_flow_enabled='implicit_flow_enabled' in request.form,
+            direct_access_grants_enabled='direct_access_grants_enabled' in request.form,
+            service_accounts_enabled='service_accounts_enabled' in request.form,
+            public_client='public_client' in request.form,
+        )
+        flash('Client settings saved successfully', 'success')
+        return redirect(url_for('admin.client_detail', realm_name=realm_name, client_id=client_id))
+
     realms = Realm.query.all()
     return render_template(
         'admin/clients/detail.html',

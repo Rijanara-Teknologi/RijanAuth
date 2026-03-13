@@ -1,7 +1,7 @@
 import pytest
 import jwt
 from apps import db
-from apps.models.client import ProtocolMapper, ClientScopeMapping
+from apps.models.client import ProtocolMapper
 
 def test_custom_claim_in_token(client, test_realm, test_client, test_user):
     """Verify custom claims appear in JWT access token"""
