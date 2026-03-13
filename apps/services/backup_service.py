@@ -211,9 +211,10 @@ def _upload_mega(zip_bytes: bytes, filename: str,
     """
     try:
         from mega import Mega
-    except ImportError:
+    except (ImportError, AttributeError):
         raise RuntimeError(
-            "mega.py is not installed. Run: pip install mega.py"
+            "mega.py is not installed or failed to import. "
+            "Run: pip install mega.py tenacity>=8.0.0"
         )
 
     mega = Mega()
@@ -222,16 +223,22 @@ def _upload_mega(zip_bytes: bytes, filename: str,
     folder_name = creds.get('folder', 'RijanAuth Backups')
     folder = m.find(folder_name)
     if not folder:
-        folder = m.create_folder(folder_name)
-        if isinstance(folder, dict):
-            folder = list(folder.values())[0]
+        created = m.create_folder(folder_name)
+        # create_folder returns {'folder_name': handle_string}
+        if isinstance(created, dict):
+            folder_dest = list(created.values())[0]
+        else:
+            folder_dest = None  # fallback: upload to root
+    else:
+        # find() returns (handle, node) – use the handle string as dest
+        folder_dest = folder[0]
 
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
     try:
         tmp.write(zip_bytes)
         tmp.flush()
         tmp.close()
-        uploaded = m.upload(tmp.name, dest=folder)
+        uploaded = m.upload(tmp.name, dest=folder_dest)
     finally:
         try:
             os.unlink(tmp.name)
@@ -691,8 +698,11 @@ def _download_google_drive(file_id: str, creds: Dict[str, Any]) -> bytes:
 def _download_mega(file_handle: str, creds: Dict[str, Any]) -> bytes:
     try:
         from mega import Mega
-    except ImportError:
-        raise RuntimeError("mega.py is not installed.")
+    except (ImportError, AttributeError):
+        raise RuntimeError(
+            "mega.py is not installed or failed to import. "
+            "Run: pip install mega.py tenacity>=8.0.0"
+        )
 
     mega = Mega()
     m = mega.login(creds['email'], creds['password'])
