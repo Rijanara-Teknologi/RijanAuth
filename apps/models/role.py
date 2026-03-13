@@ -83,6 +83,11 @@ class Role(RealmScopedModel):
         """Get all roles for a client"""
         return cls.query.filter_by(client_id=client_id).all()
     
+    @property
+    def user_count(self):
+        """Count of users directly assigned this role"""
+        return self.role_mappings.filter_by(group_id=None).count()
+
     def get_effective_roles(self):
         """Get this role plus all composite child roles (recursive)"""
         roles = {self}
