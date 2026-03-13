@@ -208,7 +208,7 @@
                                 <!-- Manual Backup Trigger -->
                                 <div class="card">
                                     <div class="card-header">
-                                        <h5><i class="feather icon-play-circle mr-2"></i>Run Backup Now</h5>
+                                        <h5><i class="feather icon-upload-cloud mr-2"></i>Upload to Cloud &amp; Save</h5>
                                     </div>
                                     <div class="card-body">
                                         <p class="text-muted">
@@ -226,6 +226,35 @@
                                             <button type="submit" class="btn btn-success"
                                                     onclick="return confirm('Start backup now?')">
                                                 <i class="feather icon-upload-cloud mr-1"></i> Start Backup
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+
+                                <!-- Download Backup (local, no cloud storage needed) -->
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5><i class="feather icon-download mr-2"></i>Download Backup</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="text-muted">
+                                            Download a complete backup of the RijanAuth database and media files
+                                            directly to your computer. No cloud storage configuration required.
+                                        </p>
+                                        <form method="POST"
+                                              action="{{ url_for('admin.backup_download', realm_name=realm.name) }}">
+                                            <div class="form-group">
+                                                <label for="download_password">ZIP Password <span class="text-muted">(optional)</span></label>
+                                                <input type="password" class="form-control" id="download_password"
+                                                       name="download_password"
+                                                       placeholder="Leave blank for an unencrypted backup">
+                                                <small class="form-text text-muted">
+                                                    AES-256 encryption. You will need this password to restore the backup.
+                                                </small>
+                                            </div>
+                                            <button type="submit" class="btn btn-info"
+                                                    onclick="return confirm('Download backup now?')">
+                                                <i class="feather icon-download mr-1"></i> Download Backup
                                             </button>
                                         </form>
                                     </div>

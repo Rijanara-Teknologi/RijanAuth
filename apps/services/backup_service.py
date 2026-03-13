@@ -487,6 +487,48 @@ class BackupService:
             return _upload_s3(zip_data, filename, creds)
         raise ValueError(f"Unknown storage provider: {provider}")
 
+    # ── Download (local / manual) ─────────────────────────────────────────────
+
+    @classmethod
+    def build_download_backup(cls, password: Optional[str] = None,
+                              triggered_by_user_id: Optional[str] = None
+                              ) -> Tuple[bytes, str, int]:
+        """
+        Build a ZIP archive and return the raw bytes for direct browser download.
+        No cloud storage configuration is required.
+
+        Also creates a BackupRecord with storage_provider='local' so the download
+        appears in the backup history.
+
+        Returns (zip_bytes, filename, size_bytes).
+        """
+        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        filename = f"rijanauth_backup_{timestamp}.zip"
+
+        record = BackupRecord(
+            filename=filename,
+            storage_provider='local',
+            status='in_progress',
+            created_by_user_id=triggered_by_user_id,
+            backed_up_at=datetime.utcnow(),
+        )
+        db.session.add(record)
+        db.session.commit()
+
+        try:
+            zip_data, size = _build_zip(password)
+        except Exception as exc:
+            record.status = 'failed'
+            record.error_message = str(exc)
+            db.session.commit()
+            raise
+
+        record.status = 'success'
+        record.size_bytes = size
+        db.session.commit()
+
+        return zip_data, filename, size
+
     # ── Restore ───────────────────────────────────────────────────────────────
 
     @classmethod
@@ -515,6 +557,19 @@ class BackupService:
         zip_data = cls._download(record, creds)
         stats = cls._restore_zip(zip_data, password)
         return stats
+
+    @classmethod
+    def restore_from_upload(cls, zip_data: bytes,
+                            password: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Restore the database from a manually uploaded ZIP archive.
+
+        zip_data  – raw bytes of the ZIP file uploaded by the user.
+        password  – optional decryption password.
+
+        Returns a dict with restore statistics.
+        """
+        return cls._restore_zip(zip_data, password)
 
     @classmethod
     def _download(cls, record: BackupRecord,

@@ -156,12 +156,56 @@
 
                             <!-- Restore panel -->
                             <div class="col-xl-4">
-                                <div class="card" id="restore-panel">
+                                <!-- Upload & Restore (manual) -->
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5><i class="feather icon-upload mr-2"></i>Upload &amp; Restore</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="text-muted small">
+                                            Upload a backup ZIP file downloaded from this system to restore directly,
+                                            without needing a cloud storage entry in the history.
+                                        </p>
+                                        <form method="POST" enctype="multipart/form-data" id="uploadRestoreForm">
+                                            <input type="hidden" name="action" value="restore_upload">
+
+                                            <div class="form-group">
+                                                <label for="zip_file">Backup ZIP File</label>
+                                                <input type="file" class="form-control-file" id="zip_file"
+                                                       name="zip_file" accept=".zip" required>
+                                                <small class="form-text text-muted">Only .zip backup files are accepted.</small>
+                                            </div>
+
+                                            <div class="form-group">
+                                                <label for="upload_zip_password">ZIP Password <span class="text-muted">(optional)</span></label>
+                                                <input type="password" class="form-control" id="upload_zip_password"
+                                                       name="upload_zip_password"
+                                                       placeholder="Leave blank if the backup has no password">
+                                                <small class="form-text text-muted">
+                                                    Required only if the backup was created with a password.
+                                                </small>
+                                            </div>
+
+                                            <div class="alert alert-danger small py-2">
+                                                <i class="feather icon-alert-circle mr-1"></i>
+                                                All existing data will be <strong>replaced</strong> by this backup.
+                                            </div>
+
+                                            <button type="submit" class="btn btn-danger btn-block"
+                                                    onclick="return confirm('Are you sure? This will overwrite ALL current data!')">
+                                                <i class="feather icon-upload mr-1"></i> Upload &amp; Restore
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+
+                                <div class="card" id="restore-panel" style="display:none;">
                                     <div class="card-header">
                                         <h5><i class="feather icon-unlock mr-2"></i>Restore Selected Backup</h5>
                                     </div>
                                     <div class="card-body">
                                         <form method="POST" id="restoreForm">
+                                            <input type="hidden" name="action" value="restore_record">
                                             <input type="hidden" name="record_id" id="restore_record_id">
 
                                             <div class="form-group">
