@@ -158,6 +158,25 @@ class TestUploadS3AddressingStyle:
         assert object_key == 'backups/backup.zip'
         assert uri == 's3://my-backup-bucket/backups/backup.zip'
 
+    def test_content_length_passed_to_put_object(self):
+        """
+        put_object must receive ContentLength equal to len(zip_data).
+        Without it, MinIO / IDCloudHost / any proxy that doesn't support
+        chunked transfer raises MissingContentLength.
+        """
+        zip_data = b'zip-data-12345'
+        mock_client = _make_s3_mock()
+        creds = _base_creds(endpoint_url='https://is3.cloudhost.id')
+
+        with patch('boto3.client', return_value=mock_client):
+            from apps.services.backup_service import _upload_s3
+            _upload_s3(zip_data, 'backup.zip', creds)
+
+        _, put_kwargs = mock_client.put_object.call_args
+        assert put_kwargs.get('ContentLength') == len(zip_data), (
+            "ContentLength must be set to avoid MissingContentLength errors"
+        )
+
 
 # ---------------------------------------------------------------------------
 # _download_s3 – addressing style

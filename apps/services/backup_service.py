@@ -393,6 +393,7 @@ def _upload_s3(zip_bytes: bytes, filename: str,
         Key=object_key,
         Body=zip_bytes,
         ContentType='application/zip',
+        ContentLength=len(zip_bytes),
     )
 
     s3_uri = f"s3://{bucket}/{object_key}"
