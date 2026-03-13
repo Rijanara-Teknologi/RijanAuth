@@ -1889,6 +1889,33 @@ PROVIDER_INFO = {
             '5. Paste the token in the <strong>Developer Token</strong> field above.',
         ],
     },
+    's3': {
+        'label': 'S3 Object Storage',
+        'icon': 'fa-aws',
+        'dev_url': 'https://aws.amazon.com/s3/',
+        'dev_label': 'AWS Console',
+        'fields': [
+            {'key': 'aws_access_key_id', 'label': 'Access Key ID', 'type': 'text',
+             'help': 'Your AWS (or S3-compatible provider) Access Key ID.'},
+            {'key': 'aws_secret_access_key', 'label': 'Secret Access Key', 'type': 'password',
+             'help': 'Your AWS (or S3-compatible provider) Secret Access Key.'},
+            {'key': 'bucket_name', 'label': 'Bucket Name', 'type': 'text',
+             'help': 'Name of the S3 bucket where backups will be stored.'},
+            {'key': 'region', 'label': 'Region (e.g. us-east-1)', 'type': 'text',
+             'help': 'AWS region of the bucket. For non-AWS providers this can often be any value.'},
+            {'key': 'endpoint_url', 'label': 'Custom Endpoint URL (optional)', 'type': 'text',
+             'help': 'Leave blank for AWS S3. For S3-compatible services (MinIO, DigitalOcean Spaces, Wasabi, etc.) enter the provider endpoint, e.g. https://s3.us-east-1.wasabisys.com'},
+            {'key': 'prefix', 'label': 'Object Key Prefix (optional)', 'type': 'text',
+             'help': 'Folder/prefix inside the bucket. Defaults to "rijanauth-backups" if left blank.'},
+        ],
+        'instructions': [
+            '1. Log in to the <a href="https://console.aws.amazon.com/s3/" target="_blank" rel="noopener noreferrer">AWS Console</a> and create an S3 bucket (or use an existing one).',
+            '2. Go to <strong>IAM → Users</strong>, create a user with <strong>programmatic access</strong>, and attach the <strong>AmazonS3FullAccess</strong> policy (or a scoped policy that allows <code>s3:PutObject</code> and <code>s3:GetObject</code> on the bucket).',
+            '3. Copy the <strong>Access Key ID</strong> and <strong>Secret Access Key</strong> shown after creation.',
+            '4. Enter the bucket name and the AWS region (e.g. <code>us-east-1</code>).',
+            '5. <strong>S3-compatible providers</strong> (MinIO, DigitalOcean Spaces, Wasabi, Backblaze B2, etc.): enter your provider\'s endpoint URL in the <strong>Custom Endpoint URL</strong> field and use your provider\'s access key and secret key.',
+        ],
+    },
 }
 
 
@@ -1972,7 +1999,8 @@ def backup_index(realm_name):
             raw = json.loads(config.credentials_json)
             # Expose non-secret fields for pre-fill; mask passwords/tokens
             secret_keys = {'password', 'app_secret', 'refresh_token',
-                           'developer_token', 'service_account_json', 'zip_password'}
+                           'developer_token', 'service_account_json', 'zip_password',
+                           'aws_secret_access_key'}
             for k, v in raw.items():
                 stored_creds[k] = '' if k in secret_keys else v
         except Exception:

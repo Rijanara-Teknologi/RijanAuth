@@ -39,12 +39,20 @@ try:
 except ImportError:
     SCHEDULER_AVAILABLE = False
 
+try:
+    import boto3
+    from botocore.exceptions import BotoCoreError, ClientError
+    BOTO3_AVAILABLE = True
+except ImportError:
+    BOTO3_AVAILABLE = False
+
 
 # =============================================================================
 # Constants
 # =============================================================================
 
 BACKUP_STORAGE_DIR = os.path.join('storage', 'backups')
+S3_DEFAULT_PREFIX = 'rijanauth-backups'
 INTERVAL_SECONDS = {
     'daily':   86400,
     'weekly':  604800,
@@ -301,6 +309,47 @@ def _upload_box(zip_bytes: bytes, filename: str,
     return box_file.id, file_url
 
 
+def _upload_s3(zip_bytes: bytes, filename: str,
+               creds: Dict[str, Any]) -> Tuple[str, str]:
+    """
+    Upload to an S3-compatible object storage bucket.
+    Supports AWS S3 and any S3-compatible provider (MinIO, DigitalOcean Spaces,
+    Wasabi, Backblaze B2, etc.) via an optional custom endpoint_url.
+    Returns (object_key, s3_uri).
+    """
+    if not BOTO3_AVAILABLE:
+        raise RuntimeError(
+            "boto3 is not installed. Run: pip install boto3"
+        )
+
+    bucket = creds.get('bucket_name', '').strip()
+    if not bucket:
+        raise ValueError("S3 bucket_name is required.")
+
+    prefix = creds.get('prefix', S3_DEFAULT_PREFIX).strip().rstrip('/')
+    object_key = f"{prefix}/{filename}" if prefix else filename
+
+    kwargs: Dict[str, Any] = {
+        'aws_access_key_id': creds.get('aws_access_key_id', ''),
+        'aws_secret_access_key': creds.get('aws_secret_access_key', ''),
+        'region_name': creds.get('region', 'us-east-1') or 'us-east-1',
+    }
+    endpoint_url = creds.get('endpoint_url', '').strip()
+    if endpoint_url:
+        kwargs['endpoint_url'] = endpoint_url
+
+    s3 = boto3.client('s3', **kwargs)
+    s3.put_object(
+        Bucket=bucket,
+        Key=object_key,
+        Body=zip_bytes,
+        ContentType='application/zip',
+    )
+
+    s3_uri = f"s3://{bucket}/{object_key}"
+    return object_key, s3_uri
+
+
 # =============================================================================
 # Public API
 # =============================================================================
@@ -388,6 +437,8 @@ class BackupService:
             return _upload_dropbox(zip_data, filename, creds)
         if provider == 'box':
             return _upload_box(zip_data, filename, creds)
+        if provider == 's3':
+            return _upload_s3(zip_data, filename, creds)
         raise ValueError(f"Unknown storage provider: {provider}")
 
     # ── Restore ───────────────────────────────────────────────────────────────
@@ -431,6 +482,8 @@ class BackupService:
             return _download_dropbox(record.remote_file_id, creds)
         if provider == 'box':
             return _download_box(record.remote_file_id, creds)
+        if provider == 's3':
+            return _download_s3(record.remote_file_id, creds)
         raise ValueError(f"Unknown storage provider: {provider}")
 
     @classmethod
@@ -679,3 +732,31 @@ def _download_box(file_id: str, creds: Dict[str, Any]) -> bytes:
     buf = io.BytesIO()
     client.file(file_id).download_to(buf)
     return buf.getvalue()
+
+
+def _download_s3(object_key: str, creds: Dict[str, Any]) -> bytes:
+    """
+    Download a backup ZIP from an S3-compatible object storage bucket.
+    The object_key stored in remote_file_id is used to retrieve the object.
+    """
+    if not BOTO3_AVAILABLE:
+        raise RuntimeError(
+            "boto3 is not installed. Run: pip install boto3"
+        )
+
+    bucket = creds.get('bucket_name', '').strip()
+    if not bucket:
+        raise ValueError("S3 bucket_name is required.")
+
+    kwargs: Dict[str, Any] = {
+        'aws_access_key_id': creds.get('aws_access_key_id', ''),
+        'aws_secret_access_key': creds.get('aws_secret_access_key', ''),
+        'region_name': creds.get('region', 'us-east-1') or 'us-east-1',
+    }
+    endpoint_url = creds.get('endpoint_url', '').strip()
+    if endpoint_url:
+        kwargs['endpoint_url'] = endpoint_url
+
+    s3 = boto3.client('s3', **kwargs)
+    response = s3.get_object(Bucket=bucket, Key=object_key)
+    return response['Body'].read()
