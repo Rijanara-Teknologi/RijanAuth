@@ -611,6 +611,26 @@ def user_group_remove(realm_name, user_id, group_id):
     return redirect(url_for('admin.user_detail', realm_name=realm_name, user_id=user_id))
 
 
+@admin_bp.route('/<realm_name>/users/<user_id>/delete', methods=['POST'])
+@login_required
+def user_delete(realm_name, user_id):
+    """Delete a user"""
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+
+    user = User.find_by_id(user_id)
+    if not user or user.realm_id != realm.id:
+        flash('User not found', 'error')
+        return redirect(url_for('admin.users_list', realm_name=realm_name))
+
+    username = user.username
+    user.delete()
+
+    flash(f'User "{username}" deleted successfully', 'success')
+    return redirect(url_for('admin.users_list', realm_name=realm_name))
+
+
 # =============================================================================
 # Client Management
 # =============================================================================
@@ -1698,6 +1718,28 @@ def client_scopes_list(realm_name):
         scopes=scopes,
         segment='client-scopes'
     )
+
+
+@admin_bp.route('/<realm_name>/client-scopes/<scope_id>/delete', methods=['POST'])
+@login_required
+def client_scope_delete(realm_name, scope_id):
+    """Delete a client scope"""
+    from apps.models.client import ClientScope
+
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+
+    scope = ClientScope.query.get(scope_id)
+    if not scope or scope.realm_id != realm.id:
+        flash('Client scope not found', 'error')
+        return redirect(url_for('admin.client_scopes_list', realm_name=realm_name))
+
+    scope_name = scope.name
+    scope.delete()
+
+    flash(f'Client scope "{scope_name}" deleted successfully', 'success')
+    return redirect(url_for('admin.client_scopes_list', realm_name=realm_name))
 
 
 @admin_bp.route('/<realm_name>/client-scopes/<scope_id>')
