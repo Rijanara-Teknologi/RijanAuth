@@ -545,7 +545,7 @@ def download_import_template(realm_name):
     if not realm:
         return redirect(url_for('admin.index'))
 
-    csv_content = 'username,email,password,first_name,last_name\nexample_user,user@example.com,secret123,John,Doe\n'
+    csv_content = 'username,email,password,first_name,last_name,roles,groups\nexample_user,user@example.com,secret123,John,Doe,admin;user,group1;group2\n'
     return Response(
         csv_content,
         mimetype='text/csv',

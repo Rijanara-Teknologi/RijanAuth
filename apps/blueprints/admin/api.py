@@ -244,12 +244,18 @@ def api_import_users(realm_name):
     The CSV must contain at minimum a ``username`` column.  All other
     columns are optional but recognised:
 
-    * ``email``    – user e-mail address
-    * ``password`` – plain-text password (will be hashed on import)
-    * ``name``     – full name; split on the first space into
-                     first_name / last_name
+    * ``email``      – user e-mail address
+    * ``password``   – plain-text password (will be hashed on import)
+    * ``name``       – full name; split on the first space into
+                       first_name / last_name
     * ``first_name`` / ``firstName`` – first name
     * ``last_name``  / ``lastName``  – last name
+    * ``roles``      – semicolon-separated realm role names; only roles
+                       that exist in the realm are assigned (invalid names
+                       are silently skipped)
+    * ``groups``     – semicolon-separated group names; only groups
+                       that exist in the realm are assigned (invalid names
+                       are silently skipped)
 
     Any additional column is stored as a custom user attribute.
 
@@ -326,8 +332,28 @@ def api_import_users(realm_name):
         password = normalised_row.get('password') or None
 
         # Collect extra columns as custom attributes
-        KNOWN_FIELDS = {'username', 'email', 'password', 'name', 'first_name', 'last_name'}
+        KNOWN_FIELDS = {'username', 'email', 'password', 'name', 'first_name', 'last_name', 'roles', 'groups'}
         extra_attrs = {k: v for k, v in normalised_row.items() if k not in KNOWN_FIELDS and v}
+
+        # Parse a semicolon-separated field and resolve items via a lookup callable
+        def _resolve_semicolon_list(raw, lookup_fn):
+            result = []
+            for name in [s.strip() for s in raw.split(';') if s.strip()]:
+                obj = lookup_fn(name)
+                if obj:
+                    result.append(obj)
+            return result
+
+        # Validate roles and groups against the realm; skip unknown values
+        roles_raw = normalised_row.get('roles', '')
+        roles_to_assign = _resolve_semicolon_list(
+            roles_raw, lambda name: Role.find_realm_role(realm.id, name)
+        ) if roles_raw else []
+
+        groups_raw = normalised_row.get('groups', '')
+        groups_to_assign = _resolve_semicolon_list(
+            groups_raw, lambda name: Group.find_realm_group(realm.id, name)
+        ) if groups_raw else []
 
         try:
             user = UserService.create_user(
@@ -340,6 +366,10 @@ def api_import_users(realm_name):
             )
             if extra_attrs:
                 UserService.set_attributes(user, {k: [v] for k, v in extra_attrs.items()})
+            for role in roles_to_assign:
+                UserService.assign_role(user, role)
+            for group in groups_to_assign:
+                UserService.join_group(user, group)
             imported += 1
         except (SQLAlchemyError, ValueError) as exc:
             db.session.rollback()
@@ -362,6 +392,8 @@ def api_export_users(realm_name):
     * ``email``      – e-mail address
     * ``first_name`` – first name
     * ``last_name``  – last name
+    * ``roles``      – semicolon-separated realm role names
+    * ``groups``     – semicolon-separated group names
 
     Returns a ``text/csv`` response with a
     ``Content-Disposition: attachment`` header.
@@ -374,14 +406,20 @@ def api_export_users(realm_name):
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(['id', 'username', 'email', 'first_name', 'last_name'])
+    writer.writerow(['id', 'username', 'email', 'first_name', 'last_name', 'roles', 'groups'])
     for user in users:
+        user_roles = UserService.get_user_roles(user)
+        user_groups = UserService.get_user_groups(user)
+        roles_str = ';'.join(r.name for r in user_roles)
+        groups_str = ';'.join(g.name for g in user_groups)
         writer.writerow([
             user.id,
             user.username,
             user.email or '',
             user.first_name or '',
             user.last_name or '',
+            roles_str,
+            groups_str,
         ])
 
     csv_content = output.getvalue()

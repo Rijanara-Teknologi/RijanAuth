@@ -49,6 +49,11 @@ class Group(RealmScopedModel):
     def find_by_path(cls, realm_id, path):
         """Find a group by its full path"""
         return cls.query.filter_by(realm_id=realm_id, path=path).first()
+
+    @classmethod
+    def find_realm_group(cls, realm_id, name):
+        """Find a realm group by name"""
+        return cls.query.filter_by(realm_id=realm_id, name=name).first()
     
     @classmethod
     def get_top_level_groups(cls, realm_id):
