@@ -4,7 +4,7 @@ RijanAuth - Admin Routes
 Web routes for the administration console
 """
 
-from flask import render_template, redirect, url_for, request, flash, g, Response
+from flask import render_template, redirect, url_for, request, flash, g, Response, send_file
 from flask_login import login_required, current_user
 from apps.blueprints.admin import admin_bp
 from apps.models.realm import Realm
@@ -22,6 +22,7 @@ from apps.utils.css_sanitizer import CSSSanitizer
 from apps.utils.media_handler import MediaHandler
 from apps import db
 import json
+import io
 
 
 def get_realm_or_404(realm_name):
@@ -2313,6 +2314,36 @@ def backup_index(realm_name):
     )
 
 
+@admin_bp.route('/<realm_name>/backup/download', methods=['POST'])
+@login_required
+def backup_download(realm_name):
+    """Build a backup ZIP and send it directly to the browser for download."""
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+
+    if not _require_master_realm(realm_name):
+        flash('The backup feature is only available in the master realm.', 'warning')
+        return redirect(url_for('admin.dashboard', realm_name=realm_name))
+
+    zip_password = request.form.get('download_password', '').strip() or None
+    try:
+        zip_data, filename, _size = BackupService.build_download_backup(
+            zip_password,
+            triggered_by_user_id=str(current_user.id),
+        )
+    except Exception as exc:
+        flash(f'Backup error: {exc}', 'error')
+        return redirect(url_for('admin.backup_index', realm_name=realm_name))
+
+    return send_file(
+        io.BytesIO(zip_data),
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=filename,
+    )
+
+
 @admin_bp.route('/<realm_name>/backup/oauth/callback/<provider>', methods=['GET'])
 @login_required
 def backup_oauth_callback(realm_name, provider):
@@ -2374,26 +2405,53 @@ def backup_restore(realm_name):
     history = BackupRecord.get_history(limit=50)
 
     if request.method == 'POST':
-        record_id = request.form.get('record_id', '').strip()
-        zip_password = request.form.get('zip_password', '').strip()
+        action = request.form.get('action', 'restore_record')
 
-        if not record_id:
-            flash('Please select a backup to restore.', 'error')
-        else:
-            try:
-                stats = BackupService.restore_from_record(record_id, zip_password or None)
-                flash(
-                    f'Restore completed: {stats["tables_restored"]} tables, '
-                    f'{stats["rows_restored"]} rows restored.',
-                    'success',
-                )
-                if stats.get('errors'):
+        if action == 'restore_upload':
+            zip_file = request.files.get('zip_file')
+            zip_password = request.form.get('upload_zip_password', '').strip() or None
+
+            if not zip_file or not zip_file.filename:
+                flash('Please select a ZIP file to restore.', 'error')
+            elif not zip_file.filename.lower().endswith('.zip'):
+                flash('Only .zip files are supported.', 'error')
+            else:
+                try:
+                    zip_data = zip_file.read()
+                    stats = BackupService.restore_from_upload(zip_data, zip_password)
                     flash(
-                        'Some non-fatal errors occurred: ' + '; '.join(stats['errors'][:5]),
-                        'warning',
+                        f'Restore completed: {stats["tables_restored"]} tables, '
+                        f'{stats["rows_restored"]} rows restored.',
+                        'success',
                     )
-            except Exception as exc:
-                flash(f'Restore failed: {exc}', 'error')
+                    if stats.get('errors'):
+                        flash(
+                            'Some non-fatal errors occurred: ' + '; '.join(stats['errors'][:5]),
+                            'warning',
+                        )
+                except Exception as exc:
+                    flash(f'Restore failed: {exc}', 'error')
+        else:
+            record_id = request.form.get('record_id', '').strip()
+            zip_password = request.form.get('zip_password', '').strip()
+
+            if not record_id:
+                flash('Please select a backup to restore.', 'error')
+            else:
+                try:
+                    stats = BackupService.restore_from_record(record_id, zip_password or None)
+                    flash(
+                        f'Restore completed: {stats["tables_restored"]} tables, '
+                        f'{stats["rows_restored"]} rows restored.',
+                        'success',
+                    )
+                    if stats.get('errors'):
+                        flash(
+                            'Some non-fatal errors occurred: ' + '; '.join(stats['errors'][:5]),
+                            'warning',
+                        )
+                except Exception as exc:
+                    flash(f'Restore failed: {exc}', 'error')
 
         return redirect(url_for('admin.backup_restore', realm_name=realm_name))
 
