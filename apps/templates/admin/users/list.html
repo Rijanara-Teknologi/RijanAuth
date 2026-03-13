@@ -45,6 +45,10 @@
                                                     data-toggle="modal" data-target="#importUsersModal">
                                                     <i class="feather icon-upload-cloud mr-1"></i> Import Users
                                                 </button>
+                                                <a href="{{ url_for('admin.api_export_users', realm_name=realm.name) }}"
+                                                    class="btn btn-outline-success mr-2">
+                                                    <i class="feather icon-download-cloud mr-1"></i> Export Users
+                                                </a>
                                                 <a href="{{ url_for('admin.create_user', realm_name=realm.name) }}"
                                                     class="btn btn-primary">
                                                     <i class="feather icon-plus mr-1"></i> Add User
