@@ -139,6 +139,8 @@
                                                         Email configuration is required for password reset and email
                                                         verification.
                                                     </div>
+
+                                                    <h6 class="mb-3">Connection</h6>
                                                     <div class="row">
                                                         <div class="col-md-8">
                                                             <div class="form-group">
@@ -157,12 +159,105 @@
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    <div class="form-group">
-                                                        <label>From Email</label>
-                                                        <input type="email" class="form-control" name="smtp_from"
-                                                            value="{{ realm.smtp_from or '' }}"
-                                                            placeholder="noreply@example.com">
+                                                    <div class="row mb-3">
+                                                        <div class="col-md-4">
+                                                            <div class="custom-control custom-switch">
+                                                                <input type="checkbox" class="custom-control-input"
+                                                                    id="smtpSsl" name="smtp_ssl" {% if realm.smtp_ssl %}checked{% endif %}>
+                                                                <label class="custom-control-label" for="smtpSsl">Enable SSL</label>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-4">
+                                                            <div class="custom-control custom-switch">
+                                                                <input type="checkbox" class="custom-control-input"
+                                                                    id="smtpStarttls" name="smtp_starttls" {% if realm.smtp_starttls %}checked{% endif %}>
+                                                                <label class="custom-control-label" for="smtpStarttls">Enable StartTLS</label>
+                                                            </div>
+                                                        </div>
                                                     </div>
+
+                                                    <h6 class="mb-3 mt-3">Sender</h6>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>From Email</label>
+                                                                <input type="email" class="form-control" name="smtp_from"
+                                                                    value="{{ realm.smtp_from or '' }}"
+                                                                    placeholder="noreply@example.com">
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>From Display Name</label>
+                                                                <input type="text" class="form-control" name="smtp_from_display_name"
+                                                                    value="{{ realm.smtp_from_display_name or '' }}"
+                                                                    placeholder="My App">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Reply-To Email</label>
+                                                                <input type="email" class="form-control" name="smtp_reply_to"
+                                                                    value="{{ realm.smtp_reply_to or '' }}"
+                                                                    placeholder="support@example.com">
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Reply-To Display Name</label>
+                                                                <input type="text" class="form-control" name="smtp_reply_to_display_name"
+                                                                    value="{{ realm.smtp_reply_to_display_name or '' }}"
+                                                                    placeholder="Support Team">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <h6 class="mb-3 mt-3">Authentication</h6>
+                                                    <div class="custom-control custom-switch mb-3">
+                                                        <input type="checkbox" class="custom-control-input"
+                                                            id="smtpAuth" name="smtp_auth" {% if realm.smtp_auth %}checked{% endif %}
+                                                            onchange="document.getElementById('smtpAuthFields').style.display=this.checked?'block':'none'">
+                                                        <label class="custom-control-label" for="smtpAuth">Enable Authentication</label>
+                                                    </div>
+                                                    <div id="smtpAuthFields" style="display:{{ 'block' if realm.smtp_auth else 'none' }}">
+                                                        <div class="row">
+                                                            <div class="col-md-6">
+                                                                <div class="form-group">
+                                                                    <label>Username</label>
+                                                                    <input type="text" class="form-control" name="smtp_user"
+                                                                        value="{{ realm.smtp_user or '' }}"
+                                                                        placeholder="smtp-user@example.com"
+                                                                        autocomplete="off">
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-md-6">
+                                                                <div class="form-group">
+                                                                    <label>Password</label>
+                                                                    <input type="password" class="form-control" name="smtp_password"
+                                                                        value=""
+                                                                        placeholder="{% if realm.smtp_password %}&#9679;&#9679;&#9679;&#9679;&#9679;&#9679;&#9679;&#9679;{% else %}Enter password{% endif %}"
+                                                                        autocomplete="new-password">
+                                                                    <small class="form-text text-muted">Leave blank to keep the existing password.</small>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <hr>
+                                                    <h6 class="mb-3">Test Connection</h6>
+                                                    <form method="POST" action="{{ url_for('admin.realm_test_email', realm_name=realm.name) }}" class="form-inline">
+                                                        <div class="form-group mr-2">
+                                                            <label class="sr-only" for="testEmailRecipient">Recipient</label>
+                                                            <input type="email" class="form-control" id="testEmailRecipient"
+                                                                name="test_email_recipient"
+                                                                placeholder="test@example.com" required>
+                                                        </div>
+                                                        <button type="submit" class="btn btn-outline-primary">
+                                                            <i class="feather icon-send mr-1"></i> Send Test Email
+                                                        </button>
+                                                    </form>
                                                 </div>
 
                                                 <!-- Tokens Tab -->

@@ -104,7 +104,7 @@
                                                         <div class="col-md-6">
                                                             <div class="custom-control custom-switch mb-2">
                                                                 <input type="checkbox" class="custom-control-input"
-                                                                    id="standardFlow" {% if client.standard_flow_enabled
+                                                                    id="standardFlow" name="standard_flow_enabled" {% if client.standard_flow_enabled
                                                                     %}checked{% endif %}>
                                                                 <label class="custom-control-label"
                                                                     for="standardFlow">Standard Flow (Authorization
@@ -112,14 +112,14 @@
                                                             </div>
                                                             <div class="custom-control custom-switch mb-2">
                                                                 <input type="checkbox" class="custom-control-input"
-                                                                    id="implicitFlow" {% if client.implicit_flow_enabled
+                                                                    id="implicitFlow" name="implicit_flow_enabled" {% if client.implicit_flow_enabled
                                                                     %}checked{% endif %}>
                                                                 <label class="custom-control-label"
                                                                     for="implicitFlow">Implicit Flow</label>
                                                             </div>
                                                             <div class="custom-control custom-switch mb-2">
                                                                 <input type="checkbox" class="custom-control-input"
-                                                                    id="directAccess" {% if
+                                                                    id="directAccess" name="direct_access_grants_enabled" {% if
                                                                     client.direct_access_grants_enabled %}checked{%
                                                                     endif %}>
                                                                 <label class="custom-control-label"
@@ -129,7 +129,7 @@
                                                         <div class="col-md-6">
                                                             <div class="custom-control custom-switch mb-2">
                                                                 <input type="checkbox" class="custom-control-input"
-                                                                    id="serviceAccounts" {% if
+                                                                    id="serviceAccounts" name="service_accounts_enabled" {% if
                                                                     client.service_accounts_enabled %}checked{% endif
                                                                     %}>
                                                                 <label class="custom-control-label"
@@ -137,7 +137,7 @@
                                                             </div>
                                                             <div class="custom-control custom-switch mb-2">
                                                                 <input type="checkbox" class="custom-control-input"
-                                                                    id="publicClient" {% if client.public_client
+                                                                    id="publicClient" name="public_client" {% if client.public_client
                                                                     %}checked{% endif %}>
                                                                 <label class="custom-control-label"
                                                                     for="publicClient">Public Client</label>

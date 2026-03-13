@@ -73,6 +73,15 @@
                                                                class="btn btn-sm btn-outline-primary" title="View">
                                                                 <i class="feather icon-eye"></i>
                                                             </a>
+                                                            <button class="btn btn-sm btn-outline-danger btn-delete-scope"
+                                                                title="Delete"
+                                                                data-toggle="modal"
+                                                                data-target="#deleteScopeModal"
+                                                                data-scope-id="{{ scope.id }}"
+                                                                data-scope-name="{{ scope.name }}"
+                                                                data-delete-url="{{ url_for('admin.client_scope_delete', realm_name=realm.name, scope_id=scope.id) }}">
+                                                                <i class="feather icon-trash-2"></i>
+                                                            </button>
                                                         </td>
                                                     </tr>
                                                     {% endfor %}
@@ -99,4 +108,52 @@
         </div>
     </div>
 </div>
+
+<!-- Delete Scope Modal -->
+<div class="modal fade" id="deleteScopeModal" tabindex="-1" role="dialog" aria-labelledby="deleteScopeModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteScopeModalLabel">
+                    <i class="feather icon-trash-2 mr-2"></i>Delete Client Scope
+                </h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="deleteScopeForm" method="POST" action="">
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="feather icon-alert-triangle mr-2"></i>
+                        <strong>Warning:</strong> This action cannot be undone.
+                    </div>
+                    <p>Are you sure you want to delete the client scope <strong id="deleteScopeName"></strong>?</p>
+                    <p class="text-muted small">All protocol mappers associated with this scope will also be deleted.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="feather icon-trash-2 mr-1"></i> Delete Scope
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 {% endblock %}
+
+{% block javascripts %}
+<script>
+(function () {
+    document.querySelectorAll('.btn-delete-scope').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var scopeName = this.getAttribute('data-scope-name');
+            var deleteUrl = this.getAttribute('data-delete-url');
+            document.getElementById('deleteScopeName').textContent = scopeName;
+            document.getElementById('deleteScopeForm').action = deleteUrl;
+        });
+    });
+})();
+</script>
+{% endblock javascripts %}

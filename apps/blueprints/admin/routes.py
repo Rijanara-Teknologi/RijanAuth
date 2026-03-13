@@ -105,6 +105,17 @@ def realm_settings(realm_name):
         realm.smtp_server = request.form.get('smtp_host', '').strip() or None
         realm.smtp_port = request.form.get('smtp_port', '').strip() or None
         realm.smtp_from = request.form.get('smtp_from', '').strip() or None
+        realm.smtp_from_display_name = request.form.get('smtp_from_display_name', '').strip() or None
+        realm.smtp_reply_to = request.form.get('smtp_reply_to', '').strip() or None
+        realm.smtp_reply_to_display_name = request.form.get('smtp_reply_to_display_name', '').strip() or None
+        realm.smtp_ssl = request.form.get('smtp_ssl') == 'on'
+        realm.smtp_starttls = request.form.get('smtp_starttls') == 'on'
+        realm.smtp_auth = request.form.get('smtp_auth') == 'on'
+        realm.smtp_user = request.form.get('smtp_user', '').strip() or None
+        # Only update password if a new value was provided
+        new_smtp_password = request.form.get('smtp_password', '').strip()
+        if new_smtp_password:
+            realm.smtp_password = new_smtp_password
         
         # Token settings
         try:
@@ -151,6 +162,81 @@ def realm_settings(realm_name):
         realms=realms,
         segment='realm-settings'
     )
+
+
+@admin_bp.route('/<realm_name>/settings/test-email', methods=['POST'])
+@login_required
+def realm_test_email(realm_name):
+    """Send a test email using the realm's SMTP configuration"""
+    import smtplib
+    import ssl
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+
+    recipient = request.form.get('test_email_recipient', '').strip()
+    if not recipient:
+        flash('Please enter a recipient email address for the test.', 'error')
+        return redirect(url_for('admin.realm_settings', realm_name=realm_name) + '#email')
+
+    if not realm.smtp_server:
+        flash('SMTP host is not configured.', 'error')
+        return redirect(url_for('admin.realm_settings', realm_name=realm_name) + '#email')
+
+    try:
+        port = int(realm.smtp_port or 25)
+    except (ValueError, TypeError):
+        port = 25
+
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = f'RijanAuth SMTP Test - {realm.name}'
+    msg['From'] = (
+        f'{realm.smtp_from_display_name} <{realm.smtp_from}>'
+        if realm.smtp_from_display_name and realm.smtp_from
+        else (realm.smtp_from or 'rijanauth@localhost')
+    )
+    msg['To'] = recipient
+    if realm.smtp_reply_to:
+        reply_label = (
+            f'{realm.smtp_reply_to_display_name} <{realm.smtp_reply_to}>'
+            if realm.smtp_reply_to_display_name
+            else realm.smtp_reply_to
+        )
+        msg['Reply-To'] = reply_label
+
+    body = (
+        f'<p>This is a test email from <strong>RijanAuth</strong> realm '
+        f'<em>{realm.name}</em>.</p>'
+        f'<p>If you received this, your SMTP settings are working correctly.</p>'
+    )
+    msg.attach(MIMEText(body, 'html'))
+
+    try:
+        context = ssl.create_default_context()
+        if realm.smtp_ssl:
+            server = smtplib.SMTP_SSL(realm.smtp_server, port, context=context, timeout=10)
+        else:
+            server = smtplib.SMTP(realm.smtp_server, port, timeout=10)
+            if realm.smtp_starttls:
+                server.starttls(context=context)
+
+        try:
+            if realm.smtp_auth and realm.smtp_user and realm.smtp_password:
+                server.login(realm.smtp_user, realm.smtp_password)
+
+            sender = realm.smtp_from or 'rijanauth@localhost'
+            server.sendmail(sender, [recipient], msg.as_string())
+        finally:
+            server.quit()
+
+        flash(f'Test email sent successfully to {recipient}.', 'success')
+    except Exception as exc:
+        flash(f'Failed to send test email: {exc}', 'error')
+
+    return redirect(url_for('admin.realm_settings', realm_name=realm_name) + '#email')
 
 
 @admin_bp.route('/<realm_name>/branding', methods=['GET', 'POST'])
@@ -611,6 +697,26 @@ def user_group_remove(realm_name, user_id, group_id):
     return redirect(url_for('admin.user_detail', realm_name=realm_name, user_id=user_id))
 
 
+@admin_bp.route('/<realm_name>/users/<user_id>/delete', methods=['POST'])
+@login_required
+def user_delete(realm_name, user_id):
+    """Delete a user"""
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+
+    user = User.find_by_id(user_id)
+    if not user or user.realm_id != realm.id:
+        flash('User not found', 'error')
+        return redirect(url_for('admin.users_list', realm_name=realm_name))
+
+    username = user.username
+    user.delete()
+
+    flash(f'User "{username}" deleted successfully', 'success')
+    return redirect(url_for('admin.users_list', realm_name=realm_name))
+
+
 # =============================================================================
 # Client Management
 # =============================================================================
@@ -671,7 +777,7 @@ def create_client(realm_name):
     return redirect(url_for('admin.clients_list', realm_name=realm_name))
 
 
-@admin_bp.route('/<realm_name>/clients/<client_id>')
+@admin_bp.route('/<realm_name>/clients/<client_id>', methods=['GET', 'POST'])
 @login_required
 def client_detail(realm_name, client_id):
     """Client detail page"""
@@ -684,6 +790,27 @@ def client_detail(realm_name, client_id):
         flash('Client not found', 'error')
         return redirect(url_for('admin.clients_list', realm_name=realm_name))
     
+    if request.method == 'POST':
+        # Parse redirect URIs - one per line
+        redirect_uris_raw = request.form.get('redirect_uris', '')
+        redirect_uris = [u.strip() for u in redirect_uris_raw.splitlines() if u.strip()]
+
+        ClientService.update_client(client,
+            # Use the submitted name, or fall back to client_id to keep it non-empty
+            name=request.form.get('name', '').strip() or client.client_id,
+            description=request.form.get('description', '').strip(),
+            # Treat empty string as NULL so the column remains nullable
+            root_url=request.form.get('root_url', '').strip() if request.form.get('root_url', '').strip() else None,
+            redirect_uris=redirect_uris,
+            standard_flow_enabled='standard_flow_enabled' in request.form,
+            implicit_flow_enabled='implicit_flow_enabled' in request.form,
+            direct_access_grants_enabled='direct_access_grants_enabled' in request.form,
+            service_accounts_enabled='service_accounts_enabled' in request.form,
+            public_client='public_client' in request.form,
+        )
+        flash('Client settings saved successfully', 'success')
+        return redirect(url_for('admin.client_detail', realm_name=realm_name, client_id=client_id))
+
     realms = Realm.query.all()
     return render_template(
         'admin/clients/detail.html',
@@ -906,6 +1033,41 @@ def sessions_list(realm_name):
         sessions=sessions,
         segment='sessions'
     )
+
+
+@admin_bp.route('/<realm_name>/sessions/<session_id>/signout', methods=['POST'])
+@login_required
+def session_signout(realm_name, session_id):
+    """Sign out a single active session"""
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+
+    session = UserSession.query.filter_by(id=session_id, realm_id=realm.id).first()
+    if not session:
+        flash('Session not found', 'error')
+        return redirect(url_for('admin.sessions_list', realm_name=realm_name))
+
+    session.logout()
+    flash('Session signed out successfully', 'success')
+    return redirect(url_for('admin.sessions_list', realm_name=realm_name))
+
+
+@admin_bp.route('/<realm_name>/sessions/signout-all', methods=['POST'])
+@login_required
+def session_signout_all(realm_name):
+    """Sign out all active sessions in a realm"""
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+
+    active_sessions = UserSession.query.filter_by(realm_id=realm.id, state='ACTIVE').all()
+    count = len(active_sessions)
+    for s in active_sessions:
+        s.logout()
+
+    flash(f'{count} session(s) signed out successfully', 'success')
+    return redirect(url_for('admin.sessions_list', realm_name=realm_name))
 
 
 # =============================================================================
@@ -1677,6 +1839,28 @@ def client_scopes_list(realm_name):
         scopes=scopes,
         segment='client-scopes'
     )
+
+
+@admin_bp.route('/<realm_name>/client-scopes/<scope_id>/delete', methods=['POST'])
+@login_required
+def client_scope_delete(realm_name, scope_id):
+    """Delete a client scope"""
+    from apps.models.client import ClientScope
+
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+
+    scope = ClientScope.query.get(scope_id)
+    if not scope or scope.realm_id != realm.id:
+        flash('Client scope not found', 'error')
+        return redirect(url_for('admin.client_scopes_list', realm_name=realm_name))
+
+    scope_name = scope.name
+    scope.delete()
+
+    flash(f'Client scope "{scope_name}" deleted successfully', 'success')
+    return redirect(url_for('admin.client_scopes_list', realm_name=realm_name))
 
 
 @admin_bp.route('/<realm_name>/client-scopes/<scope_id>')

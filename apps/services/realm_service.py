@@ -37,8 +37,9 @@ class RealmService:
         # Create default roles
         RealmService._create_default_roles(realm)
         
-        # Create default client scopes
-        RealmService._create_default_client_scopes(realm)
+        # Create default client scopes with protocol mappers
+        from apps.seeders.client_scopes_seeder import seed_client_scopes
+        seed_client_scopes(realm.id)
         
         # Create admin-cli client for API access
         RealmService._create_admin_cli_client(realm)
