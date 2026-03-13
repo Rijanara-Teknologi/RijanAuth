@@ -2089,20 +2089,26 @@ PROVIDER_INFO = {
         'icon_prefix': 'fab',
         'dev_url': 'https://console.cloud.google.com/',
         'dev_label': 'Google Cloud Console',
+        'uses_oauth': True,
         'fields': [
-            {'key': 'service_account_json', 'label': 'Service Account JSON Key', 'type': 'textarea',
-             'help': 'Paste the full JSON content of your Service Account key file.'},
+            {'key': 'client_id', 'label': 'OAuth2 Client ID', 'type': 'text',
+             'help': 'OAuth 2.0 Client ID from Google Cloud Console → APIs &amp; Services → Credentials.'},
+            {'key': 'client_secret', 'label': 'OAuth2 Client Secret', 'type': 'password',
+             'help': 'OAuth 2.0 Client Secret from Google Cloud Console.'},
+            {'key': 'refresh_token', 'label': 'OAuth2 Refresh Token', 'type': 'password',
+             'help': 'Long-lived refresh token obtained after completing the OAuth2 consent flow.'},
             {'key': 'folder_id', 'label': 'Drive Folder ID (optional)', 'type': 'text',
              'help': 'ID of the Google Drive folder to store backups in. Leave blank for root.'},
         ],
         'instructions': [
             '1. Open <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer">Google Cloud Console</a> and create a project (or select an existing one).',
             '2. Go to <strong>APIs &amp; Services → Library</strong> and enable the <strong>Google Drive API</strong>.',
-            '3. Go to <strong>APIs &amp; Services → Credentials</strong> and click <strong>Create Credentials → Service Account</strong>.',
-            '4. Fill in the service account details and click <strong>Create</strong>. Skip optional permission steps.',
-            '5. Click the service account email you just created, then open the <strong>Keys</strong> tab.',
-            '6. Click <strong>Add Key → Create new key → JSON</strong>. A JSON file will download — paste its contents in the field above.',
-            '7. (Optional) Create a folder in Google Drive and share it with the service account email (the "client_email" in the JSON). Copy the folder ID from the URL.',
+            '3. Go to <strong>APIs &amp; Services → Credentials</strong> and click <strong>Create Credentials → OAuth 2.0 Client ID</strong>.',
+            '4. Set the application type to <strong>Web application</strong>.',
+            '5. Under <strong>Authorised redirect URIs</strong>, add the redirect URL shown above and click <strong>Save</strong>.',
+            '6. Copy the <strong>Client ID</strong> and <strong>Client Secret</strong> and paste them in the fields above.',
+            '7. Complete the OAuth2 consent flow using those credentials to obtain a refresh token, then paste it in the <strong>OAuth2 Refresh Token</strong> field.',
+            '8. (Optional) Create a folder in Google Drive, copy its ID from the URL, and paste it in the <strong>Drive Folder ID</strong> field.',
         ],
     },
     'mega': {
@@ -2111,6 +2117,7 @@ PROVIDER_INFO = {
         'icon_prefix': 'fas',
         'dev_url': 'https://mega.nz/',
         'dev_label': 'Mega.nz',
+        'uses_oauth': False,
         'fields': [
             {'key': 'email', 'label': 'Mega Account Email', 'type': 'email', 'help': 'Your Mega.nz login email.'},
             {'key': 'password', 'label': 'Mega Account Password', 'type': 'password', 'help': 'Your Mega.nz login password.'},
@@ -2130,6 +2137,7 @@ PROVIDER_INFO = {
         'icon_prefix': 'fab',
         'dev_url': 'https://www.dropbox.com/developers/apps',
         'dev_label': 'Dropbox App Console',
+        'uses_oauth': True,
         'fields': [
             {'key': 'app_key', 'label': 'App Key', 'type': 'text', 'help': 'Your Dropbox app key.'},
             {'key': 'app_secret', 'label': 'App Secret', 'type': 'password', 'help': 'Your Dropbox app secret.'},
@@ -2140,28 +2148,32 @@ PROVIDER_INFO = {
             '1. Go to <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener noreferrer">Dropbox App Console</a> and click <strong>Create app</strong>.',
             '2. Choose <strong>Scoped access</strong> → <strong>Full Dropbox</strong>. Give your app a name.',
             '3. Under the <strong>Permissions</strong> tab, enable: <code>files.content.write</code>, <code>files.content.read</code>, <code>sharing.write</code>.',
-            '4. Copy the <strong>App key</strong> and <strong>App secret</strong> from the <strong>Settings</strong> tab.',
-            '5. To get a refresh token, follow the <a href="https://developers.dropbox.com/oauth-guide" target="_blank" rel="noopener noreferrer">Dropbox OAuth guide</a> and complete the OAuth2 PKCE flow, then save the refresh_token.',
+            '4. Under the <strong>Settings</strong> tab, find <strong>OAuth 2 → Redirect URIs</strong> and add the redirect URL shown above, then click <strong>Add</strong>.',
+            '5. Copy the <strong>App key</strong> and <strong>App secret</strong> from the <strong>Settings</strong> tab and paste them in the fields above.',
+            '6. Complete the OAuth2 PKCE flow to obtain a refresh token (see the <a href="https://developers.dropbox.com/oauth-guide" target="_blank" rel="noopener noreferrer">Dropbox OAuth guide</a>), then paste it in the <strong>OAuth2 Refresh Token</strong> field.',
         ],
     },
     'box': {
         'label': 'Box',
         'icon': 'fa-box',
         'icon_prefix': 'fas',
-        'dev_url': 'https://developer.box.com/',
+        'dev_url': 'https://app.box.com/developers/console',
         'dev_label': 'Box Developer Console',
+        'uses_oauth': True,
         'fields': [
-            {'key': 'client_id', 'label': 'Client ID', 'type': 'text', 'help': 'Your Box app Client ID.'},
-            {'key': 'client_secret', 'label': 'Client Secret', 'type': 'password', 'help': 'Your Box app Client Secret.'},
-            {'key': 'developer_token', 'label': 'Developer Token', 'type': 'password',
-             'help': 'Short-lived developer token for testing, or a long-lived token from your OAuth2 flow.'},
+            {'key': 'client_id', 'label': 'OAuth2 Client ID', 'type': 'text', 'help': 'Your Box app Client ID.'},
+            {'key': 'client_secret', 'label': 'OAuth2 Client Secret', 'type': 'password', 'help': 'Your Box app Client Secret.'},
+            {'key': 'refresh_token', 'label': 'OAuth2 Refresh Token', 'type': 'password',
+             'help': 'Long-lived refresh token obtained after completing the Box OAuth2 flow.'},
         ],
         'instructions': [
-            '1. Go to <a href="https://developer.box.com/" target="_blank" rel="noopener noreferrer">Box Developer Console</a> and log in.',
-            '2. Click <strong>Create New App</strong> → <strong>Custom App</strong> → <strong>Server Authentication (with OAuth 2.0)</strong>.',
-            '3. After creating, open the app and copy the <strong>Client ID</strong> and <strong>Client Secret</strong>.',
-            '4. For quick testing, click <strong>Generate Developer Token</strong> (valid for 60 min). For production, implement the full OAuth2 flow to obtain a long-lived access token.',
-            '5. Paste the token in the <strong>Developer Token</strong> field above.',
+            '1. Go to <a href="https://app.box.com/developers/console" target="_blank" rel="noopener noreferrer">Box Developer Console</a> and log in.',
+            '2. Click <strong>Create New App</strong> → <strong>Custom App</strong> → <strong>User Authentication (OAuth 2.0)</strong>.',
+            '3. After creating, open the app and go to the <strong>Configuration</strong> tab.',
+            '4. Under <strong>OAuth 2.0 Redirect URI</strong>, add the redirect URL shown above and click <strong>Save Changes</strong>.',
+            '5. Copy the <strong>Client ID</strong> and <strong>Client Secret</strong> and paste them in the fields above.',
+            '6. To obtain a refresh token, send your user to the Box authorization URL (<code>https://account.box.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&amp;response_type=code&amp;redirect_uri=REDIRECT_URL</code>). After approval, Box will redirect to your redirect URL with a <code>code</code> parameter. Exchange that code at <code>https://api.box.com/oauth2/token</code> with your client ID and secret to receive an access token and a refresh token.',
+            '7. Paste the refresh token in the <strong>OAuth2 Refresh Token</strong> field above.',
         ],
     },
     's3': {
@@ -2170,6 +2182,7 @@ PROVIDER_INFO = {
         'icon_prefix': 'fab',
         'dev_url': 'https://aws.amazon.com/s3/',
         'dev_label': 'AWS Console',
+        'uses_oauth': False,
         'fields': [
             {'key': 'aws_access_key_id', 'label': 'Access Key ID', 'type': 'text',
              'help': 'Your AWS (or S3-compatible provider) Access Key ID.'},
@@ -2273,11 +2286,19 @@ def backup_index(realm_name):
             # Expose non-secret fields for pre-fill; mask passwords/tokens
             secret_keys = {'password', 'app_secret', 'refresh_token',
                            'developer_token', 'service_account_json', 'zip_password',
-                           'aws_secret_access_key'}
+                           'aws_secret_access_key', 'client_secret'}
             for k, v in raw.items():
                 stored_creds[k] = '' if k in secret_keys else v
         except Exception:
             pass
+
+    # Build OAuth redirect URLs for providers that use OAuth
+    oauth_redirect_urls = {
+        key: url_for('admin.backup_oauth_callback', realm_name=realm_name,
+                     provider=key, _external=True)
+        for key, info in PROVIDER_INFO.items()
+        if info.get('uses_oauth')
+    }
 
     return render_template(
         'admin/backup/backup.html',
@@ -2287,8 +2308,54 @@ def backup_index(realm_name):
         history=history,
         stored_creds=stored_creds,
         provider_info=PROVIDER_INFO,
+        oauth_redirect_urls=oauth_redirect_urls,
         segment='backup',
     )
+
+
+@admin_bp.route('/<realm_name>/backup/oauth/callback/<provider>', methods=['GET'])
+@login_required
+def backup_oauth_callback(realm_name, provider):
+    """
+    OAuth2 redirect URI for cloud storage providers (Google Drive, Dropbox, Box).
+    Register the URL of this endpoint in each provider's OAuth app settings.
+    After the provider redirects here with an authorization code, the user is
+    sent back to the backup configuration page where they can complete setup.
+    """
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+
+    if not _require_master_realm(realm_name):
+        return redirect(url_for('admin.dashboard', realm_name=realm_name))
+
+    if provider not in PROVIDER_INFO or not PROVIDER_INFO[provider].get('uses_oauth'):
+        flash(f'Unknown OAuth provider: {provider}', 'error')
+        return redirect(url_for('admin.backup_index', realm_name=realm_name))
+
+    provider_label = PROVIDER_INFO[provider]['label']
+    auth_code = request.args.get('code', '')
+    error = request.args.get('error', '')
+
+    if error:
+        flash(f'{provider_label} OAuth error: {error}', 'error')
+        return redirect(url_for('admin.backup_index', realm_name=realm_name))
+
+    if auth_code:
+        flash(
+            f'{provider_label} authorization code received. '
+            'Exchange this code for a refresh token using your OAuth client credentials '
+            'and paste the resulting refresh token in the configuration below.',
+            'info',
+        )
+    else:
+        flash(
+            f'No authorization code was returned by {provider_label}. '
+            'Please complete the OAuth flow from your provider\'s app console.',
+            'warning',
+        )
+
+    return redirect(url_for('admin.backup_index', realm_name=realm_name))
 
 
 @admin_bp.route('/<realm_name>/backup/restore', methods=['GET', 'POST'])

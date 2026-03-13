@@ -107,6 +107,34 @@
                                             {% for key, info in provider_info.items() %}
                                             <div class="cred-fields" id="fields_{{ key }}">
                                                 <h6 class="mb-3 text-muted">{{ info.label }} Credentials</h6>
+
+                                                {% if info.uses_oauth %}
+                                                <!-- OAuth Redirect URL callout -->
+                                                <div class="alert alert-info d-flex align-items-start mb-3" role="alert">
+                                                    <i class="feather icon-link mr-2 mt-1 flex-shrink-0"></i>
+                                                    <div class="w-100">
+                                                        <strong>OAuth Redirect URL</strong> &mdash; register this URL in your
+                                                        <a href="{{ info.dev_url }}" target="_blank" rel="noopener noreferrer">{{ info.dev_label }}</a>
+                                                        before completing the OAuth flow:
+                                                        <div class="input-group mt-2">
+                                                            <input type="text" class="form-control form-control-sm"
+                                                                   id="redirect_url_{{ key }}"
+                                                                   value="{{ oauth_redirect_urls[key] }}"
+                                                                   readonly>
+                                                            <div class="input-group-append">
+                                                                <button class="btn btn-sm btn-outline-secondary"
+                                                                        type="button"
+                                                                        data-copy-btn="{{ key }}"
+                                                                        onclick="copyRedirectUrl('{{ key }}')"
+                                                                        title="Copy to clipboard">
+                                                                    <i class="feather icon-copy"></i> Copy
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                {% endif %}
+
                                                 {% for field in info.fields %}
                                                 <div class="form-group">
                                                     <label for="{{ field.key }}">{{ field.label }}</label>
@@ -287,6 +315,36 @@
         document.querySelectorAll('.cred-fields').forEach(f => f.style.display = 'none');
         const target = document.getElementById('fields_' + key);
         if (target) target.style.display = 'block';
+    }
+
+    function copyRedirectUrl(providerKey) {
+        const input = document.getElementById('redirect_url_' + providerKey);
+        if (!input) return;
+        input.select();
+        input.setSelectionRange(0, input.value.length);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(input.value).then(function () {
+                showCopiedFeedback(providerKey);
+            }).catch(function () {
+                document.execCommand('copy');
+                showCopiedFeedback(providerKey);
+            });
+        } else {
+            document.execCommand('copy');
+            showCopiedFeedback(providerKey);
+        }
+    }
+
+    function showCopiedFeedback(providerKey) {
+        const btn = document.querySelector('button[data-copy-btn="' + providerKey + '"]');
+        if (!btn) return;
+        const original = btn.innerHTML;
+        btn.innerHTML = '<i class="feather icon-check"></i> Copied!';
+        btn.classList.replace('btn-outline-secondary', 'btn-success');
+        setTimeout(function () {
+            btn.innerHTML = original;
+            btn.classList.replace('btn-success', 'btn-outline-secondary');
+        }, 2000);
     }
 
     // Init on page load
