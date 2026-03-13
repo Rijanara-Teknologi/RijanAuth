@@ -60,6 +60,11 @@ class Group(RealmScopedModel):
         """Get all top-level groups (no parent) in a realm"""
         return cls.query.filter_by(realm_id=realm_id, parent_id=None).all()
     
+    @property
+    def member_count(self):
+        """Count of direct members in this group"""
+        return self.members.count()
+
     def get_all_subgroups(self):
         """Get all subgroups recursively"""
         result = list(self.subgroups)
