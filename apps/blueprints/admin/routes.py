@@ -105,6 +105,17 @@ def realm_settings(realm_name):
         realm.smtp_server = request.form.get('smtp_host', '').strip() or None
         realm.smtp_port = request.form.get('smtp_port', '').strip() or None
         realm.smtp_from = request.form.get('smtp_from', '').strip() or None
+        realm.smtp_from_display_name = request.form.get('smtp_from_display_name', '').strip() or None
+        realm.smtp_reply_to = request.form.get('smtp_reply_to', '').strip() or None
+        realm.smtp_reply_to_display_name = request.form.get('smtp_reply_to_display_name', '').strip() or None
+        realm.smtp_ssl = request.form.get('smtp_ssl') == 'on'
+        realm.smtp_starttls = request.form.get('smtp_starttls') == 'on'
+        realm.smtp_auth = request.form.get('smtp_auth') == 'on'
+        realm.smtp_user = request.form.get('smtp_user', '').strip() or None
+        # Only update password if a new value was provided
+        new_smtp_password = request.form.get('smtp_password', '').strip()
+        if new_smtp_password:
+            realm.smtp_password = new_smtp_password
         
         # Token settings
         try:
@@ -151,6 +162,81 @@ def realm_settings(realm_name):
         realms=realms,
         segment='realm-settings'
     )
+
+
+@admin_bp.route('/<realm_name>/settings/test-email', methods=['POST'])
+@login_required
+def realm_test_email(realm_name):
+    """Send a test email using the realm's SMTP configuration"""
+    import smtplib
+    import ssl
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+
+    recipient = request.form.get('test_email_recipient', '').strip()
+    if not recipient:
+        flash('Please enter a recipient email address for the test.', 'error')
+        return redirect(url_for('admin.realm_settings', realm_name=realm_name) + '#email')
+
+    if not realm.smtp_server:
+        flash('SMTP host is not configured.', 'error')
+        return redirect(url_for('admin.realm_settings', realm_name=realm_name) + '#email')
+
+    try:
+        port = int(realm.smtp_port or 25)
+    except (ValueError, TypeError):
+        port = 25
+
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = f'RijanAuth SMTP Test - {realm.name}'
+    msg['From'] = (
+        f'{realm.smtp_from_display_name} <{realm.smtp_from}>'
+        if realm.smtp_from_display_name and realm.smtp_from
+        else (realm.smtp_from or 'rijanauth@localhost')
+    )
+    msg['To'] = recipient
+    if realm.smtp_reply_to:
+        reply_label = (
+            f'{realm.smtp_reply_to_display_name} <{realm.smtp_reply_to}>'
+            if realm.smtp_reply_to_display_name
+            else realm.smtp_reply_to
+        )
+        msg['Reply-To'] = reply_label
+
+    body = (
+        f'<p>This is a test email from <strong>RijanAuth</strong> realm '
+        f'<em>{realm.name}</em>.</p>'
+        f'<p>If you received this, your SMTP settings are working correctly.</p>'
+    )
+    msg.attach(MIMEText(body, 'html'))
+
+    try:
+        context = ssl.create_default_context()
+        if realm.smtp_ssl:
+            server = smtplib.SMTP_SSL(realm.smtp_server, port, context=context, timeout=10)
+        else:
+            server = smtplib.SMTP(realm.smtp_server, port, timeout=10)
+            if realm.smtp_starttls:
+                server.starttls(context=context)
+
+        try:
+            if realm.smtp_auth and realm.smtp_user and realm.smtp_password:
+                server.login(realm.smtp_user, realm.smtp_password)
+
+            sender = realm.smtp_from or 'rijanauth@localhost'
+            server.sendmail(sender, [recipient], msg.as_string())
+        finally:
+            server.quit()
+
+        flash(f'Test email sent successfully to {recipient}.', 'success')
+    except Exception as exc:
+        flash(f'Failed to send test email: {exc}', 'error')
+
+    return redirect(url_for('admin.realm_settings', realm_name=realm_name) + '#email')
 
 
 @admin_bp.route('/<realm_name>/branding', methods=['GET', 'POST'])
