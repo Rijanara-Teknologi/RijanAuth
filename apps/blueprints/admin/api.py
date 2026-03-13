@@ -7,7 +7,7 @@ REST API endpoints for admin console
 import csv
 import io
 
-from flask import jsonify, request
+from flask import jsonify, request, Response
 from flask_login import login_required
 from sqlalchemy.exc import SQLAlchemyError
 from apps.blueprints.admin import admin_bp
@@ -347,6 +347,49 @@ def api_import_users(realm_name):
             skipped += 1
 
     return jsonify({'imported': imported, 'skipped': skipped, 'errors': errors}), 200
+
+
+@admin_bp.route('/api/<realm_name>/users/export', methods=['GET'])
+@login_required
+@log_action(action="export_users", resource_type="user")
+def api_export_users(realm_name):
+    """Export all users in a realm as a CSV file.
+
+    The exported CSV contains the following columns:
+
+    * ``id``         – user UUID
+    * ``username``   – username
+    * ``email``      – e-mail address
+    * ``first_name`` – first name
+    * ``last_name``  – last name
+
+    Returns a ``text/csv`` response with a
+    ``Content-Disposition: attachment`` header.
+    """
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+
+    users = User.query.filter_by(realm_id=realm.id).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['id', 'username', 'email', 'first_name', 'last_name'])
+    for user in users:
+        writer.writerow([
+            user.id,
+            user.username,
+            user.email or '',
+            user.first_name or '',
+            user.last_name or '',
+        ])
+
+    csv_content = output.getvalue()
+    return Response(
+        csv_content,
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename=users_export_{realm_name}.csv'}
+    )
 
 
 # =============================================================================
