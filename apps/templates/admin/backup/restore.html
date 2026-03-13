@@ -74,7 +74,7 @@
                                         </h5>
                                         <a href="{{ url_for('admin.backup_index', realm_name=realm.name) }}"
                                            class="btn btn-sm btn-outline-primary">
-                                            <i class="feather icon-server mr-1"></i> New Backup
+                                            <i class="feather icon-hard-drive mr-1"></i> New Backup
                                         </a>
                                     </div>
                                     <div class="card-body p-0">
@@ -112,13 +112,6 @@
                                                             <span title="{{ rec.filename }}">
                                                                 {{ rec.filename }}
                                                             </span>
-                                                            {% if rec.remote_file_path %}
-                                                            <a href="{{ rec.remote_file_path }}" target="_blank"
-                                                               rel="noopener noreferrer" class="ml-1"
-                                                               title="Open in cloud storage">
-                                                                <i class="feather icon-external-link"></i>
-                                                            </a>
-                                                            {% endif %}
                                                         </td>
                                                         <td class="small">{{ rec.storage_provider or '-' }}</td>
                                                         <td class="small text-muted">
@@ -164,7 +157,7 @@
                                     <div class="card-body">
                                         <p class="text-muted small">
                                             Upload a backup ZIP file downloaded from this system to restore directly,
-                                            without needing a cloud storage entry in the history.
+                                            without needing a server-side backup entry in the history.
                                         </p>
                                         <form method="POST" enctype="multipart/form-data" id="uploadRestoreForm">
                                             <input type="hidden" name="action" value="restore_upload">

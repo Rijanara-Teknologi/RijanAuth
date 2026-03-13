@@ -2083,130 +2083,7 @@ from apps.models.backup import BackupConfig, BackupRecord
 from apps.services.backup_service import BackupService
 
 # Cloud provider metadata used in templates
-PROVIDER_INFO = {
-    'google_drive': {
-        'label': 'Google Drive',
-        'icon': 'fa-google-drive',
-        'icon_prefix': 'fab',
-        'dev_url': 'https://console.cloud.google.com/',
-        'dev_label': 'Google Cloud Console',
-        'uses_oauth': False,
-        'fields': [
-            {'key': 'service_account_json', 'label': 'Service Account JSON', 'type': 'textarea',
-             'help': 'Paste the full contents of the Service Account JSON key file downloaded from Google Cloud Console.'},
-            {'key': 'folder_id', 'label': 'Drive Folder ID (optional)', 'type': 'text',
-             'help': 'ID of the Google Drive folder to store backups in. Leave blank for root.'},
-        ],
-        'instructions': [
-            '1. Open <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer">Google Cloud Console</a> and create a project (or select an existing one).',
-            '2. Go to <strong>APIs &amp; Services → Library</strong> and enable the <strong>Google Drive API</strong>.',
-            '3. Go to <strong>IAM &amp; Admin → Service Accounts</strong> and click <strong>Create Service Account</strong>.',
-            '4. Enter a name for the service account and click <strong>Create and Continue</strong>, then click <strong>Done</strong>.',
-            '5. Click on the newly created service account, go to the <strong>Keys</strong> tab, click <strong>Add Key → Create new key</strong>, select <strong>JSON</strong>, and click <strong>Create</strong>.',
-            '6. A JSON key file will be downloaded. Paste its full contents into the <strong>Service Account JSON</strong> field above.',
-            '7. (Optional) Create a folder in Google Drive, share it with the service account email address (as Editor), copy the folder ID from the URL, and paste it in the <strong>Drive Folder ID</strong> field.',
-        ],
-    },
-    'mega': {
-        'label': 'Mega.nz',
-        'icon': 'fa-cloud',
-        'icon_prefix': 'fas',
-        'dev_url': 'https://mega.nz/',
-        'dev_label': 'Mega.nz',
-        'uses_oauth': False,
-        'fields': [
-            {'key': 'email', 'label': 'Mega Account Email', 'type': 'email', 'help': 'Your Mega.nz login email.'},
-            {'key': 'password', 'label': 'Mega Account Password', 'type': 'password', 'help': 'Your Mega.nz login password.'},
-            {'key': 'folder', 'label': 'Folder Name (optional)', 'type': 'text',
-             'help': 'Name of the folder inside Mega where backups will be stored. Defaults to "RijanAuth Backups".'},
-        ],
-        'instructions': [
-            '1. Register or log in at <a href="https://mega.nz/" target="_blank" rel="noopener noreferrer">Mega.nz</a>.',
-            '2. Enter your Mega account email and password in the fields above.',
-            '3. Backups will be stored in a folder called <strong>RijanAuth Backups</strong> (or the name you specify).',
-            '<strong>Note:</strong> Mega.nz does not have a separate API key — authentication uses your account credentials.',
-        ],
-    },
-    'dropbox': {
-        'label': 'Dropbox',
-        'icon': 'fa-dropbox',
-        'icon_prefix': 'fab',
-        'dev_url': 'https://www.dropbox.com/developers/apps',
-        'dev_label': 'Dropbox App Console',
-        'uses_oauth': True,
-        'fields': [
-            {'key': 'app_key', 'label': 'App Key', 'type': 'text', 'help': 'Your Dropbox app key.'},
-            {'key': 'app_secret', 'label': 'App Secret', 'type': 'password', 'help': 'Your Dropbox app secret.'},
-            {'key': 'refresh_token', 'label': 'OAuth2 Refresh Token', 'type': 'password',
-             'help': 'Long-lived refresh token for your Dropbox app.'},
-        ],
-        'instructions': [
-            '1. Go to <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener noreferrer">Dropbox App Console</a> and click <strong>Create app</strong>.',
-            '2. Choose <strong>Scoped access</strong> → <strong>Full Dropbox</strong>. Give your app a name.',
-            '3. Under the <strong>Permissions</strong> tab, enable: <code>files.content.write</code>, <code>files.content.read</code>, <code>sharing.write</code>.',
-            '4. Under the <strong>Settings</strong> tab, find <strong>OAuth 2 → Redirect URIs</strong> and add the redirect URL shown above, then click <strong>Add</strong>.',
-            '5. Copy the <strong>App key</strong> and <strong>App secret</strong> from the <strong>Settings</strong> tab and paste them in the fields above.',
-            '6. Complete the OAuth2 PKCE flow to obtain a refresh token (see the <a href="https://developers.dropbox.com/oauth-guide" target="_blank" rel="noopener noreferrer">Dropbox OAuth guide</a>), then paste it in the <strong>OAuth2 Refresh Token</strong> field.',
-        ],
-    },
-    'box': {
-        'label': 'Box',
-        'icon': 'fa-box',
-        'icon_prefix': 'fas',
-        'dev_url': 'https://app.box.com/developers/console',
-        'dev_label': 'Box Developer Console',
-        'uses_oauth': True,
-        'fields': [
-            {'key': 'client_id', 'label': 'OAuth2 Client ID', 'type': 'text', 'help': 'Your Box app Client ID.'},
-            {'key': 'client_secret', 'label': 'OAuth2 Client Secret', 'type': 'password', 'help': 'Your Box app Client Secret.'},
-            {'key': 'refresh_token', 'label': 'OAuth2 Refresh Token', 'type': 'password',
-             'help': 'Long-lived refresh token obtained after completing the Box OAuth2 flow.'},
-        ],
-        'instructions': [
-            '1. Go to <a href="https://app.box.com/developers/console" target="_blank" rel="noopener noreferrer">Box Developer Console</a> and log in.',
-            '2. Click <strong>Create New App</strong> → <strong>Custom App</strong> → <strong>User Authentication (OAuth 2.0)</strong>.',
-            '3. After creating, open the app and go to the <strong>Configuration</strong> tab.',
-            '4. Under <strong>OAuth 2.0 Redirect URI</strong>, add the redirect URL shown above and click <strong>Save Changes</strong>.',
-            '5. Copy the <strong>Client ID</strong> and <strong>Client Secret</strong> and paste them in the fields above.',
-            '6. To obtain a refresh token, send your user to the Box authorization URL (<code>https://account.box.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&amp;response_type=code&amp;redirect_uri=REDIRECT_URL</code>). After approval, Box will redirect to your redirect URL with a <code>code</code> parameter. Exchange that code at <code>https://api.box.com/oauth2/token</code> with your client ID and secret to receive an access token and a refresh token.',
-            '7. Paste the refresh token in the <strong>OAuth2 Refresh Token</strong> field above.',
-        ],
-    },
-    's3': {
-        'label': 'S3 Object Storage',
-        'icon': 'fa-aws',
-        'icon_prefix': 'fab',
-        'dev_url': 'https://aws.amazon.com/s3/',
-        'dev_label': 'AWS Console',
-        'uses_oauth': False,
-        'fields': [
-            {'key': 'aws_access_key_id', 'label': 'Access Key ID', 'type': 'text',
-             'help': 'Your AWS (or S3-compatible provider) Access Key ID.'},
-            {'key': 'aws_secret_access_key', 'label': 'Secret Access Key', 'type': 'password',
-             'help': 'Your AWS (or S3-compatible provider) Secret Access Key.'},
-            {'key': 'bucket_name', 'label': 'Bucket Name', 'type': 'text',
-             'help': 'Name of the S3 bucket where backups will be stored.'},
-            {'key': 'region', 'label': 'Region (e.g. us-east-1)', 'type': 'text',
-             'help': 'AWS region of the bucket. For non-AWS providers this can often be any value.'},
-            {'key': 'endpoint_url', 'label': 'Custom Endpoint URL (optional)', 'type': 'text',
-             'help': 'Leave blank for AWS S3. For S3-compatible services enter the provider endpoint, e.g. https://is3.cloudhost.id (IDCloudHost), https://sgp1.digitaloceanspaces.com (DigitalOcean), https://s3.us-east-1.wasabisys.com (Wasabi).'},
-            {'key': 'addressing_style', 'label': 'Addressing Style (optional)', 'type': 'text',
-             'help': 'Leave blank to auto-detect. Set to "path" for IDCloudHost, MinIO, and most S3-compatible providers. Set to "virtual" to force AWS-style bucket-subdomain addressing. Defaults to "path" when a Custom Endpoint URL is provided.'},
-            {'key': 'signature_version', 'label': 'Signature Version (optional)', 'type': 'text',
-             'help': 'Leave blank for the default (SigV4). Set to "s3" only for legacy providers that require the older SigV2 signature.'},
-            {'key': 'prefix', 'label': 'Object Key Prefix (optional)', 'type': 'text',
-             'help': 'Folder/prefix inside the bucket. Defaults to "rijanauth-backups" if left blank.'},
-        ],
-        'instructions': [
-            '1. Log in to the <a href="https://console.aws.amazon.com/s3/" target="_blank" rel="noopener noreferrer">AWS Console</a> and create an S3 bucket (or use an existing one).',
-            '2. Go to <strong>IAM → Users</strong>, create a user with <strong>programmatic access</strong>, and attach the <strong>AmazonS3FullAccess</strong> policy (or a scoped policy that allows <code>s3:PutObject</code> and <code>s3:GetObject</code> on the bucket).',
-            '3. Copy the <strong>Access Key ID</strong> and <strong>Secret Access Key</strong> shown after creation.',
-            '4. Enter the bucket name and the AWS region (e.g. <code>us-east-1</code>).',
-            '5. <strong>S3-compatible providers</strong> (IDCloudHost, MinIO, DigitalOcean Spaces, Wasabi, Backblaze B2, etc.): enter your provider\'s endpoint URL in the <strong>Custom Endpoint URL</strong> field and use your provider\'s access key and secret key. Path-style addressing is enabled automatically.',
-            '6. <strong>IDCloudHost</strong>: use endpoint <code>https://is3.cloudhost.id</code>, leave Addressing Style blank (defaults to <code>path</code>), and enter your object storage Access Key and Secret Key from the IDCloudHost console.',
-        ],
-    },
-}
+PROVIDER_INFO = {}
 
 
 def _require_master_realm(realm_name):
@@ -2234,44 +2111,39 @@ def backup_index(realm_name):
     if request.method == 'POST':
         action = request.form.get('action', '')
 
-        if action == 'save_config':
-            provider = request.form.get('storage_provider', '').strip()
+        if action == 'save_local_config':
             interval = request.form.get('auto_backup_interval', '') or None
             zip_password = request.form.get('zip_password', '').strip()
 
-            # Build credentials dict
             creds: dict = {}
             if zip_password:
                 creds['zip_password'] = zip_password
-
-            if provider and provider in PROVIDER_INFO:
-                for field in PROVIDER_INFO[provider]['fields']:
-                    val = request.form.get(field['key'], '').strip()
-                    if val:
-                        creds[field['key']] = val
 
             if not config:
                 config = BackupConfig()
                 db.session.add(config)
 
-            config.storage_provider = provider or None
+            config.storage_provider = None
             config.auto_backup_interval = interval
             config.credentials_json = json.dumps(creds) if creds else None
             db.session.commit()
 
             BackupService.apply_config()
-            flash('Backup configuration saved.', 'success')
+            flash('Local backup configuration saved.', 'success')
             return redirect(url_for('admin.backup_index', realm_name=realm_name))
 
-        elif action == 'manual_backup':
-            zip_password = request.form.get('backup_password', '').strip() or None
+        elif action == 'manual_local_backup':
+            zip_password = request.form.get('local_backup_password', '').strip() or None
             try:
-                record = BackupService.create_backup(
+                record = BackupService.save_local_backup(
                     zip_password,
                     triggered_by_user_id=str(current_user.id),
                 )
                 if record.status == 'success':
-                    flash(f'Backup created successfully: {record.filename}', 'success')
+                    flash(
+                        f'Backup saved to server: {record.filename}',
+                        'success',
+                    )
                 else:
                     flash(f'Backup failed: {record.error_message}', 'error')
             except Exception as exc:
@@ -2279,27 +2151,14 @@ def backup_index(realm_name):
 
             return redirect(url_for('admin.backup_index', realm_name=realm_name))
 
-    # Decode stored credentials for display (omit secrets)
-    stored_creds: dict = {}
+    # Decode stored zip_password indicator (never expose the value)
+    has_zip_password = False
     if config and config.credentials_json:
         try:
             raw = json.loads(config.credentials_json)
-            # Expose non-secret fields for pre-fill; mask passwords/tokens
-            secret_keys = {'password', 'app_secret', 'refresh_token',
-                           'developer_token', 'service_account_json', 'zip_password',
-                           'aws_secret_access_key', 'client_secret'}
-            for k, v in raw.items():
-                stored_creds[k] = '' if k in secret_keys else v
+            has_zip_password = bool(raw.get('zip_password'))
         except Exception:
             pass
-
-    # Build OAuth redirect URLs for providers that use OAuth
-    oauth_redirect_urls = {
-        key: url_for('admin.backup_oauth_callback', realm_name=realm_name,
-                     provider=key, _external=True)
-        for key, info in PROVIDER_INFO.items()
-        if info.get('uses_oauth')
-    }
 
     return render_template(
         'admin/backup/backup.html',
@@ -2307,9 +2166,7 @@ def backup_index(realm_name):
         realms=realms,
         backup_config=config,
         history=history,
-        stored_creds=stored_creds,
-        provider_info=PROVIDER_INFO,
-        oauth_redirect_urls=oauth_redirect_urls,
+        has_zip_password=has_zip_password,
         segment='backup',
     )
 
@@ -2342,51 +2199,6 @@ def backup_download(realm_name):
         as_attachment=True,
         download_name=filename,
     )
-
-
-@admin_bp.route('/<realm_name>/backup/oauth/callback/<provider>', methods=['GET'])
-@login_required
-def backup_oauth_callback(realm_name, provider):
-    """
-    OAuth2 redirect URI for cloud storage providers (Google Drive, Dropbox, Box).
-    Register the URL of this endpoint in each provider's OAuth app settings.
-    After the provider redirects here with an authorization code, the user is
-    sent back to the backup configuration page where they can complete setup.
-    """
-    realm = get_realm_or_404(realm_name)
-    if not realm:
-        return redirect(url_for('admin.index'))
-
-    if not _require_master_realm(realm_name):
-        return redirect(url_for('admin.dashboard', realm_name=realm_name))
-
-    if provider not in PROVIDER_INFO or not PROVIDER_INFO[provider].get('uses_oauth'):
-        flash(f'Unknown OAuth provider: {provider}', 'error')
-        return redirect(url_for('admin.backup_index', realm_name=realm_name))
-
-    provider_label = PROVIDER_INFO[provider]['label']
-    auth_code = request.args.get('code', '')
-    error = request.args.get('error', '')
-
-    if error:
-        flash(f'{provider_label} OAuth error: {error}', 'error')
-        return redirect(url_for('admin.backup_index', realm_name=realm_name))
-
-    if auth_code:
-        flash(
-            f'{provider_label} authorization code received. '
-            'Exchange this code for a refresh token using your OAuth client credentials '
-            'and paste the resulting refresh token in the configuration below.',
-            'info',
-        )
-    else:
-        flash(
-            f'No authorization code was returned by {provider_label}. '
-            'Please complete the OAuth flow from your provider\'s app console.',
-            'warning',
-        )
-
-    return redirect(url_for('admin.backup_index', realm_name=realm_name))
 
 
 @admin_bp.route('/<realm_name>/backup/restore', methods=['GET', 'POST'])

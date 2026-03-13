@@ -85,7 +85,17 @@ def run_migration():
     cursor = conn.cursor()
     
     migrations = []
-    
+
+    # ==========================================================================
+    # Backup Records Table - Add local_file_path column
+    # ==========================================================================
+    if table_exists(cursor, 'backup_records'):
+        if not column_exists(cursor, 'backup_records', 'local_file_path'):
+            migrations.append((
+                "ALTER TABLE backup_records ADD COLUMN local_file_path VARCHAR(1000)",
+                "Added 'local_file_path' column to backup_records"
+            ))
+
     # ==========================================================================
     # Protocol Mappers Table - Add priority and consent_text columns
     # ==========================================================================

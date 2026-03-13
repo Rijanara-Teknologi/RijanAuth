@@ -1,7 +1,7 @@
 # -*- encoding: utf-8 -*-
 """
 RijanAuth - Backup Service
-Handles database backup, file archiving, cloud upload and restore operations.
+Handles database backup, file archiving, local server storage and restore.
 
 What gets backed up:
   1. Database  – full JSON dump of every table
@@ -10,14 +10,17 @@ What gets backed up:
 The archive is a ZIP file (via pyzipper).  When a password is supplied, it is
 protected with AES-256 encryption; without a password the archive is created
 without encryption.
-Cloud providers: Google Drive, Mega.nz, Dropbox, Box
+
+Backup types:
+  - Manual Download : ZIP is sent directly to the admin's browser.
+  - Local Server    : ZIP is saved in storage/backups/ on the RijanAuth server.
+                      Local backups older than 30 days are automatically purged.
 """
 
 import io
 import os
 import json
 import logging
-import tempfile
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, Tuple
 
@@ -36,18 +39,9 @@ except ImportError:
 
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
-    from apscheduler.triggers.cron import CronTrigger
     SCHEDULER_AVAILABLE = True
 except ImportError:
     SCHEDULER_AVAILABLE = False
-
-try:
-    import boto3
-    from botocore.config import Config as BotocoreConfig
-    from botocore.exceptions import BotoCoreError, ClientError
-    BOTO3_AVAILABLE = True
-except ImportError:
-    BOTO3_AVAILABLE = False
 
 
 # =============================================================================
@@ -55,7 +49,7 @@ except ImportError:
 # =============================================================================
 
 BACKUP_STORAGE_DIR = os.path.join('storage', 'backups')
-S3_DEFAULT_PREFIX = 'rijanauth-backups'
+LOCAL_BACKUP_RETENTION_DAYS = 30
 INTERVAL_SECONDS = {
     'daily':   86400,
     'weekly':  604800,
@@ -161,243 +155,6 @@ def _build_zip(password: Optional[str]) -> Tuple[bytes, int]:
     return data, len(data)
 
 
-# =============================================================================
-# Cloud uploader helpers
-# =============================================================================
-
-def _upload_google_drive(zip_bytes: bytes, filename: str,
-                         creds: Dict[str, Any]) -> Tuple[str, str]:
-    """
-    Upload to Google Drive using a Service Account JSON key.
-    Returns (file_id, file_link).
-    """
-    try:
-        from google.oauth2 import service_account
-        from googleapiclient.discovery import build
-        from googleapiclient.http import MediaIoBaseUpload
-    except ImportError:
-        raise RuntimeError(
-            "google-api-python-client or google-auth are not installed.\n"
-            "Run: pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib"
-        )
-
-    sa_info = json.loads(creds.get('service_account_json', '{}'))
-    folder_id = creds.get('folder_id', '')
-
-    scopes = ['https://www.googleapis.com/auth/drive.file']
-    credentials = service_account.Credentials.from_service_account_info(
-        sa_info, scopes=scopes
-    )
-    service = build('drive', 'v3', credentials=credentials, cache_discovery=False)
-
-    file_metadata = {'name': filename}
-    if folder_id:
-        file_metadata['parents'] = [folder_id]
-
-    media = MediaIoBaseUpload(io.BytesIO(zip_bytes),
-                              mimetype='application/zip',
-                              resumable=True)
-    uploaded = service.files().create(
-        body=file_metadata, media_body=media, fields='id,webViewLink'
-    ).execute()
-
-    return uploaded.get('id', ''), uploaded.get('webViewLink', '')
-
-
-def _upload_mega(zip_bytes: bytes, filename: str,
-                 creds: Dict[str, Any]) -> Tuple[str, str]:
-    """
-    Upload to Mega.nz.
-    Returns (file_handle, file_link).
-    """
-    try:
-        from mega import Mega
-    except (ImportError, AttributeError):
-        raise RuntimeError(
-            "mega.py is not installed or failed to import. "
-            "Run: pip install mega.py tenacity>=8.0.0"
-        )
-
-    mega = Mega()
-    try:
-        m = mega.login(creds['email'], creds['password'])
-    except ValueError as exc:
-        raise RuntimeError(
-            "Mega.nz login failed – the API returned an unexpected response. "
-            "Please check your email/password credentials. "
-            f"(detail: {exc})"
-        ) from exc
-
-    folder_name = creds.get('folder', 'RijanAuth Backups')
-    folder = m.find(folder_name)
-    if not folder:
-        created = m.create_folder(folder_name)
-        # create_folder returns {'folder_name': handle_string}
-        if isinstance(created, dict):
-            folder_dest = list(created.values())[0]
-        else:
-            folder_dest = None  # fallback: upload to root
-    else:
-        # find() returns (handle, node) – use the handle string as dest
-        folder_dest = folder[0]
-
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
-    try:
-        tmp.write(zip_bytes)
-        tmp.flush()
-        tmp.close()
-        uploaded = m.upload(tmp.name, dest=folder_dest)
-    finally:
-        try:
-            os.unlink(tmp.name)
-        except OSError:
-            pass
-
-    link = m.get_upload_link(uploaded)
-    handle = str(uploaded)
-    return handle, link or ''
-
-
-def _upload_dropbox(zip_bytes: bytes, filename: str,
-                    creds: Dict[str, Any]) -> Tuple[str, str]:
-    """
-    Upload to Dropbox using OAuth2 refresh token.
-    Returns (dropbox_path, shared_link).
-    """
-    try:
-        import dropbox
-        from dropbox.files import WriteMode
-        from dropbox.exceptions import ApiError
-    except ImportError:
-        raise RuntimeError(
-            "dropbox is not installed. Run: pip install dropbox"
-        )
-
-    dbx = dropbox.Dropbox(
-        oauth2_refresh_token=creds.get('refresh_token', ''),
-        app_key=creds.get('app_key', ''),
-        app_secret=creds.get('app_secret', ''),
-    )
-
-    dest_path = f"/RijanAuth Backups/{filename}"
-    dbx.files_upload(zip_bytes, dest_path, mode=WriteMode.overwrite)
-
-    try:
-        link_result = dbx.sharing_create_shared_link_with_settings(dest_path)
-        shared_link = link_result.url
-    except ApiError:
-        shared_link = ''
-
-    return dest_path, shared_link
-
-
-def _upload_box(zip_bytes: bytes, filename: str,
-                creds: Dict[str, Any]) -> Tuple[str, str]:
-    """
-    Upload to Box using a Developer Token (simple auth).
-    Returns (file_id, file_url).
-    """
-    try:
-        from boxsdk import Client, OAuth2
-    except ImportError:
-        raise RuntimeError(
-            "boxsdk is not installed. Run: pip install boxsdk"
-        )
-
-    auth = OAuth2(
-        client_id=creds.get('client_id', ''),
-        client_secret=creds.get('client_secret', ''),
-        access_token=creds.get('developer_token', ''),
-    )
-    client = Client(auth)
-
-    folder_name = 'RijanAuth Backups'
-    root_folder = client.folder('0')
-
-    # Find or create backup folder
-    folder_id = '0'
-    try:
-        items = root_folder.get_items()
-        for item in items:
-            if item.type == 'folder' and item.name == folder_name:
-                folder_id = item.id
-                break
-        else:
-            new_folder = root_folder.create_subfolder(folder_name)
-            folder_id = new_folder.id
-    except Exception:
-        folder_id = '0'
-
-    stream = io.BytesIO(zip_bytes)
-    box_file = client.folder(folder_id).upload_stream(stream, filename)
-    file_url = f"https://app.box.com/file/{box_file.id}"
-    return box_file.id, file_url
-
-
-def _upload_s3(zip_bytes: bytes, filename: str,
-               creds: Dict[str, Any]) -> Tuple[str, str]:
-    """
-    Upload to an S3-compatible object storage bucket.
-    Supports AWS S3 and any S3-compatible provider (MinIO, DigitalOcean Spaces,
-    Wasabi, Backblaze B2, IDCloudHost, etc.) via an optional custom endpoint_url.
-    Returns (object_key, s3_uri).
-
-    When a custom endpoint_url is supplied the boto3 client is automatically
-    configured to use path-style addressing (e.g. https://endpoint/bucket/key)
-    because most S3-compatible providers do not support the AWS virtual-hosted
-    style (bucket.endpoint) by default.  This can be overridden via the optional
-    'addressing_style' credential field ('path', 'virtual', or 'auto').
-    """
-    if not BOTO3_AVAILABLE:
-        raise RuntimeError(
-            "boto3 is not installed. Run: pip install boto3"
-        )
-
-    bucket = creds.get('bucket_name', '').strip()
-    if not bucket:
-        raise ValueError("S3 bucket_name is required.")
-
-    prefix = creds.get('prefix', S3_DEFAULT_PREFIX).strip().rstrip('/')
-    object_key = f"{prefix}/{filename}" if prefix else filename
-
-    endpoint_url = creds.get('endpoint_url', '').strip()
-
-    kwargs: Dict[str, Any] = {
-        'aws_access_key_id': creds.get('aws_access_key_id', ''),
-        'aws_secret_access_key': creds.get('aws_secret_access_key', ''),
-        'region_name': creds.get('region', 'us-east-1') or 'us-east-1',
-    }
-    if endpoint_url:
-        kwargs['endpoint_url'] = endpoint_url
-
-    # Build botocore Config ──────────────────────────────────────────────────
-    # When a custom endpoint is provided default to path-style addressing so
-    # that S3-compatible providers (IDCloudHost, MinIO, Wasabi, etc.) work
-    # out-of-the-box.  Virtual-hosted-style requires a wildcard DNS entry
-    # (*.endpoint) which most third-party providers do not have.
-    addressing_style = creds.get('addressing_style', '').strip()
-    if not addressing_style:
-        addressing_style = 'path' if endpoint_url else 'auto'
-
-    boto_config_kwargs: Dict[str, Any] = {
-        's3': {'addressing_style': addressing_style},
-    }
-    signature_version = creds.get('signature_version', '').strip()
-    if signature_version:
-        boto_config_kwargs['signature_version'] = signature_version
-    kwargs['config'] = BotocoreConfig(**boto_config_kwargs)
-
-    s3 = boto3.client('s3', **kwargs)
-    s3.put_object(
-        Bucket=bucket,
-        Key=object_key,
-        Body=zip_bytes,
-        ContentType='application/zip',
-        ContentLength=len(zip_bytes),
-    )
-
-    s3_uri = f"s3://{bucket}/{object_key}"
-    return object_key, s3_uri
 
 
 # =============================================================================
@@ -409,86 +166,7 @@ class BackupService:
     High-level interface for backup and restore operations.
     """
 
-    # ── Create backup ─────────────────────────────────────────────────────────
-
-    @classmethod
-    def create_backup(cls, password: Optional[str] = None,
-                      triggered_by_user_id: Optional[str] = None) -> BackupRecord:
-        """
-        Build a ZIP archive of the database + media files and upload it
-        to the configured cloud provider.
-
-        Returns the saved BackupRecord.
-        Raises on fatal errors (no config, missing credentials, etc.).
-        """
-        config = BackupConfig.get_config()
-        if not config or not config.storage_provider:
-            raise ValueError(
-                "No backup configuration found. "
-                "Please configure a cloud storage provider first."
-            )
-        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-        filename = f"rijanauth_backup_{timestamp}.zip"
-
-        record = BackupRecord(
-            filename=filename,
-            storage_provider=config.storage_provider,
-            status='in_progress',
-            created_by_user_id=triggered_by_user_id,
-            backed_up_at=datetime.utcnow(),
-        )
-        db.session.add(record)
-        db.session.commit()
-
-        try:
-            zip_data, size = _build_zip(password)
-        except Exception as exc:
-            record.status = 'failed'
-            record.error_message = str(exc)
-            db.session.commit()
-            raise
-
-        creds = {}
-        if config.credentials_json:
-            try:
-                creds = json.loads(config.credentials_json)
-            except json.JSONDecodeError:
-                creds = {}
-
-        try:
-            file_id, file_path = cls._upload(
-                zip_data, filename, config.storage_provider, creds
-            )
-            record.status = 'success'
-            record.size_bytes = size
-            record.remote_file_id = file_id
-            record.remote_file_path = file_path
-        except Exception as exc:
-            record.status = 'failed'
-            record.error_message = str(exc)
-            logger.exception("Backup upload failed: %s", exc)
-
-        config.last_backup_at = datetime.utcnow()
-        db.session.commit()
-
-        return record
-
-    @classmethod
-    def _upload(cls, zip_data: bytes, filename: str,
-                provider: str, creds: Dict[str, Any]) -> Tuple[str, str]:
-        if provider == 'google_drive':
-            return _upload_google_drive(zip_data, filename, creds)
-        if provider == 'mega':
-            return _upload_mega(zip_data, filename, creds)
-        if provider == 'dropbox':
-            return _upload_dropbox(zip_data, filename, creds)
-        if provider == 'box':
-            return _upload_box(zip_data, filename, creds)
-        if provider == 's3':
-            return _upload_s3(zip_data, filename, creds)
-        raise ValueError(f"Unknown storage provider: {provider}")
-
-    # ── Download (local / manual) ─────────────────────────────────────────────
+    # ── Manual Download ───────────────────────────────────────────────────────
 
     @classmethod
     def build_download_backup(cls, password: Optional[str] = None,
@@ -496,10 +174,9 @@ class BackupService:
                               ) -> Tuple[bytes, str, int]:
         """
         Build a ZIP archive and return the raw bytes for direct browser download.
-        No cloud storage configuration is required.
 
-        Also creates a BackupRecord with storage_provider='local' so the download
-        appears in the backup history.
+        Also creates a BackupRecord with storage_provider='download' so the
+        action appears in the backup history.
 
         Returns (zip_bytes, filename, size_bytes).
         """
@@ -508,7 +185,7 @@ class BackupService:
 
         record = BackupRecord(
             filename=filename,
-            storage_provider='local',
+            storage_provider='download',
             status='in_progress',
             created_by_user_id=triggered_by_user_id,
             backed_up_at=datetime.utcnow(),
@@ -530,14 +207,108 @@ class BackupService:
 
         return zip_data, filename, size
 
+    # ── Local Server Backup ───────────────────────────────────────────────────
+
+    @classmethod
+    def save_local_backup(cls, password: Optional[str] = None,
+                          triggered_by_user_id: Optional[str] = None
+                          ) -> 'BackupRecord':
+        """
+        Build a ZIP archive and save it to the local server filesystem
+        (BACKUP_STORAGE_DIR).  Creates a BackupRecord with
+        storage_provider='local_server'.
+
+        Returns the saved BackupRecord.
+        """
+        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        filename = f"rijanauth_backup_{timestamp}.zip"
+
+        record = BackupRecord(
+            filename=filename,
+            storage_provider='local_server',
+            status='in_progress',
+            created_by_user_id=triggered_by_user_id,
+            backed_up_at=datetime.utcnow(),
+        )
+        db.session.add(record)
+        db.session.commit()
+
+        try:
+            zip_data, size = _build_zip(password)
+        except Exception as exc:
+            record.status = 'failed'
+            record.error_message = str(exc)
+            db.session.commit()
+            raise
+
+        try:
+            storage_dir = BACKUP_STORAGE_DIR
+            os.makedirs(storage_dir, exist_ok=True)
+            file_path = os.path.join(storage_dir, filename)
+            with open(file_path, 'wb') as fh:
+                fh.write(zip_data)
+            record.status = 'success'
+            record.size_bytes = size
+            record.local_file_path = os.path.abspath(file_path)
+        except Exception as exc:
+            record.status = 'failed'
+            record.error_message = str(exc)
+            logger.exception("Local backup save failed: %s", exc)
+
+        config = BackupConfig.get_config()
+        if config:
+            config.last_backup_at = datetime.utcnow()
+
+        db.session.commit()
+        return record
+
+    # ── Cleanup old local backups ─────────────────────────────────────────────
+
+    @classmethod
+    def cleanup_old_local_backups(cls) -> int:
+        """
+        Delete local server backup files older than LOCAL_BACKUP_RETENTION_DAYS
+        and update the corresponding BackupRecord rows to mark them as purged.
+
+        Returns the number of files deleted.
+        """
+        cutoff = datetime.utcnow() - timedelta(days=LOCAL_BACKUP_RETENTION_DAYS)
+        old_records = (
+            BackupRecord.query
+            .filter(
+                BackupRecord.storage_provider == 'local_server',
+                BackupRecord.status == 'success',
+                BackupRecord.backed_up_at < cutoff,
+                BackupRecord.local_file_path.isnot(None),
+            )
+            .all()
+        )
+
+        deleted = 0
+        for rec in old_records:
+            try:
+                if rec.local_file_path and os.path.isfile(rec.local_file_path):
+                    os.remove(rec.local_file_path)
+                    deleted += 1
+                rec.status = 'purged'
+                rec.local_file_path = None
+            except Exception as exc:
+                logger.warning("Could not delete old backup %s: %s",
+                               rec.local_file_path, exc)
+
+        if old_records:
+            db.session.commit()
+            logger.info("Cleanup: removed %d old local backup(s).", deleted)
+
+        return deleted
+
     # ── Restore ───────────────────────────────────────────────────────────────
 
     @classmethod
     def restore_from_record(cls, record_id: str,
                             password: Optional[str] = None) -> Dict[str, Any]:
         """
-        Download a backup ZIP by its BackupRecord ID, decrypt it
-        and restore the database from the embedded db_export.json.
+        Restore from a local server backup by its BackupRecord ID.
 
         Returns a dict with restore statistics.
         """
@@ -546,18 +317,19 @@ class BackupService:
             raise ValueError("Backup record not found.")
         if record.status != 'success':
             raise ValueError("Only successfully completed backups can be restored.")
+        if record.storage_provider != 'local_server':
+            raise ValueError("Only local server backups can be restored from history.")
 
-        config = BackupConfig.get_config()
-        creds: Dict[str, Any] = {}
-        if config and config.credentials_json:
-            try:
-                creds = json.loads(config.credentials_json)
-            except json.JSONDecodeError:
-                pass
+        if not record.local_file_path or not os.path.isfile(record.local_file_path):
+            raise ValueError(
+                "Backup file not found on server. "
+                "The file may have been deleted. Use Upload & Restore instead."
+            )
 
-        zip_data = cls._download(record, creds)
-        stats = cls._restore_zip(zip_data, password)
-        return stats
+        with open(record.local_file_path, 'rb') as fh:
+            zip_data = fh.read()
+
+        return cls._restore_zip(zip_data, password)
 
     @classmethod
     def restore_from_upload(cls, zip_data: bytes,
@@ -571,22 +343,6 @@ class BackupService:
         Returns a dict with restore statistics.
         """
         return cls._restore_zip(zip_data, password)
-
-    @classmethod
-    def _download(cls, record: BackupRecord,
-                  creds: Dict[str, Any]) -> bytes:
-        provider = record.storage_provider
-        if provider == 'google_drive':
-            return _download_google_drive(record.remote_file_id, creds)
-        if provider == 'mega':
-            return _download_mega(record.remote_file_id, creds)
-        if provider == 'dropbox':
-            return _download_dropbox(record.remote_file_id, creds)
-        if provider == 'box':
-            return _download_box(record.remote_file_id, creds)
-        if provider == 's3':
-            return _download_s3(record.remote_file_id, creds)
-        raise ValueError(f"Unknown storage provider: {provider}")
 
     @classmethod
     def _restore_zip(cls, zip_data: bytes, password: Optional[str]) -> Dict[str, Any]:
@@ -699,8 +455,13 @@ class BackupService:
             return
 
         job_id = 'auto_backup'
+        cleanup_job_id = 'local_backup_cleanup'
         try:
             cls._scheduler.remove_job(job_id)
+        except Exception:
+            pass
+        try:
+            cls._scheduler.remove_job(cleanup_job_id)
         except Exception:
             pass
 
@@ -719,7 +480,17 @@ class BackupService:
             id=job_id,
             replace_existing=True,
         )
-        logger.info("Auto-backup scheduled every %s.", config.auto_backup_interval)
+        logger.info("Local auto-backup scheduled every %s.", config.auto_backup_interval)
+
+        # Schedule daily cleanup of old local backups
+        cls._scheduler.add_job(
+            cls._run_cleanup,
+            'interval',
+            seconds=86400,
+            id=cleanup_job_id,
+            replace_existing=True,
+        )
+        logger.info("Local backup cleanup scheduled (daily).")
 
     @classmethod
     def _run_auto_backup(cls):
@@ -732,161 +503,37 @@ class BackupService:
             logger.warning("No Flask app context for auto-backup run.")
 
     @classmethod
+    def _run_cleanup(cls):
+        """Called by the scheduler; needs an app context."""
+        try:
+            from flask import current_app
+            with current_app.app_context():
+                cls.cleanup_old_local_backups()
+        except RuntimeError:
+            logger.warning("No Flask app context for cleanup run.")
+
+    @classmethod
     def _do_auto_backup(cls):
         config = BackupConfig.get_config()
-        if not config or not config.credentials_json:
-            logger.warning("Auto-backup skipped: no credentials configured.")
+        if not config or not config.auto_backup_interval:
+            logger.warning("Auto-backup skipped: no interval configured.")
             return
 
-        creds = json.loads(config.credentials_json)
-        password = creds.get('zip_password', '')
-        if not password:
-            logger.warning("Auto-backup skipped: no zip_password in credentials.")
-            return
+        password = None
+        if config.credentials_json:
+            try:
+                creds = json.loads(config.credentials_json)
+                password = creds.get('zip_password') or None
+            except (json.JSONDecodeError, TypeError):
+                pass
 
         try:
-            cls.create_backup(password)
-            logger.info("Auto-backup completed successfully.")
+            cls.save_local_backup(password)
+            logger.info("Auto local backup completed successfully.")
         except Exception as exc:
-            logger.error("Auto-backup failed: %s", exc)
+            logger.error("Auto local backup failed: %s", exc)
 
     @classmethod
     def apply_config(cls, app=None):
         """Call after saving a new BackupConfig to reschedule jobs."""
         cls._reschedule(app)
-
-
-# =============================================================================
-# Download helpers
-# =============================================================================
-
-def _download_google_drive(file_id: str, creds: Dict[str, Any]) -> bytes:
-    try:
-        from google.oauth2 import service_account
-        from googleapiclient.discovery import build
-        from googleapiclient.http import MediaIoBaseDownload
-    except ImportError:
-        raise RuntimeError("google-api-python-client is not installed.")
-
-    sa_info = json.loads(creds.get('service_account_json', '{}'))
-    scopes = ['https://www.googleapis.com/auth/drive.file']
-    credentials = service_account.Credentials.from_service_account_info(
-        sa_info, scopes=scopes
-    )
-    service = build('drive', 'v3', credentials=credentials, cache_discovery=False)
-    buf = io.BytesIO()
-    request = service.files().get_media(fileId=file_id)
-    downloader = MediaIoBaseDownload(buf, request)
-    done = False
-    while not done:
-        _, done = downloader.next_chunk()
-    return buf.getvalue()
-
-
-def _download_mega(file_handle: str, creds: Dict[str, Any]) -> bytes:
-    try:
-        from mega import Mega
-    except (ImportError, AttributeError):
-        raise RuntimeError(
-            "mega.py is not installed or failed to import. "
-            "Run: pip install mega.py tenacity>=8.0.0"
-        )
-
-    mega = Mega()
-    try:
-        m = mega.login(creds['email'], creds['password'])
-    except ValueError as exc:
-        raise RuntimeError(
-            "Mega.nz login failed – the API returned an unexpected response. "
-            "Please check your email/password credentials. "
-            f"(detail: {exc})"
-        ) from exc
-    # mega.py download_url downloads to a file path, not a buffer
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
-    tmp.close()
-    try:
-        m.download_url(file_handle, dest_filename=tmp.name)
-        with open(tmp.name, 'rb') as f:
-            return f.read()
-    finally:
-        try:
-            os.unlink(tmp.name)
-        except OSError:
-            pass
-
-
-def _download_dropbox(dropbox_path: str, creds: Dict[str, Any]) -> bytes:
-    try:
-        import dropbox
-    except ImportError:
-        raise RuntimeError("dropbox is not installed.")
-
-    dbx = dropbox.Dropbox(
-        oauth2_refresh_token=creds.get('refresh_token', ''),
-        app_key=creds.get('app_key', ''),
-        app_secret=creds.get('app_secret', ''),
-    )
-    _, response = dbx.files_download(dropbox_path)
-    return response.content
-
-
-def _download_box(file_id: str, creds: Dict[str, Any]) -> bytes:
-    try:
-        from boxsdk import Client, OAuth2
-    except ImportError:
-        raise RuntimeError("boxsdk is not installed.")
-
-    auth = OAuth2(
-        client_id=creds.get('client_id', ''),
-        client_secret=creds.get('client_secret', ''),
-        access_token=creds.get('developer_token', ''),
-    )
-    client = Client(auth)
-    buf = io.BytesIO()
-    client.file(file_id).download_to(buf)
-    return buf.getvalue()
-
-
-def _download_s3(object_key: str, creds: Dict[str, Any]) -> bytes:
-    """
-    Download a backup ZIP from an S3-compatible object storage bucket.
-    The object_key stored in remote_file_id is used to retrieve the object.
-
-    Applies the same addressing-style and signature-version logic as
-    _upload_s3 so that S3-compatible providers (IDCloudHost, MinIO, etc.)
-    work correctly on download as well.
-    """
-    if not BOTO3_AVAILABLE:
-        raise RuntimeError(
-            "boto3 is not installed. Run: pip install boto3"
-        )
-
-    bucket = creds.get('bucket_name', '').strip()
-    if not bucket:
-        raise ValueError("S3 bucket_name is required.")
-
-    endpoint_url = creds.get('endpoint_url', '').strip()
-
-    kwargs: Dict[str, Any] = {
-        'aws_access_key_id': creds.get('aws_access_key_id', ''),
-        'aws_secret_access_key': creds.get('aws_secret_access_key', ''),
-        'region_name': creds.get('region', 'us-east-1') or 'us-east-1',
-    }
-    if endpoint_url:
-        kwargs['endpoint_url'] = endpoint_url
-
-    addressing_style = creds.get('addressing_style', '').strip()
-    if not addressing_style:
-        addressing_style = 'path' if endpoint_url else 'auto'
-
-    boto_config_kwargs: Dict[str, Any] = {
-        's3': {'addressing_style': addressing_style},
-    }
-    signature_version = creds.get('signature_version', '').strip()
-    if signature_version:
-        boto_config_kwargs['signature_version'] = signature_version
-    kwargs['config'] = BotocoreConfig(**boto_config_kwargs)
-
-    s3 = boto3.client('s3', **kwargs)
-    response = s3.get_object(Bucket=bucket, Key=object_key)
-    return response['Body'].read()

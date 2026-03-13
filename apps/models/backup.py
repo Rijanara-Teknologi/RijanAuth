@@ -11,15 +11,16 @@ from apps.models.base import BaseModel
 
 class BackupConfig(BaseModel):
     """
-    Stores the active cloud-backup configuration.
+    Stores the active backup configuration.
     Only one row is used (global config for the master realm).
     """
     __tablename__ = 'backup_configs'
 
-    # Cloud storage provider: 'google_drive' | 'mega' | 'dropbox' | 'box'
+    # Kept for schema compatibility; not used for cloud providers any more.
     storage_provider = Column(String(50), nullable=True)
 
-    # JSON-encoded credentials (provider-specific keys/tokens)
+    # JSON-encoded settings.  Currently stores {"zip_password": "..."} for
+    # the scheduled (local) auto-backup job.
     credentials_json = Column(Text, nullable=True)
 
     # Auto-backup interval: None / 'daily' / 'weekly' / 'monthly'
@@ -54,17 +55,17 @@ class BackupRecord(BaseModel):
     """
     __tablename__ = 'backup_records'
 
-    # Local filename of the zip (e.g. 'rijanauth_backup_20240101_120000.zip')
+    # Filename of the zip (e.g. 'rijanauth_backup_20240101_120000.zip')
     filename = Column(String(255), nullable=False)
 
-    # Cloud provider used for this backup
+    # Backup type: 'local_server' (saved on server) | 'download' (browser download)
     storage_provider = Column(String(50), nullable=True)
 
-    # Identifier / path on the remote storage
+    # Not used for new backups; kept for schema compatibility.
     remote_file_id = Column(String(500), nullable=True)
 
-    # Human-readable remote path shown in UI
-    remote_file_path = Column(String(1000), nullable=True)
+    # Absolute filesystem path for 'local_server' backups; NULL for downloads.
+    local_file_path = Column(String(1000), nullable=True)
 
     # File size in bytes
     size_bytes = Column(Integer, nullable=True)
@@ -94,8 +95,7 @@ class BackupRecord(BaseModel):
             'id': self.id,
             'filename': self.filename,
             'storage_provider': self.storage_provider,
-            'remote_file_id': self.remote_file_id,
-            'remote_file_path': self.remote_file_path,
+            'local_file_path': self.local_file_path,
             'size_bytes': self.size_bytes,
             'status': self.status,
             'error_message': self.error_message,
