@@ -290,7 +290,7 @@ def _seed_realm_client_scopes(realm: Realm):
 
 
 def _create_scope_if_not_exists(realm: Realm, scope_data: dict):
-    """Create a client scope if it doesn't exist"""
+    """Create a client scope if it doesn't exist, or add missing mappers to existing scopes"""
     existing = ClientScope.query.filter_by(
         realm_id=realm.id,
         name=scope_data['name']
@@ -298,6 +298,8 @@ def _create_scope_if_not_exists(realm: Realm, scope_data: dict):
     
     if existing:
         logger.debug(f"Client scope '{scope_data['name']}' already exists for realm {realm.name}")
+        # Add any missing protocol mappers to the existing scope
+        _seed_missing_mappers(existing, scope_data.get('mappers', []))
         return existing
     
     # Create the scope
@@ -327,6 +329,34 @@ def _create_scope_if_not_exists(realm: Realm, scope_data: dict):
     logger.info(f"Created client scope '{scope_data['name']}' with {len(scope_data.get('mappers', []))} mappers")
     
     return scope
+
+
+def _seed_missing_mappers(scope: ClientScope, mappers_data: list):
+    """Add protocol mappers to a scope if they don't already exist"""
+    if not mappers_data:
+        return
+
+    existing_names = {
+        m.name for m in ProtocolMapper.query.filter_by(client_scope_id=scope.id).all()
+    }
+
+    added = 0
+    for idx, mapper_data in enumerate(mappers_data):
+        if mapper_data['name'] not in existing_names:
+            mapper = ProtocolMapper(
+                name=mapper_data['name'],
+                protocol='openid-connect',
+                protocol_mapper=mapper_data['protocol_mapper'],
+                client_scope_id=scope.id,
+                config=mapper_data.get('config', {}),
+                priority=idx * 10
+            )
+            db.session.add(mapper)
+            added += 1
+
+    if added:
+        db.session.commit()
+        logger.info(f"Added {added} missing mapper(s) to existing scope '{scope.name}'")
 
 
 def assign_default_scopes_to_client(client, scope_names=None):
