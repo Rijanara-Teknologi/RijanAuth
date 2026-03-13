@@ -276,14 +276,18 @@ def api_import_users(realm_name):
     Upload the file using ``multipart/form-data`` with the field name
     ``file``, or send raw CSV text with ``Content-Type: text/csv``.
 
+    If a username already exists in the realm the user is **updated** rather
+    than skipped.  The ``id`` and ``username`` fields are never changed; all
+    other provided fields (first name, last name, email, roles, groups, custom
+    attributes) are applied to the existing record.
+
     Returns a JSON summary::
 
         {
             "imported": 3,
-            "skipped": 1,
-            "errors": [
-                {"row": 2, "username": "alice", "error": "Username already exists"}
-            ]
+            "updated": 1,
+            "skipped": 0,
+            "errors": []
         }
     """
     realm = Realm.find_by_name(realm_name)
@@ -308,6 +312,7 @@ def api_import_users(realm_name):
     }
 
     imported = 0
+    updated = 0
     skipped = 0
     errors = []
 
@@ -324,11 +329,6 @@ def api_import_users(realm_name):
         username = normalised_row.get('username')
         if not username:
             errors.append({'row': row_num, 'error': 'Missing username'})
-            skipped += 1
-            continue
-
-        if User.find_by_username(realm.id, username):
-            errors.append({'row': row_num, 'username': username, 'error': 'Username already exists'})
             skipped += 1
             continue
 
@@ -360,6 +360,39 @@ def api_import_users(realm_name):
             groups_raw, lambda name: Group.find_realm_group(realm.id, name)
         ) if groups_raw else []
 
+        existing_user = User.find_by_username(realm.id, username)
+        if existing_user:
+            # Username already exists – update all fields except id and username.
+            # Only non-empty CSV values overwrite existing data; empty/missing
+            # columns leave the current value unchanged.
+            # Roles and groups are additive: new assignments are appended to any
+            # already held by the user (no existing assignments are removed).
+            # Custom attributes are replaced in full when extra columns are present.
+            try:
+                update_fields = {}
+                if first_name:
+                    update_fields['first_name'] = first_name
+                if last_name:
+                    update_fields['last_name'] = last_name
+                if email:
+                    update_fields['email'] = email
+                if update_fields:
+                    UserService.update_user(existing_user, **update_fields)
+                if password:
+                    UserService.set_password(existing_user, password)
+                if extra_attrs:
+                    UserService.set_attributes(existing_user, {k: [v] for k, v in extra_attrs.items()})
+                for role in roles_to_assign:
+                    UserService.assign_role(existing_user, role)
+                for group in groups_to_assign:
+                    UserService.join_group(existing_user, group)
+                updated += 1
+            except (SQLAlchemyError, ValueError) as exc:
+                db.session.rollback()
+                errors.append({'row': row_num, 'username': username, 'error': str(exc)})
+                skipped += 1
+            continue
+
         try:
             user = UserService.create_user(
                 realm_id=realm.id,
@@ -381,7 +414,7 @@ def api_import_users(realm_name):
             errors.append({'row': row_num, 'username': username, 'error': str(exc)})
             skipped += 1
 
-    return jsonify({'imported': imported, 'skipped': skipped, 'errors': errors}), 200
+    return jsonify({'imported': imported, 'updated': updated, 'skipped': skipped, 'errors': errors}), 200
 
 
 @admin_bp.route('/api/<realm_name>/users/export', methods=['GET'])
