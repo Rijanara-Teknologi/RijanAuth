@@ -43,6 +43,7 @@ except ImportError:
 
 try:
     import boto3
+    from botocore.config import Config as BotocoreConfig
     from botocore.exceptions import BotoCoreError, ClientError
     BOTO3_AVAILABLE = True
 except ImportError:
@@ -211,9 +212,10 @@ def _upload_mega(zip_bytes: bytes, filename: str,
     """
     try:
         from mega import Mega
-    except ImportError:
+    except (ImportError, AttributeError):
         raise RuntimeError(
-            "mega.py is not installed. Run: pip install mega.py"
+            "mega.py is not installed or failed to import. "
+            "Run: pip install mega.py tenacity>=8.0.0"
         )
 
     mega = Mega()
@@ -222,16 +224,22 @@ def _upload_mega(zip_bytes: bytes, filename: str,
     folder_name = creds.get('folder', 'RijanAuth Backups')
     folder = m.find(folder_name)
     if not folder:
-        folder = m.create_folder(folder_name)
-        if isinstance(folder, dict):
-            folder = list(folder.values())[0]
+        created = m.create_folder(folder_name)
+        # create_folder returns {'folder_name': handle_string}
+        if isinstance(created, dict):
+            folder_dest = list(created.values())[0]
+        else:
+            folder_dest = None  # fallback: upload to root
+    else:
+        # find() returns (handle, node) – use the handle string as dest
+        folder_dest = folder[0]
 
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
     try:
         tmp.write(zip_bytes)
         tmp.flush()
         tmp.close()
-        uploaded = m.upload(tmp.name, dest=folder)
+        uploaded = m.upload(tmp.name, dest=folder_dest)
     finally:
         try:
             os.unlink(tmp.name)
@@ -324,8 +332,14 @@ def _upload_s3(zip_bytes: bytes, filename: str,
     """
     Upload to an S3-compatible object storage bucket.
     Supports AWS S3 and any S3-compatible provider (MinIO, DigitalOcean Spaces,
-    Wasabi, Backblaze B2, etc.) via an optional custom endpoint_url.
+    Wasabi, Backblaze B2, IDCloudHost, etc.) via an optional custom endpoint_url.
     Returns (object_key, s3_uri).
+
+    When a custom endpoint_url is supplied the boto3 client is automatically
+    configured to use path-style addressing (e.g. https://endpoint/bucket/key)
+    because most S3-compatible providers do not support the AWS virtual-hosted
+    style (bucket.endpoint) by default.  This can be overridden via the optional
+    'addressing_style' credential field ('path', 'virtual', or 'auto').
     """
     if not BOTO3_AVAILABLE:
         raise RuntimeError(
@@ -339,14 +353,32 @@ def _upload_s3(zip_bytes: bytes, filename: str,
     prefix = creds.get('prefix', S3_DEFAULT_PREFIX).strip().rstrip('/')
     object_key = f"{prefix}/{filename}" if prefix else filename
 
+    endpoint_url = creds.get('endpoint_url', '').strip()
+
     kwargs: Dict[str, Any] = {
         'aws_access_key_id': creds.get('aws_access_key_id', ''),
         'aws_secret_access_key': creds.get('aws_secret_access_key', ''),
         'region_name': creds.get('region', 'us-east-1') or 'us-east-1',
     }
-    endpoint_url = creds.get('endpoint_url', '').strip()
     if endpoint_url:
         kwargs['endpoint_url'] = endpoint_url
+
+    # Build botocore Config ──────────────────────────────────────────────────
+    # When a custom endpoint is provided default to path-style addressing so
+    # that S3-compatible providers (IDCloudHost, MinIO, Wasabi, etc.) work
+    # out-of-the-box.  Virtual-hosted-style requires a wildcard DNS entry
+    # (*.endpoint) which most third-party providers do not have.
+    addressing_style = creds.get('addressing_style', '').strip()
+    if not addressing_style:
+        addressing_style = 'path' if endpoint_url else 'auto'
+
+    boto_config_kwargs: Dict[str, Any] = {
+        's3': {'addressing_style': addressing_style},
+    }
+    signature_version = creds.get('signature_version', '').strip()
+    if signature_version:
+        boto_config_kwargs['signature_version'] = signature_version
+    kwargs['config'] = BotocoreConfig(**boto_config_kwargs)
 
     s3 = boto3.client('s3', **kwargs)
     s3.put_object(
@@ -691,8 +723,11 @@ def _download_google_drive(file_id: str, creds: Dict[str, Any]) -> bytes:
 def _download_mega(file_handle: str, creds: Dict[str, Any]) -> bytes:
     try:
         from mega import Mega
-    except ImportError:
-        raise RuntimeError("mega.py is not installed.")
+    except (ImportError, AttributeError):
+        raise RuntimeError(
+            "mega.py is not installed or failed to import. "
+            "Run: pip install mega.py tenacity>=8.0.0"
+        )
 
     mega = Mega()
     m = mega.login(creds['email'], creds['password'])
@@ -746,6 +781,10 @@ def _download_s3(object_key: str, creds: Dict[str, Any]) -> bytes:
     """
     Download a backup ZIP from an S3-compatible object storage bucket.
     The object_key stored in remote_file_id is used to retrieve the object.
+
+    Applies the same addressing-style and signature-version logic as
+    _upload_s3 so that S3-compatible providers (IDCloudHost, MinIO, etc.)
+    work correctly on download as well.
     """
     if not BOTO3_AVAILABLE:
         raise RuntimeError(
@@ -756,14 +795,27 @@ def _download_s3(object_key: str, creds: Dict[str, Any]) -> bytes:
     if not bucket:
         raise ValueError("S3 bucket_name is required.")
 
+    endpoint_url = creds.get('endpoint_url', '').strip()
+
     kwargs: Dict[str, Any] = {
         'aws_access_key_id': creds.get('aws_access_key_id', ''),
         'aws_secret_access_key': creds.get('aws_secret_access_key', ''),
         'region_name': creds.get('region', 'us-east-1') or 'us-east-1',
     }
-    endpoint_url = creds.get('endpoint_url', '').strip()
     if endpoint_url:
         kwargs['endpoint_url'] = endpoint_url
+
+    addressing_style = creds.get('addressing_style', '').strip()
+    if not addressing_style:
+        addressing_style = 'path' if endpoint_url else 'auto'
+
+    boto_config_kwargs: Dict[str, Any] = {
+        's3': {'addressing_style': addressing_style},
+    }
+    signature_version = creds.get('signature_version', '').strip()
+    if signature_version:
+        boto_config_kwargs['signature_version'] = signature_version
+    kwargs['config'] = BotocoreConfig(**boto_config_kwargs)
 
     s3 = boto3.client('s3', **kwargs)
     response = s3.get_object(Bucket=bucket, Key=object_key)
