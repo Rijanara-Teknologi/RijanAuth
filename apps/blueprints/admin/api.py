@@ -22,6 +22,20 @@ from apps.logging import log_action
 from apps import db
 
 
+def _resolve_semicolon_list(raw, lookup_fn):
+    """Split a semicolon-separated CSV field and resolve each token via *lookup_fn*.
+
+    Tokens that resolve to ``None`` (i.e. the lookup returned nothing) are
+    silently skipped.  Returns a list of resolved objects.
+    """
+    result = []
+    for name in [s.strip() for s in raw.split(';') if s.strip()]:
+        obj = lookup_fn(name)
+        if obj:
+            result.append(obj)
+    return result
+
+
 # =============================================================================
 # System API
 # =============================================================================
@@ -244,12 +258,18 @@ def api_import_users(realm_name):
     The CSV must contain at minimum a ``username`` column.  All other
     columns are optional but recognised:
 
-    * ``email``    – user e-mail address
-    * ``password`` – plain-text password (will be hashed on import)
-    * ``name``     – full name; split on the first space into
-                     first_name / last_name
+    * ``email``      – user e-mail address
+    * ``password``   – plain-text password (will be hashed on import)
+    * ``name``       – full name; split on the first space into
+                       first_name / last_name
     * ``first_name`` / ``firstName`` – first name
     * ``last_name``  / ``lastName``  – last name
+    * ``roles``      – semicolon-separated realm role names; only roles
+                       that exist in the realm are assigned (invalid names
+                       are silently skipped)
+    * ``groups``     – semicolon-separated group names; only groups
+                       that exist in the realm are assigned (invalid names
+                       are silently skipped)
 
     Any additional column is stored as a custom user attribute.
 
@@ -326,8 +346,19 @@ def api_import_users(realm_name):
         password = normalised_row.get('password') or None
 
         # Collect extra columns as custom attributes
-        KNOWN_FIELDS = {'username', 'email', 'password', 'name', 'first_name', 'last_name'}
+        KNOWN_FIELDS = {'username', 'email', 'password', 'name', 'first_name', 'last_name', 'roles', 'groups'}
         extra_attrs = {k: v for k, v in normalised_row.items() if k not in KNOWN_FIELDS and v}
+
+        # Validate roles and groups against the realm; skip unknown values
+        roles_raw = normalised_row.get('roles', '')
+        roles_to_assign = _resolve_semicolon_list(
+            roles_raw, lambda name: Role.find_realm_role(realm.id, name)
+        ) if roles_raw else []
+
+        groups_raw = normalised_row.get('groups', '')
+        groups_to_assign = _resolve_semicolon_list(
+            groups_raw, lambda name: Group.find_realm_group(realm.id, name)
+        ) if groups_raw else []
 
         try:
             user = UserService.create_user(
@@ -340,6 +371,10 @@ def api_import_users(realm_name):
             )
             if extra_attrs:
                 UserService.set_attributes(user, {k: [v] for k, v in extra_attrs.items()})
+            for role in roles_to_assign:
+                UserService.assign_role(user, role)
+            for group in groups_to_assign:
+                UserService.join_group(user, group)
             imported += 1
         except (SQLAlchemyError, ValueError) as exc:
             db.session.rollback()
@@ -362,6 +397,8 @@ def api_export_users(realm_name):
     * ``email``      – e-mail address
     * ``first_name`` – first name
     * ``last_name``  – last name
+    * ``roles``      – semicolon-separated realm role names
+    * ``groups``     – semicolon-separated group names
 
     Returns a ``text/csv`` response with a
     ``Content-Disposition: attachment`` header.
@@ -374,14 +411,20 @@ def api_export_users(realm_name):
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(['id', 'username', 'email', 'first_name', 'last_name'])
+    writer.writerow(['id', 'username', 'email', 'first_name', 'last_name', 'roles', 'groups'])
     for user in users:
+        user_roles = UserService.get_user_roles(user)
+        user_groups = UserService.get_user_groups(user)
+        roles_str = ';'.join(r.name for r in user_roles)
+        groups_str = ';'.join(g.name for g in user_groups)
         writer.writerow([
             user.id,
             user.username,
             user.email or '',
             user.first_name or '',
             user.last_name or '',
+            roles_str,
+            groups_str,
         ])
 
     csv_content = output.getvalue()
@@ -439,6 +482,121 @@ def api_list_roles(realm_name):
     return jsonify([r.to_dict() for r in roles])
 
 
+@admin_bp.route('/api/<realm_name>/roles/export', methods=['GET'])
+@login_required
+@log_action(action="export_roles", resource_type="role")
+def api_export_roles(realm_name):
+    """Export all realm roles as a CSV file.
+
+    The exported CSV contains the following columns:
+
+    * ``name``        – role name
+    * ``description`` – role description
+
+    Returns a ``text/csv`` response with a
+    ``Content-Disposition: attachment`` header.
+    """
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+
+    roles = Role.get_realm_roles(realm.id)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['name', 'description'])
+    for role in roles:
+        writer.writerow([role.name, role.description or ''])
+
+    csv_content = output.getvalue()
+    return Response(
+        csv_content,
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename=roles_export_{realm_name}.csv'}
+    )
+
+
+@admin_bp.route('/api/<realm_name>/roles/import', methods=['POST'])
+@login_required
+@log_action(action="import_roles", resource_type="role")
+def api_import_roles(realm_name):
+    """Import realm roles from a CSV file.
+
+    The CSV must contain at minimum a ``name`` column.  The optional
+    ``description`` column is also recognised.
+
+    Role names are automatically normalised: converted to lowercase and
+    spaces replaced with underscores (e.g. ``Guru Quran`` → ``guru_quran``).
+
+    Roles whose normalised name already exists in the realm are skipped.
+
+    Upload the file using ``multipart/form-data`` with the field name
+    ``file``, or send raw CSV text with ``Content-Type: text/csv``.
+
+    Returns a JSON summary::
+
+        {
+            "imported": 3,
+            "skipped": 1,
+            "errors": [
+                {"row": 2, "name": "admin", "error": "Role already exists"}
+            ]
+        }
+    """
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+
+    if 'file' in request.files:
+        file = request.files['file']
+        raw = file.read().decode('utf-8-sig')
+    elif request.content_type and 'text/csv' in request.content_type:
+        raw = request.data.decode('utf-8-sig')
+    else:
+        return jsonify({'error': 'Provide a CSV file via multipart/form-data (field "file") or raw CSV with Content-Type: text/csv'}), 400
+
+    reader = csv.DictReader(io.StringIO(raw))
+
+    imported = 0
+    skipped = 0
+    errors = []
+
+    for row_num, row in enumerate(reader, start=2):
+        name_raw = (row.get('name') or '').strip()
+        if not name_raw:
+            errors.append({'row': row_num, 'error': 'Missing name'})
+            skipped += 1
+            continue
+
+        # Auto-format: lowercase + spaces → underscores
+        name = name_raw.lower().replace(' ', '_')
+        description = (row.get('description') or '').strip() or None
+
+        if Role.find_realm_role(realm.id, name):
+            errors.append({'row': row_num, 'name': name, 'error': 'Role already exists'})
+            skipped += 1
+            continue
+
+        try:
+            role = Role(
+                realm_id=realm.id,
+                name=name,
+                description=description,
+                client_id=None,
+                client_role=False,
+                composite=False
+            )
+            db.session.add(role)
+            db.session.commit()
+            imported += 1
+        except SQLAlchemyError as exc:
+            db.session.rollback()
+            errors.append({'row': row_num, 'name': name, 'error': str(exc)})
+            skipped += 1
+
+    return jsonify({'imported': imported, 'skipped': skipped, 'errors': errors}), 200
+
+
 # =============================================================================
 # Groups API
 # =============================================================================
@@ -453,6 +611,113 @@ def api_list_groups(realm_name):
     
     groups = Group.get_top_level_groups(realm.id)
     return jsonify([g.to_dict(include_subgroups=True) for g in groups])
+
+
+@admin_bp.route('/api/<realm_name>/groups/export', methods=['GET'])
+@login_required
+@log_action(action="export_groups", resource_type="group")
+def api_export_groups(realm_name):
+    """Export all top-level realm groups as a CSV file.
+
+    The exported CSV contains the following column:
+
+    * ``name`` – group name
+
+    Returns a ``text/csv`` response with a
+    ``Content-Disposition: attachment`` header.
+    """
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+
+    groups = Group.get_top_level_groups(realm.id)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['name'])
+    for group in groups:
+        writer.writerow([group.name])
+
+    csv_content = output.getvalue()
+    return Response(
+        csv_content,
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename=groups_export_{realm_name}.csv'}
+    )
+
+
+@admin_bp.route('/api/<realm_name>/groups/import', methods=['POST'])
+@login_required
+@log_action(action="import_groups", resource_type="group")
+def api_import_groups(realm_name):
+    """Import realm groups from a CSV file.
+
+    The CSV must contain at minimum a ``name`` column.  Group names are
+    stored exactly as provided (no formatting is applied).
+
+    Groups whose name already exists as a top-level group in the realm
+    are skipped.
+
+    Upload the file using ``multipart/form-data`` with the field name
+    ``file``, or send raw CSV text with ``Content-Type: text/csv``.
+
+    Returns a JSON summary::
+
+        {
+            "imported": 3,
+            "skipped": 1,
+            "errors": [
+                {"row": 2, "name": "admins", "error": "Group already exists"}
+            ]
+        }
+    """
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+
+    if 'file' in request.files:
+        file = request.files['file']
+        raw = file.read().decode('utf-8-sig')
+    elif request.content_type and 'text/csv' in request.content_type:
+        raw = request.data.decode('utf-8-sig')
+    else:
+        return jsonify({'error': 'Provide a CSV file via multipart/form-data (field "file") or raw CSV with Content-Type: text/csv'}), 400
+
+    reader = csv.DictReader(io.StringIO(raw))
+
+    imported = 0
+    skipped = 0
+    errors = []
+
+    for row_num, row in enumerate(reader, start=2):
+        name = (row.get('name') or '').strip()
+        if not name:
+            errors.append({'row': row_num, 'error': 'Missing name'})
+            skipped += 1
+            continue
+
+        path = f'/{name}'
+        if Group.find_by_path(realm.id, path):
+            errors.append({'row': row_num, 'name': name, 'error': 'Group already exists'})
+            skipped += 1
+            continue
+
+        try:
+            group = Group(
+                realm_id=realm.id,
+                name=name,
+                path=path,
+                parent_id=None
+            )
+            db.session.add(group)
+            db.session.commit()
+            imported += 1
+        except SQLAlchemyError as exc:
+            db.session.rollback()
+            errors.append({'row': row_num, 'name': name, 'error': str(exc)})
+            skipped += 1
+
+    return jsonify({'imported': imported, 'skipped': skipped, 'errors': errors}), 200
 
 
 # =============================================================================

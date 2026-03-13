@@ -4,6 +4,9 @@ import io
 import pytest
 from apps import db
 from apps.models.user import User
+from apps.models.role import Role
+from apps.models.group import Group
+from apps.services.user_service import UserService
 
 
 # ---------------------------------------------------------------------------
@@ -175,4 +178,86 @@ class TestImportUsers:
         resp = client.post(url, json={'not': 'a-csv'})
         assert resp.status_code == 400
 
+    def test_import_assigns_valid_roles(self, app, client, admin_user, test_realm):
+        """Import assigns realm roles that exist; skips role names that don't exist."""
+        realm_name = test_realm.name
+        realm_id = test_realm.id
+        _login(client)
+
+        with app.app_context():
+            role = Role.query.filter_by(realm_id=realm_id, name='import-test-role', client_id=None).first()
+            if not role:
+                role = Role(realm_id=realm_id, name='import-test-role')
+                db.session.add(role)
+                db.session.commit()
+
+        csv_content = (
+            'username,email,password,roles\n'
+            'roleuser1,roleuser1@example.com,pass123,import-test-role;nonexistent-role\n'
+        )
+        url = self._import_url(realm_name)
+        resp = client.post(url, data={'file': (io.BytesIO(csv_content.encode()), 'roles.csv')},
+                           content_type='multipart/form-data')
+        assert resp.status_code == 200
+        assert resp.get_json()['imported'] == 1
+
+        with app.app_context():
+            u = User.find_by_username(realm_id, 'roleuser1')
+            assert u is not None
+            user_roles = UserService.get_user_roles(u)
+            role_names = [r.name for r in user_roles]
+            assert 'import-test-role' in role_names
+            assert 'nonexistent-role' not in role_names
+
+    def test_import_assigns_valid_groups(self, app, client, admin_user, test_realm):
+        """Import adds users to groups that exist; skips group names that don't exist."""
+        realm_name = test_realm.name
+        realm_id = test_realm.id
+        _login(client)
+
+        with app.app_context():
+            grp = Group.query.filter_by(realm_id=realm_id, name='import-test-group').first()
+            if not grp:
+                grp = Group(realm_id=realm_id, name='import-test-group', path='/import-test-group')
+                db.session.add(grp)
+                db.session.commit()
+
+        csv_content = (
+            'username,email,password,groups\n'
+            'groupuser1,groupuser1@example.com,pass123,import-test-group;nonexistent-group\n'
+        )
+        url = self._import_url(realm_name)
+        resp = client.post(url, data={'file': (io.BytesIO(csv_content.encode()), 'groups.csv')},
+                           content_type='multipart/form-data')
+        assert resp.status_code == 200
+        assert resp.get_json()['imported'] == 1
+
+        with app.app_context():
+            u = User.find_by_username(realm_id, 'groupuser1')
+            assert u is not None
+            user_groups = UserService.get_user_groups(u)
+            group_names = [g.name for g in user_groups]
+            assert 'import-test-group' in group_names
+            assert 'nonexistent-group' not in group_names
+
+    def test_import_roles_groups_not_treated_as_attributes(self, app, client, admin_user, test_realm):
+        """The roles and groups columns must not be stored as custom user attributes."""
+        realm_name = test_realm.name
+        realm_id = test_realm.id
+        _login(client)
+
+        csv_content = (
+            'username,email,password,roles,groups\n'
+            'attrcheck1,attrcheck1@example.com,pass123,somerole,somegroup\n'
+        )
+        url = self._import_url(realm_name)
+        resp = client.post(url, data={'file': (io.BytesIO(csv_content.encode()), 'attrcheck.csv')},
+                           content_type='multipart/form-data')
+        assert resp.status_code == 200
+
+        with app.app_context():
+            u = User.find_by_username(realm_id, 'attrcheck1')
+            assert u is not None
+            assert u.get_attribute('roles') is None
+            assert u.get_attribute('groups') is None
 
