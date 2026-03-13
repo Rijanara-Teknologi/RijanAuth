@@ -949,6 +949,41 @@ def sessions_list(realm_name):
     )
 
 
+@admin_bp.route('/<realm_name>/sessions/<session_id>/signout', methods=['POST'])
+@login_required
+def session_signout(realm_name, session_id):
+    """Sign out a single active session"""
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+
+    session = UserSession.query.filter_by(id=session_id, realm_id=realm.id).first()
+    if not session:
+        flash('Session not found', 'error')
+        return redirect(url_for('admin.sessions_list', realm_name=realm_name))
+
+    session.logout()
+    flash('Session signed out successfully', 'success')
+    return redirect(url_for('admin.sessions_list', realm_name=realm_name))
+
+
+@admin_bp.route('/<realm_name>/sessions/signout-all', methods=['POST'])
+@login_required
+def session_signout_all(realm_name):
+    """Sign out all active sessions in a realm"""
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+
+    active_sessions = UserSession.query.filter_by(realm_id=realm.id, state='ACTIVE').all()
+    count = len(active_sessions)
+    for s in active_sessions:
+        s.logout()
+
+    flash(f'{count} session(s) signed out successfully', 'success')
+    return redirect(url_for('admin.sessions_list', realm_name=realm_name))
+
+
 # =============================================================================
 # User Federation
 # =============================================================================
