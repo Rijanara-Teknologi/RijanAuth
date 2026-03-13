@@ -89,6 +89,7 @@
                                                 {% for key, info in provider_info.items() %}
                                                 <div class="col-md-3 col-6 mb-3">
                                                     <div class="provider-card p-3 text-center {% if backup_config and backup_config.storage_provider == key %}selected{% endif %}"
+                                                         data-provider="{{ key }}"
                                                          onclick="selectProvider('{{ key }}')">
                                                         <i class="{{ info.icon_prefix }} {{ info.icon }} fa-2x mb-2 text-primary"></i>
                                                         <div class="font-weight-bold small">{{ info.label }}</div>
@@ -276,11 +277,10 @@
             c.classList.remove('selected');
             c.querySelector('.provider-check').style.display = 'none';
         });
-        const cards = document.querySelectorAll('.provider-card');
-        const idx = Object.keys(PROVIDER_INFO).indexOf(key);
-        if (idx >= 0) {
-            cards[idx].classList.add('selected');
-            cards[idx].querySelector('.provider-check').style.display = 'inline-block';
+        const selectedCard = document.querySelector('.provider-card[data-provider="' + key + '"]');
+        if (selectedCard) {
+            selectedCard.classList.add('selected');
+            selectedCard.querySelector('.provider-check').style.display = 'inline-block';
         }
 
         // Show/hide credential fields
