@@ -147,6 +147,33 @@ class TestUploadMega:
             with pytest.raises(RuntimeError, match="mega.py"):
                 _upload_mega(b'data', 'f.zip', {'email': 'a@b.c', 'password': 'x'})
 
+    def test_raises_runtime_error_on_login_json_decode_error(self):
+        """
+        When mega.login() raises json.JSONDecodeError (empty / non-JSON API
+        response, e.g. wrong credentials), _upload_mega must re-raise it as a
+        RuntimeError with a helpful message instead of exposing the raw
+        JSONDecodeError.
+        """
+        import json
+        from apps.services.backup_service import _upload_mega
+
+        mock_mega_instance = MagicMock()
+        mock_mega_instance.login.side_effect = json.JSONDecodeError(
+            "Expecting value", "", 0
+        )
+        mock_mega_cls = MagicMock(return_value=mock_mega_instance)
+
+        fake_module = types.ModuleType('mega')
+        fake_module.Mega = mock_mega_cls
+
+        with patch.dict(sys.modules, {'mega': fake_module}):
+            with pytest.raises(RuntimeError, match="Mega.nz login failed"):
+                _upload_mega(
+                    b'dummy zip data',
+                    'backup.zip',
+                    {'email': 'wrong@example.com', 'password': 'bad_pass'},
+                )
+
 
 # ---------------------------------------------------------------------------
 # _download_mega
@@ -184,3 +211,27 @@ class TestDownloadMega:
         with patch('builtins.__import__', side_effect=fake_import):
             with pytest.raises(RuntimeError, match="mega.py"):
                 _download_mega('handle', {'email': 'a@b.c', 'password': 'x'})
+
+    def test_raises_runtime_error_on_login_json_decode_error(self):
+        """
+        When mega.login() raises json.JSONDecodeError during download, _download_mega
+        must re-raise it as a RuntimeError with a helpful message.
+        """
+        import json
+        from apps.services.backup_service import _download_mega
+
+        mock_mega_instance = MagicMock()
+        mock_mega_instance.login.side_effect = json.JSONDecodeError(
+            "Expecting value", "", 0
+        )
+        mock_mega_cls = MagicMock(return_value=mock_mega_instance)
+
+        fake_module = types.ModuleType('mega')
+        fake_module.Mega = mock_mega_cls
+
+        with patch.dict(sys.modules, {'mega': fake_module}):
+            with pytest.raises(RuntimeError, match="Mega.nz login failed"):
+                _download_mega(
+                    'some_file_handle',
+                    {'email': 'wrong@example.com', 'password': 'bad_pass'},
+                )

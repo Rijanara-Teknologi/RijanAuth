@@ -219,7 +219,14 @@ def _upload_mega(zip_bytes: bytes, filename: str,
         )
 
     mega = Mega()
-    m = mega.login(creds['email'], creds['password'])
+    try:
+        m = mega.login(creds['email'], creds['password'])
+    except ValueError as exc:
+        raise RuntimeError(
+            "Mega.nz login failed – the API returned an unexpected response. "
+            "Please check your email/password credentials. "
+            f"(detail: {exc})"
+        ) from exc
 
     folder_name = creds.get('folder', 'RijanAuth Backups')
     folder = m.find(folder_name)
@@ -730,7 +737,14 @@ def _download_mega(file_handle: str, creds: Dict[str, Any]) -> bytes:
         )
 
     mega = Mega()
-    m = mega.login(creds['email'], creds['password'])
+    try:
+        m = mega.login(creds['email'], creds['password'])
+    except ValueError as exc:
+        raise RuntimeError(
+            "Mega.nz login failed – the API returned an unexpected response. "
+            "Please check your email/password credentials. "
+            f"(detail: {exc})"
+        ) from exc
     # mega.py download_url downloads to a file path, not a buffer
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
     tmp.close()
