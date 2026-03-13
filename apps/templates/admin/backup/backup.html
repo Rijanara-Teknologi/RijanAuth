@@ -88,19 +88,19 @@
                                             <div class="row mb-4">
                                                 {% for key, info in provider_info.items() %}
                                                 <div class="col-md-3 col-6 mb-3">
-                                                    <div class="provider-card p-3 text-center {% if config and config.storage_provider == key %}selected{% endif %}"
+                                                    <div class="provider-card p-3 text-center {% if backup_config and backup_config.storage_provider == key %}selected{% endif %}"
                                                          onclick="selectProvider('{{ key }}')">
                                                         <i class="{{ info.icon_prefix }} {{ info.icon }} fa-2x mb-2 text-primary"></i>
                                                         <div class="font-weight-bold small">{{ info.label }}</div>
                                                         <i class="feather icon-check-circle text-primary provider-check mt-1"
-                                                           style="display:{{ 'inline-block' if config and config.storage_provider == key else 'none' }}"></i>
+                                                           style="display:{{ 'inline-block' if backup_config and backup_config.storage_provider == key else 'none' }}"></i>
                                                     </div>
                                                 </div>
                                                 {% endfor %}
                                             </div>
 
                                             <input type="hidden" name="storage_provider" id="storage_provider_input"
-                                                   value="{{ config.storage_provider if config else '' }}">
+                                                   value="{{ backup_config.storage_provider if backup_config else '' }}">
 
                                             <!-- Credentials fields (shown per provider) -->
                                             {% for key, info in provider_info.items() %}
@@ -147,10 +147,10 @@
                                             <div class="form-group">
                                                 <label for="auto_backup_interval">Auto-Backup Interval</label>
                                                 <select class="form-control" id="auto_backup_interval" name="auto_backup_interval">
-                                                    <option value="" {% if not config or not config.auto_backup_interval %}selected{% endif %}>Disabled (manual only)</option>
-                                                    <option value="daily"   {% if config and config.auto_backup_interval == 'daily'   %}selected{% endif %}>Every Day</option>
-                                                    <option value="weekly"  {% if config and config.auto_backup_interval == 'weekly'  %}selected{% endif %}>Every Week</option>
-                                                    <option value="monthly" {% if config and config.auto_backup_interval == 'monthly' %}selected{% endif %}>Every Month</option>
+                                                    <option value="" {% if not backup_config or not backup_config.auto_backup_interval %}selected{% endif %}>Disabled (manual only)</option>
+                                                    <option value="daily"   {% if backup_config and backup_config.auto_backup_interval == 'daily'   %}selected{% endif %}>Every Day</option>
+                                                    <option value="weekly"  {% if backup_config and backup_config.auto_backup_interval == 'weekly'  %}selected{% endif %}>Every Week</option>
+                                                    <option value="monthly" {% if backup_config and backup_config.auto_backup_interval == 'monthly' %}selected{% endif %}>Every Month</option>
                                                 </select>
                                                 <small class="form-text text-muted">
                                                     When auto-backup is active, the password set below is used automatically.
@@ -243,12 +243,12 @@
                                         </div>
                                         {% endif %}
                                     </div>
-                                    {% if config %}
+                                    {% if backup_config %}
                                     <div class="card-footer small text-muted">
                                         <i class="feather icon-info mr-1"></i>
-                                        Provider: <strong>{{ provider_info[config.storage_provider].label if config.storage_provider in provider_info else config.storage_provider or 'Not set' }}</strong>
+                                        Provider: <strong>{{ provider_info[backup_config.storage_provider].label if backup_config.storage_provider in provider_info else backup_config.storage_provider or 'Not set' }}</strong>
                                         &nbsp;|&nbsp;
-                                        Auto: <strong>{{ config.auto_backup_interval or 'Disabled' }}</strong>
+                                        Auto: <strong>{{ backup_config.auto_backup_interval or 'Disabled' }}</strong>
                                     </div>
                                     {% endif %}
                                 </div>
@@ -266,7 +266,7 @@
 {% block javascripts %}
 <script>
     const PROVIDER_INFO = {{ provider_info | tojson }};
-    const currentProvider = {{ (config.storage_provider if config and config.storage_provider else '') | tojson }};
+    const currentProvider = {{ (backup_config.storage_provider if backup_config and backup_config.storage_provider else '') | tojson }};
 
     function selectProvider(key) {
         document.getElementById('storage_provider_input').value = key;

@@ -2286,7 +2286,7 @@ def backup_index(realm_name):
         'admin/backup/backup.html',
         realm=realm,
         realms=realms,
-        config=config,
+        backup_config=config,
         history=history,
         stored_creds=stored_creds,
         provider_info=PROVIDER_INFO,
