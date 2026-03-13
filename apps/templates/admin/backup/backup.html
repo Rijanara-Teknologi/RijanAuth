@@ -4,32 +4,10 @@
 
 {% block stylesheets %}
 <style>
-    .provider-card {
-        border: 2px solid #e9ecef;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-    .provider-card:hover,
-    .provider-card.selected {
-        border-color: var(--primary-color);
-        background: rgba(103, 58, 183, 0.05);
-    }
-    .provider-card.selected .provider-check {
-        display: inline-block !important;
-    }
-    .instructions-box {
-        background: #f8f9fa;
-        border-left: 4px solid var(--primary-color);
-        padding: 1rem 1.25rem;
-        border-radius: 0 4px 4px 0;
-    }
-    .instructions-box ol, .instructions-box ul { padding-left: 1.2rem; margin-bottom: 0; }
-    .instructions-box li { margin-bottom: .4rem; }
-    .cred-fields { display: none; }
     .backup-status-success { color: #28a745; }
     .backup-status-failed  { color: #dc3545; }
     .backup-status-in_progress { color: #ffc107; }
+    .backup-status-purged  { color: #6c757d; }
 </style>
 {% endblock %}
 
@@ -72,109 +50,28 @@
                         {% endwith %}
 
                         <div class="row">
-                            <!-- Left column: Config & Manual Backup -->
+                            <!-- Left column: Local Backup & Manual Download -->
                             <div class="col-xl-8">
 
-                                <!-- Cloud Provider Selection -->
+                                <!-- Local Backup -->
                                 <div class="card">
                                     <div class="card-header">
-                                        <h5><i class="feather icon-cloud mr-2"></i>Cloud Storage Provider</h5>
+                                        <h5><i class="feather icon-hard-drive mr-2"></i>Local Backup</h5>
                                     </div>
                                     <div class="card-body">
-                                        <form method="POST" id="configForm">
-                                            <input type="hidden" name="action" value="save_config">
+                                        <p class="text-muted">
+                                            Backups are saved on the RijanAuth server filesystem
+                                            (<code>storage/backups/</code>). Local backups older than
+                                            <strong>30 days</strong> are automatically deleted to keep
+                                            disk usage under control.
+                                        </p>
 
-                                            <!-- Provider selector cards -->
-                                            <div class="row mb-4">
-                                                {% for key, info in provider_info.items() %}
-                                                <div class="col-md-3 col-6 mb-3">
-                                                    <div class="provider-card p-3 text-center {% if backup_config and backup_config.storage_provider == key %}selected{% endif %}"
-                                                         data-provider="{{ key }}"
-                                                         onclick="selectProvider('{{ key }}')">
-                                                        <i class="{{ info.icon_prefix }} {{ info.icon }} fa-2x mb-2 text-primary"></i>
-                                                        <div class="font-weight-bold small">{{ info.label }}</div>
-                                                        <i class="feather icon-check-circle text-primary provider-check mt-1"
-                                                           style="display:{{ 'inline-block' if backup_config and backup_config.storage_provider == key else 'none' }}"></i>
-                                                    </div>
-                                                </div>
-                                                {% endfor %}
-                                            </div>
+                                        <!-- Schedule configuration -->
+                                        <form method="POST" class="mb-4">
+                                            <input type="hidden" name="action" value="save_local_config">
 
-                                            <input type="hidden" name="storage_provider" id="storage_provider_input"
-                                                   value="{{ backup_config.storage_provider if backup_config else '' }}">
-
-                                            <!-- Credentials fields (shown per provider) -->
-                                            {% for key, info in provider_info.items() %}
-                                            <div class="cred-fields" id="fields_{{ key }}">
-                                                <h6 class="mb-3 text-muted">{{ info.label }} Credentials</h6>
-
-                                                {% if info.uses_oauth %}
-                                                <!-- OAuth Redirect URL callout -->
-                                                <div class="alert alert-info d-flex align-items-start mb-3" role="alert">
-                                                    <i class="feather icon-link mr-2 mt-1 flex-shrink-0"></i>
-                                                    <div class="w-100">
-                                                        <strong>OAuth Redirect URL</strong> &mdash; register this URL in your
-                                                        <a href="{{ info.dev_url }}" target="_blank" rel="noopener noreferrer">{{ info.dev_label }}</a>
-                                                        before completing the OAuth flow:
-                                                        <div class="input-group mt-2">
-                                                            <input type="text" class="form-control form-control-sm"
-                                                                   id="redirect_url_{{ key }}"
-                                                                   value="{{ oauth_redirect_urls[key] }}"
-                                                                   readonly>
-                                                            <div class="input-group-append">
-                                                                <button class="btn btn-sm btn-outline-secondary"
-                                                                        type="button"
-                                                                        data-copy-btn="{{ key }}"
-                                                                        onclick="copyRedirectUrl('{{ key }}')"
-                                                                        title="Copy to clipboard">
-                                                                    <i class="feather icon-copy"></i> Copy
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                {% endif %}
-
-                                                {% for field in info.fields %}
-                                                <div class="form-group">
-                                                    <label for="{{ field.key }}">{{ field.label }}</label>
-                                                    {% if field.type == 'textarea' %}
-                                                    <textarea class="form-control" id="{{ field.key }}"
-                                                              name="{{ field.key }}" rows="5"
-                                                              placeholder="Paste here..."
-                                                              >{{ stored_creds.get(field.key, '') }}</textarea>
-                                                    {% else %}
-                                                    <input type="{{ field.type }}" class="form-control"
-                                                           id="{{ field.key }}" name="{{ field.key }}"
-                                                           value="{{ stored_creds.get(field.key, '') }}"
-                                                           placeholder="{% if field.type == 'password' %}(unchanged){% endif %}">
-                                                    {% endif %}
-                                                    <small class="form-text text-muted">{{ field.help }}</small>
-                                                </div>
-                                                {% endfor %}
-
-                                                <!-- Instructions box -->
-                                                <div class="instructions-box mb-4">
-                                                    <p class="font-weight-bold mb-2">
-                                                        <i class="feather icon-info mr-1"></i>
-                                                        How to get your {{ info.label }} credentials
-                                                        &mdash;
-                                                        <a href="{{ info.dev_url }}" target="_blank" rel="noopener noreferrer">
-                                                            Open {{ info.dev_label }} <i class="feather icon-external-link ml-1"></i>
-                                                        </a>
-                                                    </p>
-                                                    <ol>
-                                                        {% for step in info.instructions %}
-                                                        <li>{{ step | safe }}</li>
-                                                        {% endfor %}
-                                                    </ol>
-                                                </div>
-                                            </div>
-                                            {% endfor %}
-
-                                            <!-- Auto-backup interval -->
                                             <div class="form-group">
-                                                <label for="auto_backup_interval">Auto-Backup Interval</label>
+                                                <label for="auto_backup_interval"><i class="feather icon-clock mr-1"></i>Auto-Backup Interval</label>
                                                 <select class="form-control" id="auto_backup_interval" name="auto_backup_interval">
                                                     <option value="" {% if not backup_config or not backup_config.auto_backup_interval %}selected{% endif %}>Disabled (manual only)</option>
                                                     <option value="daily"   {% if backup_config and backup_config.auto_backup_interval == 'daily'   %}selected{% endif %}>Every Day</option>
@@ -182,64 +79,62 @@
                                                     <option value="monthly" {% if backup_config and backup_config.auto_backup_interval == 'monthly' %}selected{% endif %}>Every Month</option>
                                                 </select>
                                                 <small class="form-text text-muted">
-                                                    When auto-backup is active, the password set below is used automatically.
+                                                    Automatic backups run in the background using the password set below.
                                                 </small>
                                             </div>
 
-                                            <!-- ZIP Password -->
                                             <div class="form-group">
                                                 <label for="zip_password">ZIP Encryption Password <span class="text-muted">(optional)</span></label>
                                                 <input type="password" class="form-control" id="zip_password"
                                                        name="zip_password" autocomplete="new-password"
-                                                       placeholder="Leave blank for no encryption">
+                                                       placeholder="{% if has_zip_password %}(password already set — enter new value to change){% else %}Leave blank for no encryption{% endif %}">
                                                 <small class="form-text text-muted">
                                                     AES-256 encryption. You will need this password to restore the backup.
-                                                    Leave blank to keep the existing password (or create an unencrypted backup).
+                                                    {% if has_zip_password %}A password is currently configured; leave blank to keep it.{% endif %}
                                                 </small>
                                             </div>
 
                                             <button type="submit" class="btn btn-primary">
-                                                <i class="feather icon-save mr-1"></i> Save Configuration
+                                                <i class="feather icon-save mr-1"></i> Save Schedule
                                             </button>
                                         </form>
-                                    </div>
-                                </div>
 
-                                <!-- Manual Backup Trigger -->
-                                <div class="card">
-                                    <div class="card-header">
-                                        <h5><i class="feather icon-upload-cloud mr-2"></i>Upload to Cloud &amp; Save</h5>
-                                    </div>
-                                    <div class="card-body">
-                                        <p class="text-muted">
-                                            Backs up the entire RijanAuth database (all realms) and uploaded media files
-                                            into a single AES-256 encrypted ZIP and uploads it to the configured provider.
-                                        </p>
+                                        <hr>
+
+                                        <!-- Manual trigger: save to server -->
+                                        <h6 class="mb-3">Save Backup Now</h6>
                                         <form method="POST">
-                                            <input type="hidden" name="action" value="manual_backup">
+                                            <input type="hidden" name="action" value="manual_local_backup">
                                             <div class="form-group">
-                                                <label for="backup_password">ZIP Password <span class="text-muted">(optional)</span></label>
-                                                <input type="password" class="form-control" id="backup_password"
-                                                       name="backup_password"
+                                                <label for="local_backup_password">ZIP Password <span class="text-muted">(optional)</span></label>
+                                                <input type="password" class="form-control" id="local_backup_password"
+                                                       name="local_backup_password"
                                                        placeholder="Leave blank for an unencrypted backup">
                                             </div>
                                             <button type="submit" class="btn btn-success"
-                                                    onclick="return confirm('Start backup now?')">
-                                                <i class="feather icon-upload-cloud mr-1"></i> Start Backup
+                                                    onclick="return confirm('Save backup to server now?')">
+                                                <i class="feather icon-save mr-1"></i> Save to Server
                                             </button>
                                         </form>
+
+                                        {% if backup_config and backup_config.last_backup_at %}
+                                        <p class="mt-3 mb-0 small text-muted">
+                                            <i class="feather icon-check-circle mr-1 text-success"></i>
+                                            Last auto-backup: <strong>{{ backup_config.last_backup_at.strftime('%Y-%m-%d %H:%M') }}</strong>
+                                        </p>
+                                        {% endif %}
                                     </div>
                                 </div>
 
-                                <!-- Download Backup (local, no cloud storage needed) -->
+                                <!-- Manual Download -->
                                 <div class="card">
                                     <div class="card-header">
-                                        <h5><i class="feather icon-download mr-2"></i>Download Backup</h5>
+                                        <h5><i class="feather icon-download mr-2"></i>Manual Backup (Download)</h5>
                                     </div>
                                     <div class="card-body">
                                         <p class="text-muted">
                                             Download a complete backup of the RijanAuth database and media files
-                                            directly to your computer. No cloud storage configuration required.
+                                            directly to your computer. Nothing is saved on the server.
                                         </p>
                                         <form method="POST"
                                               action="{{ url_for('admin.backup_download', realm_name=realm.name) }}">
@@ -280,7 +175,7 @@
                                                 <div class="d-flex justify-content-between">
                                                     <small class="font-weight-bold text-truncate" style="max-width:160px;"
                                                            title="{{ rec.filename }}">{{ rec.filename }}</small>
-                                                    <span class="badge badge-{{ 'success' if rec.status == 'success' else ('danger' if rec.status == 'failed' else 'warning') }} ml-1">
+                                                    <span class="badge badge-{{ 'success' if rec.status == 'success' else ('danger' if rec.status == 'failed' else ('secondary' if rec.status == 'purged' else 'warning')) }} ml-1">
                                                         {{ rec.status }}
                                                     </span>
                                                 </div>
@@ -304,9 +199,9 @@
                                     {% if backup_config %}
                                     <div class="card-footer small text-muted">
                                         <i class="feather icon-info mr-1"></i>
-                                        Provider: <strong>{{ provider_info[backup_config.storage_provider].label if backup_config.storage_provider in provider_info else backup_config.storage_provider or 'Not set' }}</strong>
-                                        &nbsp;|&nbsp;
                                         Auto: <strong>{{ backup_config.auto_backup_interval or 'Disabled' }}</strong>
+                                        &nbsp;|&nbsp;
+                                        Retention: <strong>30 days</strong>
                                     </div>
                                     {% endif %}
                                 </div>
@@ -319,66 +214,4 @@
         </div>
     </div>
 </div>
-{% endblock %}
-
-{% block javascripts %}
-<script>
-    const PROVIDER_INFO = {{ provider_info | tojson }};
-    const currentProvider = {{ (backup_config.storage_provider if backup_config and backup_config.storage_provider else '') | tojson }};
-
-    function selectProvider(key) {
-        document.getElementById('storage_provider_input').value = key;
-
-        // Update card highlight
-        document.querySelectorAll('.provider-card').forEach(c => {
-            c.classList.remove('selected');
-            c.querySelector('.provider-check').style.display = 'none';
-        });
-        const selectedCard = document.querySelector('.provider-card[data-provider="' + key + '"]');
-        if (selectedCard) {
-            selectedCard.classList.add('selected');
-            selectedCard.querySelector('.provider-check').style.display = 'inline-block';
-        }
-
-        // Show/hide credential fields
-        document.querySelectorAll('.cred-fields').forEach(f => f.style.display = 'none');
-        const target = document.getElementById('fields_' + key);
-        if (target) target.style.display = 'block';
-    }
-
-    function copyRedirectUrl(providerKey) {
-        const input = document.getElementById('redirect_url_' + providerKey);
-        if (!input) return;
-        input.select();
-        input.setSelectionRange(0, input.value.length);
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(input.value).then(function () {
-                showCopiedFeedback(providerKey);
-            }).catch(function () {
-                document.execCommand('copy');
-                showCopiedFeedback(providerKey);
-            });
-        } else {
-            document.execCommand('copy');
-            showCopiedFeedback(providerKey);
-        }
-    }
-
-    function showCopiedFeedback(providerKey) {
-        const btn = document.querySelector('button[data-copy-btn="' + providerKey + '"]');
-        if (!btn) return;
-        const original = btn.innerHTML;
-        btn.innerHTML = '<i class="feather icon-check"></i> Copied!';
-        btn.classList.replace('btn-outline-secondary', 'btn-success');
-        setTimeout(function () {
-            btn.innerHTML = original;
-            btn.classList.replace('btn-success', 'btn-outline-secondary');
-        }, 2000);
-    }
-
-    // Init on page load
-    if (currentProvider) {
-        selectProvider(currentProvider);
-    }
-</script>
 {% endblock %}
