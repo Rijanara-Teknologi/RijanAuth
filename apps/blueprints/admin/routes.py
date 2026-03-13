@@ -1945,6 +1945,93 @@ def client_scope_mapper_add(realm_name, scope_id):
     )
 
 
+@admin_bp.route('/<realm_name>/client-scopes/<scope_id>/mappers/<mapper_id>/edit', methods=['GET', 'POST'])
+@login_required
+def client_scope_mapper_edit(realm_name, scope_id, mapper_id):
+    """Edit a protocol mapper on a client scope"""
+    from apps.models.client import ClientScope, ProtocolMapper
+    from apps import db
+
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+
+    scope = ClientScope.query.get(scope_id)
+    if not scope or scope.realm_id != realm.id:
+        flash('Client scope not found', 'error')
+        return redirect(url_for('admin.client_scopes_list', realm_name=realm_name))
+
+    mapper = ProtocolMapper.query.get(mapper_id)
+    if not mapper or mapper.client_scope_id != scope_id:
+        flash('Mapper not found', 'error')
+        return redirect(url_for('admin.client_scope_detail', realm_name=realm_name, scope_id=scope_id))
+
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+
+        if not name:
+            flash('Mapper name is required', 'error')
+            return redirect(url_for('admin.client_scope_mapper_edit', realm_name=realm_name, scope_id=scope_id, mapper_id=mapper_id))
+
+        config = _build_mapper_config(mapper.protocol_mapper, request.form)
+
+        from apps.services.mapper_service import MapperService
+        errors = MapperService.validate_mapper_config(mapper.protocol_mapper, config)
+        if errors:
+            for error in errors:
+                flash(error, 'error')
+            return redirect(url_for('admin.client_scope_mapper_edit', realm_name=realm_name, scope_id=scope_id, mapper_id=mapper_id))
+
+        mapper.name = name
+        mapper.config = config
+        mapper.priority = int(request.form.get('priority', 0))
+        db.session.commit()
+
+        flash(f'Mapper "{name}" updated successfully', 'success')
+        return redirect(url_for('admin.client_scope_detail', realm_name=realm_name, scope_id=scope_id))
+
+    mapper_types = ProtocolMapper.MAPPER_TYPES
+
+    return render_template(
+        'admin/client_scopes/mapper_form.html',
+        realm=realm,
+        scope=scope,
+        mapper=mapper,
+        mapper_type=mapper.protocol_mapper,
+        mapper_types=mapper_types,
+        segment='client-scopes'
+    )
+
+
+@admin_bp.route('/<realm_name>/client-scopes/<scope_id>/mappers/<mapper_id>/delete', methods=['POST'])
+@login_required
+def client_scope_mapper_delete(realm_name, scope_id, mapper_id):
+    """Delete a protocol mapper from a client scope"""
+    from apps.models.client import ClientScope, ProtocolMapper
+    from apps import db
+
+    realm = get_realm_or_404(realm_name)
+    if not realm:
+        return redirect(url_for('admin.index'))
+
+    scope = ClientScope.query.get(scope_id)
+    if not scope or scope.realm_id != realm.id:
+        flash('Client scope not found', 'error')
+        return redirect(url_for('admin.client_scopes_list', realm_name=realm_name))
+
+    mapper = ProtocolMapper.query.get(mapper_id)
+    if not mapper or mapper.client_scope_id != scope_id:
+        flash('Mapper not found', 'error')
+        return redirect(url_for('admin.client_scope_detail', realm_name=realm_name, scope_id=scope_id))
+
+    mapper_name = mapper.name
+    db.session.delete(mapper)
+    db.session.commit()
+
+    flash(f'Mapper "{mapper_name}" deleted successfully', 'success')
+    return redirect(url_for('admin.client_scope_detail', realm_name=realm_name, scope_id=scope_id))
+
+
 def _build_mapper_config(mapper_type: str, form) -> dict:
     """Build mapper configuration from form data"""
     config = {
