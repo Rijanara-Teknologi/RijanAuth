@@ -75,6 +75,65 @@ def register_blueprints(app):
         return send_from_directory(absolute_dir, asset.stored_path, mimetype=asset.content_type)
 
 
+def _run_schema_migrations():
+    """
+    Apply incremental schema changes to existing databases.
+
+    ``db.create_all()`` only creates missing *tables*; it never adds columns to
+    tables that already exist.  This function uses SQLAlchemy's inspection API
+    to detect and add any columns that are present in the ORM models but
+    absent from the live database schema.
+    """
+    from sqlalchemy import inspect as sa_inspect, text
+
+    inspector = sa_inspect(db.engine)
+    existing_tables = inspector.get_table_names()
+
+    def _get_columns(table):
+        return {col['name'] for col in inspector.get_columns(table)}
+
+    # ------------------------------------------------------------------
+    # backup_records – local_file_path column (added in v2.x)
+    # ------------------------------------------------------------------
+    if 'backup_records' in existing_tables:
+        if 'local_file_path' not in _get_columns('backup_records'):
+            try:
+                with db.engine.connect() as conn:
+                    conn.execute(text(
+                        'ALTER TABLE backup_records ADD COLUMN local_file_path VARCHAR(1000)'
+                    ))
+                    conn.commit()
+                print('> Migration: Added column local_file_path to backup_records')
+            except Exception as exc:
+                print('> Migration warning (backup_records.local_file_path): ' + str(exc))
+
+    # ------------------------------------------------------------------
+    # protocol_mappers – priority and consent_text columns (v2.4.0)
+    # ------------------------------------------------------------------
+    if 'protocol_mappers' in existing_tables:
+        existing_cols = _get_columns('protocol_mappers')
+        if 'priority' not in existing_cols:
+            try:
+                with db.engine.connect() as conn:
+                    conn.execute(text(
+                        'ALTER TABLE protocol_mappers ADD COLUMN priority INTEGER DEFAULT 0 NOT NULL'
+                    ))
+                    conn.commit()
+                print('> Migration: Added column priority to protocol_mappers')
+            except Exception as exc:
+                print('> Migration warning (protocol_mappers.priority): ' + str(exc))
+        if 'consent_text' not in existing_cols:
+            try:
+                with db.engine.connect() as conn:
+                    conn.execute(text(
+                        'ALTER TABLE protocol_mappers ADD COLUMN consent_text VARCHAR(255)'
+                    ))
+                    conn.commit()
+                print('> Migration: Added column consent_text to protocol_mappers')
+            except Exception as exc:
+                print('> Migration warning (protocol_mappers.consent_text): ' + str(exc))
+
+
 def configure_database(app):
     """Configure database initialization"""
     
@@ -98,6 +157,9 @@ def configure_database(app):
         try:
             db.create_all()
             print('> Database tables created successfully')
+            
+            # Apply any incremental schema changes to existing tables
+            _run_schema_migrations()
             
             # Initialize master realm on first run
             _initialize_master_realm()
