@@ -210,3 +210,123 @@ class TestClientScopeDelete:
                 if r:
                     db.session.delete(r)
                     db.session.commit()
+
+
+# ============================================================
+# Client scope mapper delete
+# ============================================================
+
+class TestClientScopeMapperDelete:
+    def test_delete_scope_mapper_redirects(self, client, app):
+        """POST /<realm>/client-scopes/<id>/mappers/<id>/delete must redirect."""
+        with app.app_context():
+            realm = RealmService.create_realm('del-mapper-realm1', 'Del Mapper 1')
+            realm_name = realm.name
+            scope = ClientScope(realm_id=realm.id, name='mapper-scope-1', protocol='openid-connect')
+            db.session.add(scope)
+            db.session.flush()
+            mapper = ProtocolMapper(
+                name='mapper-to-delete-1',
+                protocol='openid-connect',
+                protocol_mapper='oidc-usermodel-attribute-mapper',
+                client_scope_id=scope.id,
+                config={},
+            )
+            db.session.add(mapper)
+            db.session.commit()
+            scope_id = scope.id
+            mapper_id = mapper.id
+
+        try:
+            _login_admin(client)
+            response = client.post(
+                f'/admin/{realm_name}/client-scopes/{scope_id}/mappers/{mapper_id}/delete',
+                follow_redirects=False,
+            )
+            assert response.status_code == 302, (
+                f"Expected 302 redirect, got {response.status_code}"
+            )
+            assert f'/admin/{realm_name}/client-scopes/{scope_id}' in response.headers.get('Location', '')
+        finally:
+            with app.app_context():
+                r = Realm.find_by_name(realm_name)
+                if r:
+                    db.session.delete(r)
+                    db.session.commit()
+
+    def test_delete_scope_mapper_removes_from_db(self, client, app):
+        """After deletion the protocol mapper must no longer exist in the database."""
+        with app.app_context():
+            realm = RealmService.create_realm('del-mapper-realm2', 'Del Mapper 2')
+            realm_name = realm.name
+            scope = ClientScope(realm_id=realm.id, name='mapper-scope-2', protocol='openid-connect')
+            db.session.add(scope)
+            db.session.flush()
+            mapper = ProtocolMapper(
+                name='mapper-to-delete-2',
+                protocol='openid-connect',
+                protocol_mapper='oidc-usermodel-attribute-mapper',
+                client_scope_id=scope.id,
+                config={},
+            )
+            db.session.add(mapper)
+            db.session.commit()
+            scope_id = scope.id
+            mapper_id = mapper.id
+
+        try:
+            _login_admin(client)
+            client.post(
+                f'/admin/{realm_name}/client-scopes/{scope_id}/mappers/{mapper_id}/delete',
+                follow_redirects=True,
+            )
+            with app.app_context():
+                assert ProtocolMapper.query.get(mapper_id) is None, \
+                    "ProtocolMapper should have been deleted from the database"
+                assert ClientScope.query.get(scope_id) is not None, \
+                    "ClientScope itself should still exist after mapper deletion"
+        finally:
+            with app.app_context():
+                r = Realm.find_by_name(realm_name)
+                if r:
+                    db.session.delete(r)
+                    db.session.commit()
+
+    def test_delete_scope_mapper_wrong_scope_is_rejected(self, client, app):
+        """Deleting a mapper that belongs to a different scope must fail gracefully."""
+        with app.app_context():
+            realm = RealmService.create_realm('del-mapper-realm3', 'Del Mapper 3')
+            realm_name = realm.name
+            scope_a = ClientScope(realm_id=realm.id, name='mapper-scope-3a', protocol='openid-connect')
+            scope_b = ClientScope(realm_id=realm.id, name='mapper-scope-3b', protocol='openid-connect')
+            db.session.add_all([scope_a, scope_b])
+            db.session.flush()
+            mapper = ProtocolMapper(
+                name='mapper-to-keep',
+                protocol='openid-connect',
+                protocol_mapper='oidc-usermodel-attribute-mapper',
+                client_scope_id=scope_b.id,
+                config={},
+            )
+            db.session.add(mapper)
+            db.session.commit()
+            scope_a_id = scope_a.id
+            scope_b_id = scope_b.id
+            mapper_id = mapper.id
+
+        try:
+            _login_admin(client)
+            # Try to delete scope_b's mapper via scope_a's URL
+            client.post(
+                f'/admin/{realm_name}/client-scopes/{scope_a_id}/mappers/{mapper_id}/delete',
+                follow_redirects=True,
+            )
+            with app.app_context():
+                assert ProtocolMapper.query.get(mapper_id) is not None, \
+                    "Mapper from another scope must NOT be deleted"
+        finally:
+            with app.app_context():
+                r = Realm.find_by_name(realm_name)
+                if r:
+                    db.session.delete(r)
+                    db.session.commit()

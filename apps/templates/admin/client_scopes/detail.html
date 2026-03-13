@@ -87,12 +87,17 @@
                                                         <th>Type</th>
                                                         <th>Claim Name</th>
                                                         <th>Token Types</th>
+                                                        <th class="text-right">Actions</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {% for mapper in mappers %}
                                                     <tr>
-                                                        <td><strong>{{ mapper.name }}</strong></td>
+                                                        <td>
+                                                            <a href="{{ url_for('admin.client_scope_mapper_edit', realm_name=realm.name, scope_id=scope.id, mapper_id=mapper.id) }}">
+                                                                <strong>{{ mapper.name }}</strong>
+                                                            </a>
+                                                        </td>
                                                         <td>
                                                             <span class="badge badge-info">{{ mapper_types.get(mapper.protocol_mapper, mapper.protocol_mapper) }}</span>
                                                         </td>
@@ -107,6 +112,18 @@
                                                             {% if mapper.config.get('userinfo.token.claim') == 'true' %}
                                                             <span class="badge badge-secondary badge-sm">UserInfo</span>
                                                             {% endif %}
+                                                        </td>
+                                                        <td class="text-right">
+                                                            <a href="{{ url_for('admin.client_scope_mapper_edit', realm_name=realm.name, scope_id=scope.id, mapper_id=mapper.id) }}"
+                                                               class="btn btn-sm btn-outline-primary" title="Edit">
+                                                                <i class="feather icon-edit"></i>
+                                                            </a>
+                                                            <form action="{{ url_for('admin.client_scope_mapper_delete', realm_name=realm.name, scope_id=scope.id, mapper_id=mapper.id) }}"
+                                                                  method="POST" class="d-inline" onsubmit="return confirm('Delete this mapper?');">
+                                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
+                                                                    <i class="feather icon-trash-2"></i>
+                                                                </button>
+                                                            </form>
                                                         </td>
                                                     </tr>
                                                     {% endfor %}
