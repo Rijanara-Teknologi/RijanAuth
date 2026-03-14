@@ -149,6 +149,31 @@ def _run_schema_migrations():
 
 def configure_database(app):
     """Configure database initialization"""
+
+    # Enable SQLite performance optimisations for large imports.
+    # These are applied once per new connection via the engine "connect" event.
+    try:
+        import sqlite3
+        from sqlalchemy import event
+        from sqlalchemy.engine import Engine
+
+        @event.listens_for(Engine, "connect")
+        def _set_sqlite_pragmas(dbapi_connection, connection_record):
+            if isinstance(dbapi_connection, sqlite3.Connection):
+                cursor = dbapi_connection.cursor()
+                # WAL mode allows concurrent reads during writes and is much
+                # faster for bulk inserts than the default DELETE journal mode.
+                cursor.execute("PRAGMA journal_mode=WAL")
+                # NORMAL sync is safe with WAL and avoids the overhead of
+                # fsync after every write.
+                cursor.execute("PRAGMA synchronous=NORMAL")
+                # 64 MB page cache (negative value = kibibytes).
+                cursor.execute("PRAGMA cache_size=-65536")
+                # Store temp tables in memory instead of on disk.
+                cursor.execute("PRAGMA temp_store=MEMORY")
+                cursor.close()
+    except (ImportError, Exception) as _pragma_exc:
+        print(f'> Warning: could not register SQLite pragma listener: {_pragma_exc}')
     
     with app.app_context():
         # Import all models to register them with SQLAlchemy

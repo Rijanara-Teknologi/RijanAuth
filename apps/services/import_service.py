@@ -1,62 +1,70 @@
 # -*- encoding: utf-8 -*-
 """
 RijanAuth - Import Service
-Handles chunked, background CSV import for users, roles and groups.
+Handles synchronous CSV import for users, roles and groups.
 
-Each import request is split into chunks of CHUNK_SIZE rows.  Each chunk is
-processed in a background thread so the HTTP request returns immediately with
-a job ID.  The caller can poll
-``GET /api/<realm>/import-jobs/<job_id>`` to track progress.
+Each import request is processed directly within the HTTP request so the
+caller receives a complete result immediately::
+
+    {
+        "total_rows": 300,
+        "imported":   295,
+        "updated":      5,
+        "skipped":      0,
+        "errors":      []
+    }
 """
 
 import csv
 import io
-import threading
-from datetime import datetime
 
 from sqlalchemy.exc import SQLAlchemyError
 
-CHUNK_SIZE = 20  # rows processed per background chunk
-
 
 # ============================================================================
-# Internal helpers
+# Public API
 # ============================================================================
 
-def _process_users_chunk(app, job_id, realm_id, rows, start_row):
-    """Process a single chunk of user rows inside an app-context thread."""
-    from apps import db
-    from apps.models.import_job import ImportJob
-    from apps.models.user import User
-    from apps.models.role import Role
-    from apps.models.group import Group
-    from apps.services.user_service import UserService
+class ImportService:
+    """Processes CSV imports synchronously and returns a result dict."""
 
-    FIELD_ALIASES = {'firstname': 'first_name', 'lastname': 'last_name'}
-    KNOWN_FIELDS = {'username', 'email', 'password', 'name', 'first_name', 'last_name', 'roles', 'groups'}
+    @classmethod
+    def import_users(cls, realm_id, csv_raw):
+        """Parse *csv_raw* and import/update users synchronously.
 
-    def _resolve(raw, lookup_fn):
-        result = []
-        for name in [s.strip() for s in raw.split(';') if s.strip()]:
-            obj = lookup_fn(name)
-            if obj:
-                result.append(obj)
-        return result
+        Returns a dict with keys ``total_rows``, ``imported``, ``updated``,
+        ``skipped``, and ``errors``.
+        """
+        from apps import db
+        from apps.models.user import User
+        from apps.models.role import Role
+        from apps.models.group import Group
+        from apps.services.user_service import UserService
 
-    with app.app_context():
-        job = ImportJob.find_by_id(job_id)
-        if not job:
-            return
+        FIELD_ALIASES = {'firstname': 'first_name', 'lastname': 'last_name'}
+        KNOWN_FIELDS = {
+            'username', 'email', 'password', 'name',
+            'first_name', 'last_name', 'roles', 'groups',
+        }
 
+        def _resolve(raw, lookup_fn):
+            result = []
+            for name in [s.strip() for s in raw.split(';') if s.strip()]:
+                obj = lookup_fn(name)
+                if obj:
+                    result.append(obj)
+            return result
+
+        rows = list(csv.DictReader(io.StringIO(csv_raw)))
+        total_rows = len(rows)
         imported = 0
         updated = 0
         skipped = 0
-        errors = list(job.errors)
+        errors = []
 
         for i, row in enumerate(rows):
-            row_num = start_row + i
+            row_num = i + 2  # header is row 1
 
-            # Normalise keys
             normalised_row = {}
             for k, v in row.items():
                 if k is None:
@@ -71,7 +79,6 @@ def _process_users_chunk(app, job_id, realm_id, rows, start_row):
                 skipped += 1
                 continue
 
-            # Name resolution
             first_name = normalised_row.get('first_name') or ''
             last_name = normalised_row.get('last_name') or ''
             if not first_name and not last_name:
@@ -83,17 +90,22 @@ def _process_users_chunk(app, job_id, realm_id, rows, start_row):
 
             email = normalised_row.get('email') or None
             password = normalised_row.get('password') or None
-            extra_attrs = {k: v for k, v in normalised_row.items() if k not in KNOWN_FIELDS and v}
+            extra_attrs = {
+                k: v for k, v in normalised_row.items()
+                if k not in KNOWN_FIELDS and v
+            }
 
             roles_raw = normalised_row.get('roles', '')
-            roles_to_assign = _resolve(
-                roles_raw, lambda name: Role.find_realm_role(realm_id, name)
-            ) if roles_raw else []
+            roles_to_assign = (
+                _resolve(roles_raw, lambda name: Role.find_realm_role(realm_id, name))
+                if roles_raw else []
+            )
 
             groups_raw = normalised_row.get('groups', '')
-            groups_to_assign = _resolve(
-                groups_raw, lambda name: Group.find_realm_group(realm_id, name)
-            ) if groups_raw else []
+            groups_to_assign = (
+                _resolve(groups_raw, lambda name: Group.find_realm_group(realm_id, name))
+                if groups_raw else []
+            )
 
             existing_user = User.find_by_username(realm_id, username)
             if existing_user:
@@ -110,7 +122,9 @@ def _process_users_chunk(app, job_id, realm_id, rows, start_row):
                     if password:
                         UserService.set_password(existing_user, password)
                     if extra_attrs:
-                        UserService.set_attributes(existing_user, {k: [v] for k, v in extra_attrs.items()})
+                        UserService.set_attributes(
+                            existing_user, {k: [v] for k, v in extra_attrs.items()}
+                        )
                     for role in roles_to_assign:
                         UserService.assign_role(existing_user, role)
                     for group in groups_to_assign:
@@ -143,34 +157,32 @@ def _process_users_chunk(app, job_id, realm_id, rows, start_row):
                 errors.append({'row': row_num, 'username': username, 'error': str(exc)})
                 skipped += 1
 
-        # Persist chunk results back to the job
-        job = ImportJob.find_by_id(job_id)
-        if job:
-            job.imported += imported
-            job.updated += updated
-            job.skipped += skipped
-            job.errors = errors
-            job.processed_rows += len(rows)
-            db.session.commit()
+        return {
+            'total_rows': total_rows,
+            'imported': imported,
+            'updated': updated,
+            'skipped': skipped,
+            'errors': errors,
+        }
 
+    @classmethod
+    def import_roles(cls, realm_id, csv_raw):
+        """Parse *csv_raw* and import roles synchronously.
 
-def _process_roles_chunk(app, job_id, realm_id, rows, start_row):
-    """Process a single chunk of role rows inside an app-context thread."""
-    from apps import db
-    from apps.models.import_job import ImportJob
-    from apps.models.role import Role
+        Returns a dict with keys ``total_rows``, ``imported``, ``skipped``,
+        and ``errors``.
+        """
+        from apps import db
+        from apps.models.role import Role
 
-    with app.app_context():
-        job = ImportJob.find_by_id(job_id)
-        if not job:
-            return
-
+        rows = list(csv.DictReader(io.StringIO(csv_raw)))
+        total_rows = len(rows)
         imported = 0
         skipped = 0
-        errors = list(job.errors)
+        errors = []
 
         for i, row in enumerate(rows):
-            row_num = start_row + i
+            row_num = i + 2
 
             name_raw = (row.get('name') or '').strip()
             if not name_raw:
@@ -203,32 +215,32 @@ def _process_roles_chunk(app, job_id, realm_id, rows, start_row):
                 errors.append({'row': row_num, 'name': name, 'error': str(exc)})
                 skipped += 1
 
-        job = ImportJob.find_by_id(job_id)
-        if job:
-            job.imported += imported
-            job.skipped += skipped
-            job.errors = errors
-            job.processed_rows += len(rows)
-            db.session.commit()
+        return {
+            'total_rows': total_rows,
+            'imported': imported,
+            'updated': 0,
+            'skipped': skipped,
+            'errors': errors,
+        }
 
+    @classmethod
+    def import_groups(cls, realm_id, csv_raw):
+        """Parse *csv_raw* and import groups synchronously.
 
-def _process_groups_chunk(app, job_id, realm_id, rows, start_row):
-    """Process a single chunk of group rows inside an app-context thread."""
-    from apps import db
-    from apps.models.import_job import ImportJob
-    from apps.models.group import Group
+        Returns a dict with keys ``total_rows``, ``imported``, ``skipped``,
+        and ``errors``.
+        """
+        from apps import db
+        from apps.models.group import Group
 
-    with app.app_context():
-        job = ImportJob.find_by_id(job_id)
-        if not job:
-            return
-
+        rows = list(csv.DictReader(io.StringIO(csv_raw)))
+        total_rows = len(rows)
         imported = 0
         skipped = 0
-        errors = list(job.errors)
+        errors = []
 
         for i, row in enumerate(rows):
-            row_num = start_row + i
+            row_num = i + 2
 
             name = (row.get('name') or '').strip()
             if not name:
@@ -252,126 +264,10 @@ def _process_groups_chunk(app, job_id, realm_id, rows, start_row):
                 errors.append({'row': row_num, 'name': name, 'error': str(exc)})
                 skipped += 1
 
-        job = ImportJob.find_by_id(job_id)
-        if job:
-            job.imported += imported
-            job.skipped += skipped
-            job.errors = errors
-            job.processed_rows += len(rows)
-            db.session.commit()
-
-
-# ============================================================================
-# Public API
-# ============================================================================
-
-class ImportService:
-    """Coordinates chunked background CSV imports."""
-
-    @staticmethod
-    def _chunk(lst, size):
-        """Yield successive *size*-sized sublists from *lst*."""
-        for i in range(0, len(lst), size):
-            yield lst[i: i + size]
-
-    @classmethod
-    def _run_job(cls, app, job_id, realm_id, job_type, all_rows, chunk_fn):
-        """
-        Run all chunks sequentially in a single background thread and then
-        mark the job as completed (or failed on exception).
-        """
-        from apps import db
-        from apps.models.import_job import ImportJob
-
-        with app.app_context():
-            job = ImportJob.find_by_id(job_id)
-            if not job:
-                return
-            job.status = 'processing'
-            job.started_at = datetime.utcnow()
-            db.session.commit()
-
-        try:
-            for chunk_index, chunk in enumerate(cls._chunk(all_rows, CHUNK_SIZE)):
-                # row numbers start at 2 (header is row 1)
-                start_row = 2 + chunk_index * CHUNK_SIZE
-                chunk_fn(app, job_id, realm_id, chunk, start_row)
-        except (SQLAlchemyError, ValueError, OSError) as exc:  # noqa: BLE001
-            with app.app_context():
-                job = ImportJob.find_by_id(job_id)
-                if job:
-                    errs = list(job.errors)
-                    errs.append({'error': f'Unexpected error: {exc}'})
-                    job.errors = errs
-                    job.status = 'failed'
-                    job.finished_at = datetime.utcnow()
-                    db.session.commit()
-            return
-
-        with app.app_context():
-            job = ImportJob.find_by_id(job_id)
-            if job:
-                job.status = 'completed'
-                job.finished_at = datetime.utcnow()
-                db.session.commit()
-
-    @classmethod
-    def enqueue_users(cls, app, realm_id, csv_raw):
-        """
-        Parse *csv_raw*, create an ImportJob, and start background processing.
-
-        Returns the new :class:`ImportJob` instance (status=``'pending'``).
-        """
-        from apps import db
-        from apps.models.import_job import ImportJob
-
-        rows = list(csv.DictReader(io.StringIO(csv_raw)))
-        job = ImportJob(realm_id=realm_id, job_type='users', total_rows=len(rows))
-        db.session.add(job)
-        db.session.commit()
-
-        t = threading.Thread(
-            target=cls._run_job,
-            args=(app, job.id, realm_id, 'users', rows, _process_users_chunk),
-            daemon=True,
-        )
-        t.start()
-        return job
-
-    @classmethod
-    def enqueue_roles(cls, app, realm_id, csv_raw):
-        """Parse *csv_raw*, create an ImportJob, and start background processing."""
-        from apps import db
-        from apps.models.import_job import ImportJob
-
-        rows = list(csv.DictReader(io.StringIO(csv_raw)))
-        job = ImportJob(realm_id=realm_id, job_type='roles', total_rows=len(rows))
-        db.session.add(job)
-        db.session.commit()
-
-        t = threading.Thread(
-            target=cls._run_job,
-            args=(app, job.id, realm_id, 'roles', rows, _process_roles_chunk),
-            daemon=True,
-        )
-        t.start()
-        return job
-
-    @classmethod
-    def enqueue_groups(cls, app, realm_id, csv_raw):
-        """Parse *csv_raw*, create an ImportJob, and start background processing."""
-        from apps import db
-        from apps.models.import_job import ImportJob
-
-        rows = list(csv.DictReader(io.StringIO(csv_raw)))
-        job = ImportJob(realm_id=realm_id, job_type='groups', total_rows=len(rows))
-        db.session.add(job)
-        db.session.commit()
-
-        t = threading.Thread(
-            target=cls._run_job,
-            args=(app, job.id, realm_id, 'groups', rows, _process_groups_chunk),
-            daemon=True,
-        )
-        t.start()
-        return job
+        return {
+            'total_rows': total_rows,
+            'imported': imported,
+            'updated': 0,
+            'skipped': skipped,
+            'errors': errors,
+        }

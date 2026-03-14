@@ -1,21 +1,17 @@
-"""Tests for the chunked, asynchronous import queue mechanism.
+"""Tests for the synchronous CSV import mechanism.
 
 Validates that:
-* Large CSVs are split into chunks and processed in the background.
-* Import-job status endpoint returns correct state transitions.
-* Multiple concurrent jobs are tracked independently.
-* Import-jobs list endpoint returns all jobs for a realm.
+* Imports are processed synchronously and return results directly.
+* Large CSVs are fully processed in a single request.
+* Skipped/error rows are reported in the response.
 """
 
 import io
-import time
 import pytest
 from apps import db
-from apps.models.import_job import ImportJob
 from apps.models.user import User
 from apps.models.role import Role
 from apps.models.group import Group
-from apps.services.import_service import CHUNK_SIZE
 
 
 # ---------------------------------------------------------------------------
@@ -25,21 +21,6 @@ from apps.services.import_service import CHUNK_SIZE
 def _login(client, username='admin', password='testadmin123!'):
     client.post('/auth/login', data={'username': username, 'password': password},
                 follow_redirects=False)
-
-
-def _await_job(client, realm_name, job_id, max_retries=100, delay=0.1):
-    """Poll until job reaches a terminal state ('completed' or 'failed')."""
-    url = f'/admin/api/{realm_name}/import-jobs/{job_id}'
-    for _ in range(max_retries):
-        resp = client.get(url)
-        assert resp.status_code == 200, f"Status endpoint returned {resp.status_code}"
-        data = resp.get_json()
-        if data['status'] in ('completed', 'failed'):
-            return data
-        time.sleep(delay)
-    raise AssertionError(
-        f"Import job {job_id} did not finish within {max_retries * delay:.1f}s"
-    )
 
 
 def _build_user_csv(count, prefix='quser'):
@@ -53,13 +34,13 @@ def _build_user_csv(count, prefix='quser'):
 
 
 # ---------------------------------------------------------------------------
-# Job lifecycle
+# Import lifecycle – synchronous
 # ---------------------------------------------------------------------------
 
-class TestImportJobLifecycle:
+class TestImportLifecycle:
 
-    def test_import_returns_202_with_job_id(self, app, client, admin_user, test_realm):
-        """POST /import returns 202 Accepted with a job_id immediately."""
+    def test_import_returns_200_with_results(self, app, client, admin_user, test_realm):
+        """POST /import returns 200 with import results immediately."""
         realm_name = test_realm.name
         _login(client)
 
@@ -69,105 +50,88 @@ class TestImportJobLifecycle:
             data={'file': (io.BytesIO(csv_content.encode()), 'test.csv')},
             content_type='multipart/form-data',
         )
-        assert resp.status_code == 202
+        assert resp.status_code == 200
         body = resp.get_json()
-        assert 'job_id' in body
-        assert body['status'] == 'queued'
         assert body['total_rows'] == 5
+        assert body['imported'] == 5
+        assert body['skipped'] == 0
 
-    def test_import_job_reaches_completed(self, app, client, admin_user, test_realm):
-        """Import job transitions from pending/processing → completed."""
+    def test_import_users_result_fields(self, app, client, admin_user, test_realm):
+        """Response contains all expected result fields."""
         realm_name = test_realm.name
         _login(client)
 
-        csv_content = _build_user_csv(3, prefix='jobstatus')
+        csv_content = _build_user_csv(3, prefix='fields')
         resp = client.post(
             f'/admin/api/{realm_name}/users/import',
             data={'file': (io.BytesIO(csv_content.encode()), 'test.csv')},
             content_type='multipart/form-data',
         )
-        job_id = resp.get_json()['job_id']
-        result = _await_job(client, realm_name, job_id)
+        body = resp.get_json()
+        assert 'total_rows' in body
+        assert 'imported' in body
+        assert 'updated' in body
+        assert 'skipped' in body
+        assert 'errors' in body
+        assert body['imported'] == 3
+        assert body['skipped'] == 0
 
-        assert result['status'] == 'completed'
-        assert result['imported'] == 3
-        assert result['skipped'] == 0
-
-    def test_import_job_invalid_realm_returns_404(self, app, client, admin_user):
-        """GET /import-jobs/<id> for a non-existent realm returns 404."""
+    def test_import_invalid_realm_returns_404(self, app, client, admin_user):
+        """POST /import for a non-existent realm returns 404."""
         _login(client)
-        resp = client.get('/admin/api/nonexistent-realm-xyz/import-jobs/some-job-id')
-        assert resp.status_code == 404
-
-    def test_import_job_unknown_id_returns_404(self, app, client, admin_user, test_realm):
-        """GET /import-jobs/<id> with an unknown job id returns 404."""
-        realm_name = test_realm.name
-        _login(client)
-        resp = client.get(f'/admin/api/{realm_name}/import-jobs/00000000-0000-0000-0000-000000000000')
-        assert resp.status_code == 404
-
-    def test_import_jobs_list(self, app, client, admin_user, test_realm):
-        """GET /import-jobs returns a list of jobs for the realm."""
-        realm_name = test_realm.name
-        _login(client)
-
-        # Create a job
-        csv_content = _build_user_csv(2, prefix='listjob')
+        csv_content = _build_user_csv(1)
         resp = client.post(
-            f'/admin/api/{realm_name}/users/import',
+            '/admin/api/nonexistent-realm-xyz/users/import',
             data={'file': (io.BytesIO(csv_content.encode()), 'test.csv')},
             content_type='multipart/form-data',
         )
-        job_id = resp.get_json()['job_id']
-        _await_job(client, realm_name, job_id)
+        assert resp.status_code == 404
 
-        list_resp = client.get(f'/admin/api/{realm_name}/import-jobs')
-        assert list_resp.status_code == 200
-        jobs = list_resp.get_json()
-        job_ids = [j['id'] for j in jobs]
-        assert job_id in job_ids
+    def test_import_no_file_returns_400(self, client, admin_user, test_realm):
+        """Missing file in the multipart request returns 400."""
+        _login(client)
+        resp = client.post(
+            f'/admin/api/{test_realm.name}/users/import',
+            data={},
+            content_type='multipart/form-data',
+        )
+        assert resp.status_code == 400
 
 
 # ---------------------------------------------------------------------------
-# Chunking behaviour
+# Large import
 # ---------------------------------------------------------------------------
 
-class TestImportChunking:
+class TestLargeImport:
 
-    def test_large_user_import_processed_in_chunks(self, app, client, admin_user, test_realm):
-        """A user import larger than CHUNK_SIZE is fully processed."""
+    def test_large_user_import_fully_processed(self, app, client, admin_user, test_realm):
+        """A large user import is fully processed synchronously."""
         realm_name = test_realm.name
         realm_id = test_realm.id
-        # Import 2.5x CHUNK_SIZE to guarantee multiple chunks
-        count = CHUNK_SIZE * 2 + CHUNK_SIZE // 2
+        count = 50
         _login(client)
 
-        csv_content = _build_user_csv(count, prefix='chunked')
+        csv_content = _build_user_csv(count, prefix='bulk')
         resp = client.post(
             f'/admin/api/{realm_name}/users/import',
             data={'file': (io.BytesIO(csv_content.encode()), 'big.csv')},
             content_type='multipart/form-data',
         )
-        assert resp.status_code == 202
-        assert resp.get_json()['total_rows'] == count
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body['total_rows'] == count
+        assert body['imported'] == count
+        assert body['skipped'] == 0
 
-        job_id = resp.get_json()['job_id']
-        result = _await_job(client, realm_name, job_id, max_retries=200, delay=0.1)
-
-        assert result['status'] == 'completed'
-        assert result['processed_rows'] == count
-        assert result['imported'] == count
-
-        # Spot-check a few users in the DB
         with app.app_context():
-            assert User.find_by_username(realm_id, 'chunked0') is not None
-            assert User.find_by_username(realm_id, f'chunked{count - 1}') is not None
+            assert User.find_by_username(realm_id, 'bulk0') is not None
+            assert User.find_by_username(realm_id, f'bulk{count - 1}') is not None
 
-    def test_large_role_import_processed(self, app, client, admin_user, test_realm):
-        """A role import larger than CHUNK_SIZE is fully processed."""
+    def test_large_role_import_fully_processed(self, app, client, admin_user, test_realm):
+        """A large role import is fully processed synchronously."""
         realm_name = test_realm.name
         realm_id = test_realm.id
-        count = CHUNK_SIZE + 5
+        count = 25
         _login(client)
 
         lines = ['name,description']
@@ -180,22 +144,19 @@ class TestImportChunking:
             data={'file': (io.BytesIO(csv_content.encode()), 'roles.csv')},
             content_type='multipart/form-data',
         )
-        assert resp.status_code == 202
-        job_id = resp.get_json()['job_id']
-        result = _await_job(client, realm_name, job_id, max_retries=200, delay=0.1)
-
-        assert result['status'] == 'completed'
-        assert result['imported'] == count
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body['imported'] == count
 
         with app.app_context():
             assert Role.find_realm_role(realm_id, 'bulk_role_0') is not None
             assert Role.find_realm_role(realm_id, f'bulk_role_{count - 1}') is not None
 
-    def test_large_group_import_processed(self, app, client, admin_user, test_realm):
-        """A group import larger than CHUNK_SIZE is fully processed."""
+    def test_large_group_import_fully_processed(self, app, client, admin_user, test_realm):
+        """A large group import is fully processed synchronously."""
         realm_name = test_realm.name
         realm_id = test_realm.id
-        count = CHUNK_SIZE + 5
+        count = 25
         _login(client)
 
         lines = ['name']
@@ -208,12 +169,9 @@ class TestImportChunking:
             data={'file': (io.BytesIO(csv_content.encode()), 'groups.csv')},
             content_type='multipart/form-data',
         )
-        assert resp.status_code == 202
-        job_id = resp.get_json()['job_id']
-        result = _await_job(client, realm_name, job_id, max_retries=200, delay=0.1)
-
-        assert result['status'] == 'completed'
-        assert result['imported'] == count
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body['imported'] == count
 
         with app.app_context():
             assert Group.find_by_path(realm_id, '/bulk_group_0') is not None
@@ -221,13 +179,13 @@ class TestImportChunking:
 
 
 # ---------------------------------------------------------------------------
-# Error handling in jobs
+# Error handling
 # ---------------------------------------------------------------------------
 
-class TestImportJobErrors:
+class TestImportErrors:
 
-    def test_skipped_rows_reported_in_job(self, app, client, admin_user, test_realm):
-        """Rows without required fields increment skipped and add to errors in the job."""
+    def test_skipped_rows_reported_in_response(self, app, client, admin_user, test_realm):
+        """Rows without required fields increment skipped and add to errors."""
         realm_name = test_realm.name
         _login(client)
 
@@ -241,11 +199,9 @@ class TestImportJobErrors:
             data={'file': (io.BytesIO(csv_content.encode()), 'errors.csv')},
             content_type='multipart/form-data',
         )
-        assert resp.status_code == 202
-        job_id = resp.get_json()['job_id']
-        result = _await_job(client, realm_name, job_id)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body['skipped'] == 1
+        assert body['imported'] == 1
+        assert len(body['errors']) == 1
 
-        assert result['status'] == 'completed'
-        assert result['skipped'] == 1
-        assert result['imported'] == 1
-        assert len(result['errors']) == 1
