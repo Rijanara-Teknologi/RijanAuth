@@ -119,76 +119,342 @@
                                                     {% if provider.provider_type == 'ldap' %}
                                                     <div class="form-group">
                                                         <label>Connection URL</label>
-                                                        <input type="text" class="form-control" name="connection_url" 
-                                                               value="{{ config.get('connection_url', '') }}">
+                                                        <input type="text" class="form-control" name="connection_url"
+                                                               value="{{ provider_config.get('connection_url', '') }}">
                                                     </div>
                                                     <div class="row">
                                                         <div class="col-md-6">
                                                             <div class="form-group">
                                                                 <label>Bind DN</label>
-                                                                <input type="text" class="form-control" name="bind_dn" 
-                                                                       value="{{ config.get('bind_dn', '') }}">
+                                                                <input type="text" class="form-control" name="bind_dn"
+                                                                       value="{{ provider_config.get('bind_dn', '') }}">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-6">
                                                             <div class="form-group">
                                                                 <label>Bind Credential</label>
-                                                                <input type="password" class="form-control" name="bind_credential" 
+                                                                <input type="password" class="form-control" name="bind_credential"
                                                                        placeholder="Leave empty to keep current">
                                                             </div>
                                                         </div>
                                                     </div>
+                                                    <div class="row">
+                                                        <div class="col-md-4">
+                                                            <div class="custom-control custom-switch mb-3">
+                                                                <input type="checkbox" class="custom-control-input" id="use_ssl" name="use_ssl"
+                                                                       {{ 'checked' if provider_config.get('use_ssl') }}>
+                                                                <label class="custom-control-label" for="use_ssl">Enable SSL</label>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-4">
+                                                            <div class="custom-control custom-switch mb-3">
+                                                                <input type="checkbox" class="custom-control-input" id="use_starttls" name="use_starttls"
+                                                                       {{ 'checked' if provider_config.get('use_starttls') }}>
+                                                                <label class="custom-control-label" for="use_starttls">Enable StartTLS</label>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-4">
+                                                            <div class="form-group">
+                                                                <label>Connection Timeout (s)</label>
+                                                                <input type="number" class="form-control" name="connection_timeout"
+                                                                       value="{{ provider_config.get('connection_timeout', 30) }}">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Vendor</label>
+                                                                <select class="form-control" name="vendor">
+                                                                    <option value="other" {{ 'selected' if provider_config.get('vendor', 'other') == 'other' }}>Other</option>
+                                                                    <option value="ad" {{ 'selected' if provider_config.get('vendor') == 'ad' }}>Active Directory</option>
+                                                                    <option value="rhds" {{ 'selected' if provider_config.get('vendor') == 'rhds' }}>Red Hat Directory Server</option>
+                                                                    <option value="tivoli" {{ 'selected' if provider_config.get('vendor') == 'tivoli' }}>Tivoli</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <hr>
+
+                                                    <!-- LDAP Search Settings -->
+                                                    <h6 class="mb-3">User Search Settings</h6>
                                                     <div class="form-group">
                                                         <label>Users DN</label>
-                                                        <input type="text" class="form-control" name="users_dn" 
-                                                               value="{{ config.get('users_dn', '') }}">
+                                                        <input type="text" class="form-control" name="users_dn"
+                                                               value="{{ provider_config.get('users_dn', '') }}">
+                                                        <small class="form-text text-muted">Base DN for user searches</small>
                                                     </div>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Search Scope</label>
+                                                                <select class="form-control" name="search_scope">
+                                                                    <option value="subtree" {{ 'selected' if provider_config.get('search_scope', 'subtree') == 'subtree' }}>Subtree (all levels)</option>
+                                                                    <option value="one" {{ 'selected' if provider_config.get('search_scope') == 'one' }}>One Level</option>
+                                                                    <option value="base" {{ 'selected' if provider_config.get('search_scope') == 'base' }}>Base Object</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>User Object Classes</label>
+                                                                <input type="text" class="form-control" name="user_object_classes"
+                                                                       value="{{ provider_config.get('user_object_classes', 'inetOrgPerson') if provider_config.get('user_object_classes') is string else (provider_config.get('user_object_classes') or ['inetOrgPerson'])|join(',') }}">
+                                                                <small class="form-text text-muted">Comma-separated list</small>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <hr>
+
+                                                    <!-- LDAP Attribute Mappings -->
+                                                    <h6 class="mb-3">Attribute Mappings</h6>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Username Attribute</label>
+                                                                <input type="text" class="form-control" name="username_ldap_attribute"
+                                                                       value="{{ provider_config.get('username_ldap_attribute', 'uid') }}">
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Email Attribute</label>
+                                                                <input type="text" class="form-control" name="email_ldap_attribute"
+                                                                       value="{{ provider_config.get('email_ldap_attribute', 'mail') }}">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>First Name Attribute</label>
+                                                                <input type="text" class="form-control" name="first_name_ldap_attribute"
+                                                                       value="{{ provider_config.get('first_name_ldap_attribute', 'givenName') }}">
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Last Name Attribute</label>
+                                                                <input type="text" class="form-control" name="last_name_ldap_attribute"
+                                                                       value="{{ provider_config.get('last_name_ldap_attribute', 'sn') }}">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <hr>
+
+                                                    <!-- LDAP Role/Group Sync Settings -->
+                                                    <h6 class="mb-3">Role/Group Mapping Settings</h6>
+                                                    <div class="custom-control custom-switch mb-3">
+                                                        <input type="checkbox" class="custom-control-input" id="role_sync_enabled" name="role_sync_enabled"
+                                                               {{ 'checked' if provider_config.get('role_sync_enabled') }}
+                                                               onchange="toggleRoleSettings(this.checked)">
+                                                        <label class="custom-control-label" for="role_sync_enabled">Enable Role Synchronization</label>
+                                                    </div>
+                                                    <div id="role_settings" style="display: {{ 'block' if provider_config.get('role_sync_enabled') else 'none' }};">
+                                                        <div class="form-group">
+                                                            <label>Role Source</label>
+                                                            <select class="form-control" name="role_source" id="role_source"
+                                                                    onchange="toggleLdapRoleSource(this.value)">
+                                                                <option value="memberOf" {{ 'selected' if provider_config.get('role_source', 'memberOf') == 'memberOf' }}>memberOf Attribute</option>
+                                                                <option value="group" {{ 'selected' if provider_config.get('role_source') == 'group' }}>Group Search</option>
+                                                            </select>
+                                                        </div>
+                                                        <div id="memberof_settings" style="display: {{ 'none' if provider_config.get('role_source') == 'group' else 'block' }};">
+                                                            <div class="form-group">
+                                                                <label>Role/Group Attribute</label>
+                                                                <input type="text" class="form-control" name="role_attribute"
+                                                                       value="{{ provider_config.get('role_attribute', 'memberOf') }}">
+                                                                <small class="text-muted">LDAP attribute containing group DNs</small>
+                                                            </div>
+                                                            <div class="custom-control custom-switch mb-3">
+                                                                <input type="checkbox" class="custom-control-input" id="extract_cn_from_dn" name="extract_cn_from_dn"
+                                                                       {{ 'checked' if provider_config.get('extract_cn_from_dn', True) }}>
+                                                                <label class="custom-control-label" for="extract_cn_from_dn">Extract CN from DN</label>
+                                                                <small class="text-muted d-block">Convert "cn=admin,ou=groups,..." to "admin"</small>
+                                                            </div>
+                                                        </div>
+                                                        <div id="group_search_settings" style="display: {{ 'block' if provider_config.get('role_source') == 'group' else 'none' }};">
+                                                            <div class="form-group">
+                                                                <label>Groups DN</label>
+                                                                <input type="text" class="form-control" name="groups_dn"
+                                                                       value="{{ provider_config.get('groups_dn', '') }}"
+                                                                       placeholder="ou=groups,dc=example,dc=com">
+                                                            </div>
+                                                            <div class="form-group">
+                                                                <label>Group Object Classes</label>
+                                                                <input type="text" class="form-control" name="group_object_classes"
+                                                                       value="{{ provider_config.get('group_object_classes', 'groupOfNames,groupOfUniqueNames') if provider_config.get('group_object_classes') is string else (provider_config.get('group_object_classes') or ['groupOfNames','groupOfUniqueNames'])|join(',') }}">
+                                                            </div>
+                                                            <div class="form-group">
+                                                                <label>Group Name Attribute</label>
+                                                                <input type="text" class="form-control" name="group_name_ldap_attribute"
+                                                                       value="{{ provider_config.get('group_name_ldap_attribute', 'cn') }}">
+                                                            </div>
+                                                        </div>
+                                                        <div class="row">
+                                                            <div class="col-md-6">
+                                                                <div class="custom-control custom-switch mb-3">
+                                                                    <input type="checkbox" class="custom-control-input" id="create_missing_roles" name="create_missing_roles"
+                                                                           {{ 'checked' if provider_config.get('create_missing_roles') }}>
+                                                                    <label class="custom-control-label" for="create_missing_roles">Auto-create missing roles</label>
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-md-6">
+                                                                <div class="form-group">
+                                                                    <label>Default Role if Empty</label>
+                                                                    <input type="text" class="form-control" name="default_role_if_empty"
+                                                                           value="{{ provider_config.get('default_role_if_empty', '') }}"
+                                                                           placeholder="user">
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
                                                     {% elif provider.provider_type in ['mysql', 'postgresql'] %}
                                                     <div class="row">
                                                         <div class="col-md-8">
                                                             <div class="form-group">
                                                                 <label>Host</label>
-                                                                <input type="text" class="form-control" name="host" 
-                                                                       value="{{ config.get('host', 'localhost') }}">
+                                                                <input type="text" class="form-control" name="host"
+                                                                       value="{{ provider_config.get('host', 'localhost') }}">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-4">
                                                             <div class="form-group">
                                                                 <label>Port</label>
-                                                                <input type="number" class="form-control" name="port" 
-                                                                       value="{{ config.get('port', 3306 if provider.provider_type == 'mysql' else 5432) }}">
+                                                                <input type="number" class="form-control" name="port"
+                                                                       value="{{ provider_config.get('port', 3306 if provider.provider_type == 'mysql' else 5432) }}">
                                                             </div>
                                                         </div>
                                                     </div>
                                                     <div class="form-group">
                                                         <label>Database</label>
-                                                        <input type="text" class="form-control" name="database" 
-                                                               value="{{ config.get('database', '') }}">
+                                                        <input type="text" class="form-control" name="database"
+                                                               value="{{ provider_config.get('database', '') }}">
                                                     </div>
                                                     <div class="row">
                                                         <div class="col-md-6">
                                                             <div class="form-group">
                                                                 <label>Database Username</label>
-                                                                <input type="text" class="form-control" name="db_username" 
-                                                                       value="{{ config.get('username', '') }}">
+                                                                <input type="text" class="form-control" name="db_username"
+                                                                       value="{{ provider_config.get('username', '') }}">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-6">
                                                             <div class="form-group">
                                                                 <label>Database Password</label>
-                                                                <input type="password" class="form-control" name="db_password" 
+                                                                <input type="password" class="form-control" name="db_password"
                                                                        placeholder="Leave empty to keep current">
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    <div class="form-group">
-                                                        <label>User Table</label>
-                                                        <input type="text" class="form-control" name="user_table" 
-                                                               value="{{ config.get('user_table', 'users') }}">
+                                                    {% if provider.provider_type == 'postgresql' %}
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Schema</label>
+                                                                <input type="text" class="form-control" name="schema"
+                                                                       value="{{ provider_config.get('schema', 'public') }}">
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>SSL Mode</label>
+                                                                <select class="form-control" name="sslmode">
+                                                                    <option value="prefer" {{ 'selected' if provider_config.get('sslmode', 'prefer') == 'prefer' }}>Prefer</option>
+                                                                    <option value="disable" {{ 'selected' if provider_config.get('sslmode') == 'disable' }}>Disable</option>
+                                                                    <option value="require" {{ 'selected' if provider_config.get('sslmode') == 'require' }}>Require</option>
+                                                                    <option value="verify-ca" {{ 'selected' if provider_config.get('sslmode') == 'verify-ca' }}>Verify CA</option>
+                                                                    <option value="verify-full" {{ 'selected' if provider_config.get('sslmode') == 'verify-full' }}>Verify Full</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                     {% endif %}
 
-                                                    {% if provider.provider_type in ['mysql', 'postgresql'] %}
+                                                    <hr>
+
+                                                    <!-- Table & Column Mappings -->
+                                                    <h6 class="mb-3">Table &amp; Column Mappings</h6>
+                                                    <div class="form-group">
+                                                        <label>User Table</label>
+                                                        <input type="text" class="form-control" name="user_table"
+                                                               value="{{ provider_config.get('user_table', 'users') }}">
+                                                    </div>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>ID Column</label>
+                                                                <input type="text" class="form-control" name="id_column"
+                                                                       value="{{ provider_config.get('id_column', 'id') }}">
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Username Column</label>
+                                                                <input type="text" class="form-control" name="username_column"
+                                                                       value="{{ provider_config.get('username_column', 'username') }}">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Email Column</label>
+                                                                <input type="text" class="form-control" name="email_column"
+                                                                       value="{{ provider_config.get('email_column', 'email') }}">
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Password Column</label>
+                                                                <input type="text" class="form-control" name="password_column"
+                                                                       value="{{ provider_config.get('password_column', 'password') }}">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>First Name Column</label>
+                                                                <input type="text" class="form-control" name="first_name_column"
+                                                                       value="{{ provider_config.get('first_name_column', '') }}"
+                                                                       placeholder="first_name (optional)">
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Last Name Column</label>
+                                                                <input type="text" class="form-control" name="last_name_column"
+                                                                       value="{{ provider_config.get('last_name_column', '') }}"
+                                                                       placeholder="last_name (optional)">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Enabled Column</label>
+                                                                <input type="text" class="form-control" name="enabled_column"
+                                                                       value="{{ provider_config.get('enabled_column', '') }}"
+                                                                       placeholder="enabled (optional)">
+                                                            </div>
+                                                        </div>
+                                                        {% if provider.provider_type == 'postgresql' %}
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Attributes Column</label>
+                                                                <input type="text" class="form-control" name="attributes_column"
+                                                                       value="{{ provider_config.get('attributes_column', '') }}"
+                                                                       placeholder="attributes (optional)">
+                                                            </div>
+                                                        </div>
+                                                        {% endif %}
+                                                    </div>
+
                                                     <hr>
 
                                                     <!-- Sync Key Matching -->
@@ -199,8 +465,8 @@
                                                             <div class="form-group">
                                                                 <label>Realm User Field</label>
                                                                 <select class="form-control" name="realm_match_field">
-                                                                    <option value="username" {% if config.get('realm_match_field', 'username') == 'username' %}selected{% endif %}>Username</option>
-                                                                    <option value="id" {% if config.get('realm_match_field') == 'id' %}selected{% endif %}>ID</option>
+                                                                    <option value="username" {{ 'selected' if provider_config.get('realm_match_field', 'username') == 'username' }}>Username</option>
+                                                                    <option value="id" {{ 'selected' if provider_config.get('realm_match_field') == 'id' }}>ID</option>
                                                                 </select>
                                                                 <small class="form-text text-muted">Realm user field used as the matching key.</small>
                                                             </div>
@@ -209,9 +475,121 @@
                                                             <div class="form-group">
                                                                 <label>External Match Column</label>
                                                                 <input type="text" class="form-control" name="external_match_column"
-                                                                       value="{{ config.get('external_match_column', '') }}"
+                                                                       value="{{ provider_config.get('external_match_column', '') }}"
                                                                        placeholder="e.g., nip">
                                                                 <small class="form-text text-muted">Column in the external table whose value matches the Realm user field above.</small>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <hr>
+
+                                                    <!-- Password Settings -->
+                                                    <h6 class="mb-3">Password Settings</h6>
+                                                    <div class="form-group">
+                                                        <label>Password Hash Algorithm</label>
+                                                        <select class="form-control" name="password_hash_algorithm">
+                                                            <option value="bcrypt" {{ 'selected' if provider_config.get('password_hash_algorithm', 'bcrypt') == 'bcrypt' }}>bcrypt</option>
+                                                            <option value="sha256" {{ 'selected' if provider_config.get('password_hash_algorithm') == 'sha256' }}>SHA-256</option>
+                                                            <option value="sha512" {{ 'selected' if provider_config.get('password_hash_algorithm') == 'sha512' }}>SHA-512</option>
+                                                            <option value="md5" {{ 'selected' if provider_config.get('password_hash_algorithm') == 'md5' }}>MD5</option>
+                                                            <option value="plaintext" {{ 'selected' if provider_config.get('password_hash_algorithm') == 'plaintext' }}>Plain Text (not recommended)</option>
+                                                        </select>
+                                                    </div>
+
+                                                    <hr>
+
+                                                    <!-- Role Mapping Settings -->
+                                                    <h6 class="mb-3">Role Mapping Settings</h6>
+                                                    <div class="custom-control custom-switch mb-3">
+                                                        <input type="checkbox" class="custom-control-input" id="role_sync_enabled" name="role_sync_enabled"
+                                                               {{ 'checked' if provider_config.get('role_sync_enabled') }}
+                                                               onchange="toggleRoleSettings(this.checked)">
+                                                        <label class="custom-control-label" for="role_sync_enabled">Enable Role Synchronization</label>
+                                                    </div>
+                                                    <div id="role_settings" style="display: {{ 'block' if provider_config.get('role_sync_enabled') else 'none' }};">
+                                                        <div class="form-group">
+                                                            <label>Role Source</label>
+                                                            <select class="form-control" name="role_source" id="role_source"
+                                                                    onchange="toggleDbRoleSource(this.value)">
+                                                                <option value="column" {{ 'selected' if provider_config.get('role_source', 'column') == 'column' }}>Column in User Table</option>
+                                                                <option value="table" {{ 'selected' if provider_config.get('role_source') == 'table' }}>Separate Role Table</option>
+                                                                {% if provider.provider_type == 'postgresql' %}
+                                                                <option value="jsonb" {{ 'selected' if provider_config.get('role_source') == 'jsonb' }}>JSONB Column</option>
+                                                                {% endif %}
+                                                            </select>
+                                                        </div>
+                                                        <div id="role_column_settings" style="display: {{ 'none' if provider_config.get('role_source') in ('table', 'jsonb') else 'block' }};">
+                                                            <div class="form-group">
+                                                                <label>Role Column</label>
+                                                                <input type="text" class="form-control" name="role_column"
+                                                                       value="{{ provider_config.get('role_column', 'roles') }}"
+                                                                       placeholder="roles">
+                                                                <small class="text-muted">Column containing user roles (comma-separated or JSON)</small>
+                                                            </div>
+                                                            <div class="form-group">
+                                                                <label>Role Delimiter</label>
+                                                                <input type="text" class="form-control" name="role_delimiter"
+                                                                       value="{{ provider_config.get('role_delimiter', ',') }}"
+                                                                       style="max-width: 60px;">
+                                                                <small class="text-muted">Delimiter for string-based roles</small>
+                                                            </div>
+                                                        </div>
+                                                        <div id="role_table_settings" style="display: {{ 'block' if provider_config.get('role_source') == 'table' else 'none' }};">
+                                                            <div class="form-group">
+                                                                <label>Role Table Name</label>
+                                                                <input type="text" class="form-control" name="role_table"
+                                                                       value="{{ provider_config.get('role_table', '') }}"
+                                                                       placeholder="user_roles">
+                                                            </div>
+                                                            <div class="row">
+                                                                <div class="col-md-6">
+                                                                    <div class="form-group">
+                                                                        <label>User ID Column</label>
+                                                                        <input type="text" class="form-control" name="role_user_id_column"
+                                                                               value="{{ provider_config.get('role_user_id_column', 'user_id') }}">
+                                                                    </div>
+                                                                </div>
+                                                                <div class="col-md-6">
+                                                                    <div class="form-group">
+                                                                        <label>Role Name Column</label>
+                                                                        <input type="text" class="form-control" name="role_name_column"
+                                                                               value="{{ provider_config.get('role_name_column', 'role_name') }}">
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        {% if provider.provider_type == 'postgresql' %}
+                                                        <div id="role_jsonb_settings" style="display: {{ 'block' if provider_config.get('role_source') == 'jsonb' else 'none' }};">
+                                                            <div class="form-group">
+                                                                <label>JSONB Column</label>
+                                                                <input type="text" class="form-control" name="role_column"
+                                                                       value="{{ provider_config.get('role_column', 'data') }}"
+                                                                       placeholder="data">
+                                                            </div>
+                                                            <div class="form-group">
+                                                                <label>JSONB Path to Roles</label>
+                                                                <input type="text" class="form-control" name="role_jsonb_path"
+                                                                       value="{{ provider_config.get('role_jsonb_path', 'roles') }}"
+                                                                       placeholder="roles or data.user.roles">
+                                                            </div>
+                                                        </div>
+                                                        {% endif %}
+                                                        <div class="row">
+                                                            <div class="col-md-6">
+                                                                <div class="custom-control custom-switch mb-3">
+                                                                    <input type="checkbox" class="custom-control-input" id="create_missing_roles" name="create_missing_roles"
+                                                                           {{ 'checked' if provider_config.get('create_missing_roles') }}>
+                                                                    <label class="custom-control-label" for="create_missing_roles">Auto-create missing roles</label>
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-md-6">
+                                                                <div class="form-group">
+                                                                    <label>Default Role if Empty</label>
+                                                                    <input type="text" class="form-control" name="default_role_if_empty"
+                                                                           value="{{ provider_config.get('default_role_if_empty', '') }}"
+                                                                           placeholder="user">
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -224,8 +602,17 @@
                                                     <div class="row">
                                                         <div class="col-md-6">
                                                             <div class="form-group">
+                                                                <label>Batch Size</label>
+                                                                <input type="number" class="form-control" name="batch_size"
+                                                                       value="{{ provider_config.get('batch_size', 100) }}">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
                                                                 <label>Full Sync Period (seconds)</label>
-                                                                <input type="number" class="form-control" name="full_sync_period" 
+                                                                <input type="number" class="form-control" name="full_sync_period"
                                                                        value="{{ provider.full_sync_period }}">
                                                                 <small class="text-muted">-1 = disabled</small>
                                                             </div>
@@ -233,7 +620,7 @@
                                                         <div class="col-md-6">
                                                             <div class="form-group">
                                                                 <label>Changed Sync Period (seconds)</label>
-                                                                <input type="number" class="form-control" name="changed_sync_period" 
+                                                                <input type="number" class="form-control" name="changed_sync_period"
                                                                        value="{{ provider.changed_sync_period }}">
                                                                 <small class="text-muted">-1 = disabled</small>
                                                             </div>
@@ -246,7 +633,7 @@
                                             <button type="submit" class="btn btn-primary">
                                                 <i class="feather icon-save mr-1"></i> Save
                                             </button>
-                                            <a href="{{ url_for('admin.federation_list', realm_name=realm.name) }}" 
+                                            <a href="{{ url_for('admin.federation_list', realm_name=realm.name) }}"
                                                class="btn btn-outline-secondary">Cancel</a>
                                         </div>
                                     </form>
@@ -352,6 +739,22 @@
 
 {% block javascripts %}
 <script>
+function toggleRoleSettings(enabled) {
+    document.getElementById('role_settings').style.display = enabled ? 'block' : 'none';
+}
+
+function toggleLdapRoleSource(value) {
+    document.getElementById('memberof_settings').style.display = value === 'group' ? 'none' : 'block';
+    document.getElementById('group_search_settings').style.display = value === 'group' ? 'block' : 'none';
+}
+
+function toggleDbRoleSource(value) {
+    document.getElementById('role_column_settings').style.display = value === 'column' ? 'block' : 'none';
+    document.getElementById('role_table_settings').style.display = value === 'table' ? 'block' : 'none';
+    var jsonbEl = document.getElementById('role_jsonb_settings');
+    if (jsonbEl) { jsonbEl.style.display = value === 'jsonb' ? 'block' : 'none'; }
+}
+
 document.getElementById('testConnectionBtn').addEventListener('click', function () {
     var btn = this;
     var resultDiv = document.getElementById('connectionTestResult');

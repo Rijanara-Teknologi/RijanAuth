@@ -1238,7 +1238,14 @@ def federation_edit(realm_name, provider_id):
             # Update provider settings
             display_name = request.form.get('display_name', '').strip()
             config = _build_provider_config(provider.provider_type, request.form)
-            
+
+            # Preserve existing passwords when the form fields are left blank
+            existing_config = FederationService._decrypt_config(provider.config, provider.provider_type)
+            for sensitive_key in ('password', 'bind_credential'):
+                if sensitive_key in config and not config[sensitive_key]:
+                    if existing_config.get(sensitive_key):
+                        config[sensitive_key] = existing_config[sensitive_key]
+
             try:
                 FederationService.update_provider(
                     provider_id=provider.id,
@@ -1311,7 +1318,7 @@ def federation_edit(realm_name, provider_id):
         provider=provider,
         mappers=mappers,
         linked_users=linked_users,
-        config=display_config,
+        provider_config=display_config,
         segment='federation'
     )
 
