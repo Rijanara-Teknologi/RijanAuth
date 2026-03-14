@@ -2,6 +2,7 @@
 
 import csv
 import io
+import time
 import pytest
 from apps import db
 from apps.models.role import Role
@@ -16,6 +17,19 @@ def _login(client, username='admin', password='testadmin123!'):
     """Log the test client in as admin."""
     client.post('/auth/login', data={'username': username, 'password': password},
                 follow_redirects=False)
+
+
+def _await_job(client, realm_name, job_id, max_retries=50, delay=0.1):
+    """Poll the import-job status endpoint until the job is done."""
+    url = f'/admin/api/{realm_name}/import-jobs/{job_id}'
+    for _ in range(max_retries):
+        resp = client.get(url)
+        assert resp.status_code == 200
+        data = resp.get_json()
+        if data['status'] in ('completed', 'failed'):
+            return data
+        time.sleep(delay)
+    raise AssertionError(f"Import job {job_id} did not finish within {max_retries * delay:.1f}s")
 
 
 # ---------------------------------------------------------------------------
@@ -101,8 +115,9 @@ class TestImportRoles:
             data={'file': (io.BytesIO(csv_content.encode()), 'roles.csv')},
             content_type='multipart/form-data'
         )
-        assert resp.status_code == 200
-        result = resp.get_json()
+        assert resp.status_code == 202
+        job_id = resp.get_json()['job_id']
+        result = _await_job(client, realm_name, job_id)
         assert result['imported'] == 2
         assert result['skipped'] == 0
 
@@ -126,8 +141,9 @@ class TestImportRoles:
             data={'file': (io.BytesIO(csv_content.encode()), 'roles.csv')},
             content_type='multipart/form-data'
         )
-        assert resp.status_code == 200
-        result = resp.get_json()
+        assert resp.status_code == 202
+        job_id = resp.get_json()['job_id']
+        result = _await_job(client, realm_name, job_id)
         assert result['imported'] == 2
 
         with app.app_context():
@@ -156,21 +172,26 @@ class TestImportRoles:
             data={'file': (io.BytesIO(csv_content.encode()), 'roles.csv')},
             content_type='multipart/form-data'
         )
-        result = resp.get_json()
+        assert resp.status_code == 202
+        job_id = resp.get_json()['job_id']
+        result = _await_job(client, realm_name, job_id)
         assert result['skipped'] == 1
         assert result['imported'] == 0
         assert len(result['errors']) == 1
 
     def test_import_skips_missing_name(self, app, client, admin_user, test_realm):
         """Rows with an empty name are reported as errors."""
+        realm_name = test_realm.name
         _login(client)
         csv_content = 'name,description\n,empty name row\n'
         resp = client.post(
-            self._url(test_realm.name),
+            self._url(realm_name),
             data={'file': (io.BytesIO(csv_content.encode()), 'bad.csv')},
             content_type='multipart/form-data'
         )
-        result = resp.get_json()
+        assert resp.status_code == 202
+        job_id = resp.get_json()['job_id']
+        result = _await_job(client, realm_name, job_id)
         assert result['skipped'] == 1
 
     def test_import_raw_csv(self, app, client, admin_user, test_realm):
@@ -185,8 +206,10 @@ class TestImportRoles:
             data=csv_content.encode(),
             content_type='text/csv'
         )
-        assert resp.status_code == 200
-        assert resp.get_json()['imported'] == 1
+        assert resp.status_code == 202
+        job_id = resp.get_json()['job_id']
+        result = _await_job(client, realm_name, job_id)
+        assert result['imported'] == 1
 
         with app.app_context():
             assert Role.find_realm_role(realm_id, 'raw_role_import') is not None
@@ -297,8 +320,9 @@ class TestImportGroups:
             data={'file': (io.BytesIO(csv_content.encode()), 'groups.csv')},
             content_type='multipart/form-data'
         )
-        assert resp.status_code == 200
-        result = resp.get_json()
+        assert resp.status_code == 202
+        job_id = resp.get_json()['job_id']
+        result = _await_job(client, realm_name, job_id)
         assert result['imported'] == 2
         assert result['skipped'] == 0
 
@@ -318,8 +342,10 @@ class TestImportGroups:
             data={'file': (io.BytesIO(csv_content.encode()), 'groups.csv')},
             content_type='multipart/form-data'
         )
-        assert resp.status_code == 200
-        assert resp.get_json()['imported'] == 1
+        assert resp.status_code == 202
+        job_id = resp.get_json()['job_id']
+        result = _await_job(client, realm_name, job_id)
+        assert result['imported'] == 1
 
         with app.app_context():
             grp = Group.find_by_path(realm_id, '/Mixed Case Group')
@@ -345,22 +371,27 @@ class TestImportGroups:
             data={'file': (io.BytesIO(csv_content.encode()), 'groups.csv')},
             content_type='multipart/form-data'
         )
-        result = resp.get_json()
+        assert resp.status_code == 202
+        job_id = resp.get_json()['job_id']
+        result = _await_job(client, realm_name, job_id)
         assert result['skipped'] == 1
         assert result['imported'] == 0
         assert len(result['errors']) == 1
 
     def test_import_skips_missing_name(self, app, client, admin_user, test_realm):
         """Rows with a whitespace-only name are reported as errors."""
+        realm_name = test_realm.name
         _login(client)
         # Use a whitespace-only name; csv.DictReader skips fully-blank rows
         csv_content = 'name\n   \n'
         resp = client.post(
-            self._url(test_realm.name),
+            self._url(realm_name),
             data={'file': (io.BytesIO(csv_content.encode()), 'bad.csv')},
             content_type='multipart/form-data'
         )
-        result = resp.get_json()
+        assert resp.status_code == 202
+        job_id = resp.get_json()['job_id']
+        result = _await_job(client, realm_name, job_id)
         assert result['skipped'] == 1
 
     def test_import_raw_csv(self, app, client, admin_user, test_realm):
@@ -375,8 +406,10 @@ class TestImportGroups:
             data=csv_content.encode(),
             content_type='text/csv'
         )
-        assert resp.status_code == 200
-        assert resp.get_json()['imported'] == 1
+        assert resp.status_code == 202
+        job_id = resp.get_json()['job_id']
+        result = _await_job(client, realm_name, job_id)
+        assert result['imported'] == 1
 
         with app.app_context():
             assert Group.find_by_path(realm_id, '/raw_group_import') is not None

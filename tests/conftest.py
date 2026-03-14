@@ -132,3 +132,28 @@ def test_client(app, test_realm):
             db.session.commit()
             
         yield oidc_client
+
+
+# ---------------------------------------------------------------------------
+# Shared import-job polling helper
+# ---------------------------------------------------------------------------
+
+def await_import_job(client, realm_name, job_id, max_retries=100, delay=0.1):
+    """Poll the import-job status endpoint until the job reaches a terminal state.
+
+    Returns the final job dict (``status`` is ``'completed'`` or ``'failed'``).
+    Raises ``AssertionError`` if the job does not finish within *max_retries*
+    attempts.
+    """
+    import time
+    url = f'/admin/api/{realm_name}/import-jobs/{job_id}'
+    for _ in range(max_retries):
+        resp = client.get(url)
+        assert resp.status_code == 200, f"Job status endpoint returned {resp.status_code}"
+        data = resp.get_json()
+        if data['status'] in ('completed', 'failed'):
+            return data
+        time.sleep(delay)
+    raise AssertionError(
+        f"Import job {job_id} did not finish within {max_retries * delay:.1f}s"
+    )
