@@ -31,6 +31,18 @@
                             </div>
                         </div>
 
+                        <!-- Flash Messages -->
+                        {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                        {% for category, message in messages %}
+                        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible" role="alert">
+                            {{ message }}
+                            <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
+                        </div>
+                        {% endfor %}
+                        {% endif %}
+                        {% endwith %}
+
                         <!-- Content -->
                         <div class="row">
                             <div class="col-lg-8">
@@ -248,12 +260,11 @@
                                         <h5><i class="feather icon-zap mr-2"></i>Actions</h5>
                                     </div>
                                     <div class="card-body">
-                                        <form method="POST" class="mb-2">
-                                            <input type="hidden" name="action" value="test">
-                                            <button type="submit" class="btn btn-info btn-block">
-                                                <i class="feather icon-check-circle mr-1"></i> Test Connection
-                                            </button>
-                                        </form>
+                                        <button type="button" id="testConnectionBtn" class="btn btn-info btn-block mb-2"
+                                                data-url="{{ url_for('admin.api_test_federation_connection', realm_name=realm.name, provider_id=provider.id) }}">
+                                            <i class="feather icon-check-circle mr-1"></i> Test Connection
+                                        </button>
+                                        <div id="connectionTestResult" class="mb-2" style="display:none;"></div>
                                         <form method="POST" class="mb-2">
                                             <input type="hidden" name="action" value="sync">
                                             <button type="submit" class="btn btn-primary btn-block">
@@ -338,3 +349,49 @@
     </div>
 </div>
 {% endblock %}
+
+{% block javascripts %}
+<script>
+document.getElementById('testConnectionBtn').addEventListener('click', function () {
+    var btn = this;
+    var resultDiv = document.getElementById('connectionTestResult');
+    var url = btn.getAttribute('data-url');
+
+    // Show loading state
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm mr-1" role="status"></span> Testing&hellip;';
+    resultDiv.style.display = 'none';
+
+    fetch(url, {
+        method: 'POST',
+        headers: {'X-Requested-With': 'XMLHttpRequest'}
+    })
+    .then(function (response) { return response.json(); })
+    .then(function (data) {
+        if (data.success) {
+            resultDiv.className = 'alert alert-success alert-dismissible mb-2';
+            resultDiv.innerHTML = '<i class="feather icon-check-circle mr-1"></i> ' +
+                '<strong>Connected:</strong> ' + data.message +
+                '<button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>';
+        } else {
+            resultDiv.className = 'alert alert-danger alert-dismissible mb-2';
+            resultDiv.innerHTML = '<i class="feather icon-x-circle mr-1"></i> ' +
+                '<strong>Failed:</strong> ' + data.message +
+                '<button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>';
+        }
+        resultDiv.style.display = 'block';
+    })
+    .catch(function () {
+        resultDiv.className = 'alert alert-danger alert-dismissible mb-2';
+        resultDiv.innerHTML = '<i class="feather icon-x-circle mr-1"></i> ' +
+            '<strong>Error:</strong> Could not reach the server.' +
+            '<button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>';
+        resultDiv.style.display = 'block';
+    })
+    .finally(function () {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="feather icon-check-circle mr-1"></i> Test Connection';
+    });
+});
+</script>
+{% endblock javascripts %}
