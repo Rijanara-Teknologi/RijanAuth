@@ -187,9 +187,14 @@
                                                     <div class="form-group">
                                                         <label>JSONB Attributes Column</label>
                                                         <input type="text" class="form-control" name="attributes_column" placeholder="attributes (optional)">
-                                                        <small class="text-muted">For JSONB user attributes</small>
+                                                        <small class="text-muted">Column containing a JSONB object whose keys/values are imported as user attributes.</small>
                                                     </div>
                                                 </div>
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Custom Attribute Columns</label>
+                                                <input type="text" class="form-control" name="attribute_columns" placeholder="e.g. photo,phone,department (optional)">
+                                                <small class="text-muted">Comma-separated list of additional table columns to sync as individual user attributes. Each column value will be stored as a user attribute with the same name as the column. Use a <strong>Protocol Mapper</strong> on the desired scope to expose these attributes as JWT/userinfo claims.</small>
                                             </div>
 
                                             <hr>

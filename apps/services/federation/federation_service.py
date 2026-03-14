@@ -373,7 +373,7 @@ class FederationService:
             # Set additional attributes
             attributes = external_user.get('attributes', {})
             if attributes:
-                UserService.set_attributes(user.id, attributes)
+                UserService.set_attributes(user, attributes)
             
             logger.info(f"Created federated user: {username}")
             return user
@@ -411,7 +411,7 @@ class FederationService:
             # Update attributes
             attributes = external_user.get('attributes', {})
             if attributes:
-                UserService.set_attributes(user.id, attributes)
+                UserService.set_attributes(user, attributes)
                 
         except Exception as e:
             logger.error(f"Failed to update user from external: {str(e)}")

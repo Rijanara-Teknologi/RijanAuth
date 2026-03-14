@@ -1238,7 +1238,14 @@ def federation_edit(realm_name, provider_id):
             # Update provider settings
             display_name = request.form.get('display_name', '').strip()
             config = _build_provider_config(provider.provider_type, request.form)
-            
+
+            # Preserve existing passwords when the form fields are left blank
+            existing_config = FederationService._decrypt_config(provider.config, provider.provider_type)
+            for sensitive_key in ('password', 'bind_credential'):
+                if sensitive_key in config and not config[sensitive_key]:
+                    if existing_config.get(sensitive_key):
+                        config[sensitive_key] = existing_config[sensitive_key]
+
             try:
                 FederationService.update_provider(
                     provider_id=provider.id,
@@ -1311,7 +1318,7 @@ def federation_edit(realm_name, provider_id):
         provider=provider,
         mappers=mappers,
         linked_users=linked_users,
-        config=display_config,
+        provider_config=display_config,
         segment='federation'
     )
 
@@ -1600,6 +1607,8 @@ def _build_provider_config(provider_type, form):
             'connection_timeout': int(form.get('connection_timeout', 30)),
             'batch_size': int(form.get('batch_size', 100)),
             'vendor': form.get('vendor', 'other'),
+            # Custom attribute columns to sync (comma-separated LDAP attribute names)
+            'attribute_columns': form.get('attribute_columns', ''),
             # Role sync settings
             'role_sync_enabled': form.get('role_sync_enabled') == 'on',
             'role_source': form.get('role_source', 'memberOf'),
@@ -1627,6 +1636,8 @@ def _build_provider_config(provider_type, form):
             'first_name_column': form.get('first_name_column', ''),
             'last_name_column': form.get('last_name_column', ''),
             'enabled_column': form.get('enabled_column', ''),
+            # Custom attribute columns to sync (comma-separated column names)
+            'attribute_columns': form.get('attribute_columns', ''),
             'password_hash_algorithm': form.get('password_hash_algorithm', 'bcrypt'),
             'batch_size': int(form.get('batch_size', 100)),
             # Role sync settings
@@ -1660,7 +1671,10 @@ def _build_provider_config(provider_type, form):
             'first_name_column': form.get('first_name_column', ''),
             'last_name_column': form.get('last_name_column', ''),
             'enabled_column': form.get('enabled_column', ''),
+            # JSONB column whose keys/values are merged as user attributes
             'attributes_column': form.get('attributes_column', ''),
+            # Plain columns to sync as individual user attributes (comma-separated)
+            'attribute_columns': form.get('attribute_columns', ''),
             'password_hash_algorithm': form.get('password_hash_algorithm', 'bcrypt'),
             'sslmode': form.get('sslmode', 'prefer'),
             'batch_size': int(form.get('batch_size', 100)),
