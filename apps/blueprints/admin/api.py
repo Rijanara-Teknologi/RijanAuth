@@ -7,7 +7,7 @@ REST API endpoints for admin console
 import csv
 import io
 
-from flask import jsonify, request, Response
+from flask import jsonify, request, Response, current_app
 from flask_login import login_required
 from sqlalchemy.exc import SQLAlchemyError
 from apps.blueprints.admin import admin_bp
@@ -16,8 +16,10 @@ from apps.models.user import User
 from apps.models.client import Client
 from apps.models.role import Role
 from apps.models.group import Group
+from apps.models.import_job import ImportJob
 from apps.services.user_service import UserService
 from apps.services.client_service import ClientService
+from apps.services.import_service import ImportService
 from apps.logging import log_action
 from apps import db
 
@@ -253,7 +255,7 @@ def api_reset_password(realm_name, user_id):
 @login_required
 @log_action(action="import_users", resource_type="user")
 def api_import_users(realm_name):
-    """Import users from a CSV file.
+    """Import users from a CSV file (asynchronous, chunked).
 
     The CSV must contain at minimum a ``username`` column.  All other
     columns are optional but recognised:
@@ -276,19 +278,17 @@ def api_import_users(realm_name):
     Upload the file using ``multipart/form-data`` with the field name
     ``file``, or send raw CSV text with ``Content-Type: text/csv``.
 
-    If a username already exists in the realm the user is **updated** rather
-    than skipped.  The ``id`` and ``username`` fields are never changed; all
-    other provided fields (first name, last name, email, roles, groups, custom
-    attributes) are applied to the existing record.
-
-    Returns a JSON summary::
+    The import is processed in background chunks of 20 rows each.
+    The endpoint returns immediately with a job ID::
 
         {
-            "imported": 3,
-            "updated": 1,
-            "skipped": 0,
-            "errors": []
+            "job_id": "<uuid>",
+            "status": "queued",
+            "total_rows": 300,
+            "message": "Import queued. Poll /api/<realm>/import-jobs/<job_id> for status."
         }
+
+    Poll ``GET /api/<realm>/import-jobs/<job_id>`` to track progress.
     """
     realm = Realm.find_by_name(realm_name)
     if not realm:
@@ -303,118 +303,15 @@ def api_import_users(realm_name):
     else:
         return jsonify({'error': 'Provide a CSV file via multipart/form-data (field "file") or raw CSV with Content-Type: text/csv'}), 400
 
-    reader = csv.DictReader(io.StringIO(raw))
+    app = current_app._get_current_object()  # unwrap LocalProxy for thread-safe access
+    job = ImportService.enqueue_users(app, realm.id, raw)
 
-    # Normalise header names to lowercase-with-underscores
-    FIELD_ALIASES = {
-        'firstname': 'first_name',
-        'lastname': 'last_name',
-    }
-
-    imported = 0
-    updated = 0
-    skipped = 0
-    errors = []
-
-    for row_num, row in enumerate(reader, start=2):
-        # Normalise keys
-        normalised_row = {}
-        for k, v in row.items():
-            if k is None:
-                continue
-            key = k.strip().lower().replace(' ', '_')
-            key = FIELD_ALIASES.get(key, key)
-            normalised_row[key] = (v or '').strip()
-
-        username = normalised_row.get('username')
-        if not username:
-            errors.append({'row': row_num, 'error': 'Missing username'})
-            skipped += 1
-            continue
-
-        # Resolve first/last name
-        first_name = normalised_row.get('first_name') or ''
-        last_name = normalised_row.get('last_name') or ''
-        if not first_name and not last_name:
-            full_name = normalised_row.get('name', '')
-            if full_name:
-                parts = full_name.split(' ', 1)
-                first_name = parts[0]
-                last_name = parts[1] if len(parts) > 1 else ''
-
-        email = normalised_row.get('email') or None
-        password = normalised_row.get('password') or None
-
-        # Collect extra columns as custom attributes
-        KNOWN_FIELDS = {'username', 'email', 'password', 'name', 'first_name', 'last_name', 'roles', 'groups'}
-        extra_attrs = {k: v for k, v in normalised_row.items() if k not in KNOWN_FIELDS and v}
-
-        # Validate roles and groups against the realm; skip unknown values
-        roles_raw = normalised_row.get('roles', '')
-        roles_to_assign = _resolve_semicolon_list(
-            roles_raw, lambda name: Role.find_realm_role(realm.id, name)
-        ) if roles_raw else []
-
-        groups_raw = normalised_row.get('groups', '')
-        groups_to_assign = _resolve_semicolon_list(
-            groups_raw, lambda name: Group.find_realm_group(realm.id, name)
-        ) if groups_raw else []
-
-        existing_user = User.find_by_username(realm.id, username)
-        if existing_user:
-            # Username already exists – update all fields except id and username.
-            # Only non-empty CSV values overwrite existing data; empty/missing
-            # columns leave the current value unchanged.
-            # Roles and groups are additive: new assignments are appended to any
-            # already held by the user (no existing assignments are removed).
-            # Custom attributes are replaced in full when extra columns are present.
-            try:
-                update_fields = {}
-                if first_name:
-                    update_fields['first_name'] = first_name
-                if last_name:
-                    update_fields['last_name'] = last_name
-                if email:
-                    update_fields['email'] = email
-                if update_fields:
-                    UserService.update_user(existing_user, **update_fields)
-                if password:
-                    UserService.set_password(existing_user, password)
-                if extra_attrs:
-                    UserService.set_attributes(existing_user, {k: [v] for k, v in extra_attrs.items()})
-                for role in roles_to_assign:
-                    UserService.assign_role(existing_user, role)
-                for group in groups_to_assign:
-                    UserService.join_group(existing_user, group)
-                updated += 1
-            except (SQLAlchemyError, ValueError) as exc:
-                db.session.rollback()
-                errors.append({'row': row_num, 'username': username, 'error': str(exc)})
-                skipped += 1
-            continue
-
-        try:
-            user = UserService.create_user(
-                realm_id=realm.id,
-                username=username,
-                email=email,
-                password=password,
-                first_name=first_name or None,
-                last_name=last_name or None,
-            )
-            if extra_attrs:
-                UserService.set_attributes(user, {k: [v] for k, v in extra_attrs.items()})
-            for role in roles_to_assign:
-                UserService.assign_role(user, role)
-            for group in groups_to_assign:
-                UserService.join_group(user, group)
-            imported += 1
-        except (SQLAlchemyError, ValueError) as exc:
-            db.session.rollback()
-            errors.append({'row': row_num, 'username': username, 'error': str(exc)})
-            skipped += 1
-
-    return jsonify({'imported': imported, 'updated': updated, 'skipped': skipped, 'errors': errors}), 200
+    return jsonify({
+        'job_id': job.id,
+        'status': 'queued',
+        'total_rows': job.total_rows,
+        'message': f'Import queued. Poll /api/{realm_name}/import-jobs/{job.id} for status.',
+    }), 202
 
 
 @admin_bp.route('/api/<realm_name>/users/export', methods=['GET'])
@@ -466,6 +363,57 @@ def api_export_users(realm_name):
         mimetype='text/csv',
         headers={'Content-Disposition': f'attachment; filename=users_export_{realm_name}.csv'}
     )
+
+
+# =============================================================================
+# Import Job Status API
+# =============================================================================
+
+@admin_bp.route('/api/<realm_name>/import-jobs/<job_id>', methods=['GET'])
+@login_required
+def api_get_import_job(realm_name, job_id):
+    """Get the status and result of an asynchronous import job.
+
+    Returns a JSON object with the current job state::
+
+        {
+            "id": "<uuid>",
+            "job_type": "users",
+            "status": "completed",
+            "total_rows": 300,
+            "processed_rows": 300,
+            "imported": 295,
+            "updated": 5,
+            "skipped": 0,
+            "errors": [],
+            "created_at": "...",
+            "started_at": "...",
+            "finished_at": "..."
+        }
+
+    ``status`` is one of ``pending``, ``processing``, ``completed``, ``failed``.
+    """
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+
+    job = ImportJob.find_by_id(job_id)
+    if not job or job.realm_id != realm.id:
+        return jsonify({'error': 'Import job not found'}), 404
+
+    return jsonify(job.to_dict()), 200
+
+
+@admin_bp.route('/api/<realm_name>/import-jobs', methods=['GET'])
+@login_required
+def api_list_import_jobs(realm_name):
+    """List all import jobs for a realm (most recent first)."""
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+
+    jobs = ImportJob.find_by_realm(realm.id)
+    return jsonify([j.to_dict() for j in jobs]), 200
 
 
 # =============================================================================
@@ -553,7 +501,7 @@ def api_export_roles(realm_name):
 @login_required
 @log_action(action="import_roles", resource_type="role")
 def api_import_roles(realm_name):
-    """Import realm roles from a CSV file.
+    """Import realm roles from a CSV file (asynchronous, chunked).
 
     The CSV must contain at minimum a ``name`` column.  The optional
     ``description`` column is also recognised.
@@ -566,14 +514,14 @@ def api_import_roles(realm_name):
     Upload the file using ``multipart/form-data`` with the field name
     ``file``, or send raw CSV text with ``Content-Type: text/csv``.
 
-    Returns a JSON summary::
+    The import is processed in background chunks of 20 rows each.
+    Returns a job descriptor immediately::
 
         {
-            "imported": 3,
-            "skipped": 1,
-            "errors": [
-                {"row": 2, "name": "admin", "error": "Role already exists"}
-            ]
+            "job_id": "<uuid>",
+            "status": "queued",
+            "total_rows": 50,
+            "message": "Import queued. Poll /api/<realm>/import-jobs/<job_id> for status."
         }
     """
     realm = Realm.find_by_name(realm_name)
@@ -588,46 +536,15 @@ def api_import_roles(realm_name):
     else:
         return jsonify({'error': 'Provide a CSV file via multipart/form-data (field "file") or raw CSV with Content-Type: text/csv'}), 400
 
-    reader = csv.DictReader(io.StringIO(raw))
+    app = current_app._get_current_object()  # unwrap LocalProxy for thread-safe access
+    job = ImportService.enqueue_roles(app, realm.id, raw)
 
-    imported = 0
-    skipped = 0
-    errors = []
-
-    for row_num, row in enumerate(reader, start=2):
-        name_raw = (row.get('name') or '').strip()
-        if not name_raw:
-            errors.append({'row': row_num, 'error': 'Missing name'})
-            skipped += 1
-            continue
-
-        # Auto-format: lowercase + spaces → underscores
-        name = name_raw.lower().replace(' ', '_')
-        description = (row.get('description') or '').strip() or None
-
-        if Role.find_realm_role(realm.id, name):
-            errors.append({'row': row_num, 'name': name, 'error': 'Role already exists'})
-            skipped += 1
-            continue
-
-        try:
-            role = Role(
-                realm_id=realm.id,
-                name=name,
-                description=description,
-                client_id=None,
-                client_role=False,
-                composite=False
-            )
-            db.session.add(role)
-            db.session.commit()
-            imported += 1
-        except SQLAlchemyError as exc:
-            db.session.rollback()
-            errors.append({'row': row_num, 'name': name, 'error': str(exc)})
-            skipped += 1
-
-    return jsonify({'imported': imported, 'skipped': skipped, 'errors': errors}), 200
+    return jsonify({
+        'job_id': job.id,
+        'status': 'queued',
+        'total_rows': job.total_rows,
+        'message': f'Import queued. Poll /api/{realm_name}/import-jobs/{job.id} for status.',
+    }), 202
 
 
 # =============================================================================
@@ -683,7 +600,7 @@ def api_export_groups(realm_name):
 @login_required
 @log_action(action="import_groups", resource_type="group")
 def api_import_groups(realm_name):
-    """Import realm groups from a CSV file.
+    """Import realm groups from a CSV file (asynchronous, chunked).
 
     The CSV must contain at minimum a ``name`` column.  Group names are
     stored exactly as provided (no formatting is applied).
@@ -694,14 +611,14 @@ def api_import_groups(realm_name):
     Upload the file using ``multipart/form-data`` with the field name
     ``file``, or send raw CSV text with ``Content-Type: text/csv``.
 
-    Returns a JSON summary::
+    The import is processed in background chunks of 20 rows each.
+    Returns a job descriptor immediately::
 
         {
-            "imported": 3,
-            "skipped": 1,
-            "errors": [
-                {"row": 2, "name": "admins", "error": "Group already exists"}
-            ]
+            "job_id": "<uuid>",
+            "status": "queued",
+            "total_rows": 50,
+            "message": "Import queued. Poll /api/<realm>/import-jobs/<job_id> for status."
         }
     """
     realm = Realm.find_by_name(realm_name)
@@ -716,41 +633,15 @@ def api_import_groups(realm_name):
     else:
         return jsonify({'error': 'Provide a CSV file via multipart/form-data (field "file") or raw CSV with Content-Type: text/csv'}), 400
 
-    reader = csv.DictReader(io.StringIO(raw))
+    app = current_app._get_current_object()  # unwrap LocalProxy for thread-safe access
+    job = ImportService.enqueue_groups(app, realm.id, raw)
 
-    imported = 0
-    skipped = 0
-    errors = []
-
-    for row_num, row in enumerate(reader, start=2):
-        name = (row.get('name') or '').strip()
-        if not name:
-            errors.append({'row': row_num, 'error': 'Missing name'})
-            skipped += 1
-            continue
-
-        path = f'/{name}'
-        if Group.find_by_path(realm.id, path):
-            errors.append({'row': row_num, 'name': name, 'error': 'Group already exists'})
-            skipped += 1
-            continue
-
-        try:
-            group = Group(
-                realm_id=realm.id,
-                name=name,
-                path=path,
-                parent_id=None
-            )
-            db.session.add(group)
-            db.session.commit()
-            imported += 1
-        except SQLAlchemyError as exc:
-            db.session.rollback()
-            errors.append({'row': row_num, 'name': name, 'error': str(exc)})
-            skipped += 1
-
-    return jsonify({'imported': imported, 'skipped': skipped, 'errors': errors}), 200
+    return jsonify({
+        'job_id': job.id,
+        'status': 'queued',
+        'total_rows': job.total_rows,
+        'message': f'Import queued. Poll /api/{realm_name}/import-jobs/{job.id} for status.',
+    }), 202
 
 
 # =============================================================================

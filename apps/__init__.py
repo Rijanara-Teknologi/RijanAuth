@@ -133,6 +133,19 @@ def _run_schema_migrations():
             except Exception as exc:
                 print('> Migration warning (protocol_mappers.consent_text): ' + str(exc))
 
+    # ------------------------------------------------------------------
+    # import_jobs – create table if missing (added in queue-import feature)
+    # db.create_all() handles this for fresh installs; this guard covers
+    # existing databases that were created before the feature was added.
+    # ------------------------------------------------------------------
+    if 'import_jobs' not in existing_tables:
+        try:
+            from apps.models.import_job import ImportJob
+            ImportJob.__table__.create(db.engine, checkfirst=True)
+            print('> Migration: Created table import_jobs')
+        except Exception as exc:
+            print('> Migration warning (import_jobs): ' + str(exc))
+
 
 def configure_database(app):
     """Configure database initialization"""
@@ -153,6 +166,7 @@ def configure_database(app):
         from apps.models.federation import UserFederationProvider, UserFederationMapper, UserFederationLink, FederationSyncLog
         from apps.models.customization import RealmPageCustomization, MediaAsset
         from apps.models.backup import BackupConfig, BackupRecord
+        from apps.models.import_job import ImportJob
         
         try:
             db.create_all()

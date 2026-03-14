@@ -1,6 +1,7 @@
 """Tests for user import endpoint and custom-attribute update endpoint."""
 
 import io
+import time
 import pytest
 from apps import db
 from apps.models.user import User
@@ -17,6 +18,23 @@ def _login(client, username='admin', password='testadmin123!'):
     """Log the test client in as admin."""
     client.post('/auth/login', data={'username': username, 'password': password},
                 follow_redirects=False)
+
+
+def _await_job(client, realm_name, job_id, max_retries=50, delay=0.1):
+    """Poll the import-job status endpoint until the job is done.
+
+    Returns the final job dict (status == 'completed' or 'failed').
+    Raises AssertionError if the job doesn't finish within *max_retries* attempts.
+    """
+    url = f'/admin/api/{realm_name}/import-jobs/{job_id}'
+    for _ in range(max_retries):
+        resp = client.get(url)
+        assert resp.status_code == 200, f"Job status endpoint returned {resp.status_code}"
+        data = resp.get_json()
+        if data['status'] in ('completed', 'failed'):
+            return data
+        time.sleep(delay)
+    raise AssertionError(f"Import job {job_id} did not finish within {max_retries * delay:.1f}s")
 
 
 # ---------------------------------------------------------------------------
@@ -97,8 +115,9 @@ class TestImportUsers:
         url = self._import_url(realm_name)
 
         resp = client.post(url, data=data, content_type='multipart/form-data')
-        assert resp.status_code == 200
-        result = resp.get_json()
+        assert resp.status_code == 202
+        job_id = resp.get_json()['job_id']
+        result = _await_job(client, realm_name, job_id)
         assert result['imported'] == 2
         assert result['skipped'] == 0
 
@@ -113,7 +132,8 @@ class TestImportUsers:
 
     def test_import_csv_raw(self, app, client, admin_user, test_realm):
         """Import via raw CSV body creates users."""
-        url = self._import_url(test_realm.name)
+        realm_name = test_realm.name
+        url = self._import_url(realm_name)
         _login(client)
 
         csv_content = (
@@ -121,13 +141,15 @@ class TestImportUsers:
             'rawuser1,rawuser1@example.com,secret,Charlie,Brown\n'
         )
         resp = client.post(url, data=csv_content.encode(), content_type='text/csv')
-        assert resp.status_code == 200
-        result = resp.get_json()
+        assert resp.status_code == 202
+        job_id = resp.get_json()['job_id']
+        result = _await_job(client, realm_name, job_id)
         assert result['imported'] == 1
 
     def test_import_updates_existing_user(self, app, client, admin_user, test_realm, test_user):
         """Import updates a user whose username already exists instead of reporting an error."""
-        url = self._import_url(test_realm.name)
+        realm_name = test_realm.name
+        url = self._import_url(realm_name)
         realm_id = test_realm.id
         existing_username = test_user.username
         _login(client)
@@ -138,7 +160,9 @@ class TestImportUsers:
         )
         resp = client.post(url, data={'file': (io.BytesIO(csv_content.encode()), 'update.csv')},
                            content_type='multipart/form-data')
-        result = resp.get_json()
+        assert resp.status_code == 202
+        job_id = resp.get_json()['job_id']
+        result = _await_job(client, realm_name, job_id)
         assert result['updated'] == 1
         assert result['imported'] == 0
         assert result['skipped'] == 0
@@ -153,7 +177,8 @@ class TestImportUsers:
 
     def test_import_existing_user_preserves_id_and_username(self, app, client, admin_user, test_realm, test_user):
         """Import never changes id or username for an existing user."""
-        url = self._import_url(test_realm.name)
+        realm_name = test_realm.name
+        url = self._import_url(realm_name)
         realm_id = test_realm.id
         existing_username = test_user.username
         original_id = test_user.id
@@ -165,7 +190,10 @@ class TestImportUsers:
         )
         resp = client.post(url, data={'file': (io.BytesIO(csv_content.encode()), 'id_check.csv')},
                            content_type='multipart/form-data')
-        assert resp.get_json()['updated'] == 1
+        assert resp.status_code == 202
+        job_id = resp.get_json()['job_id']
+        result = _await_job(client, realm_name, job_id)
+        assert result['updated'] == 1
 
         with app.app_context():
             u = User.find_by_username(realm_id, existing_username)
@@ -174,12 +202,15 @@ class TestImportUsers:
 
     def test_import_skips_missing_username(self, app, client, admin_user, test_realm):
         """Row with no username is reported as an error."""
-        url = self._import_url(test_realm.name)
+        realm_name = test_realm.name
+        url = self._import_url(realm_name)
         _login(client)
         csv_content = 'username,email\n,noname@example.com\n'
         resp = client.post(url, data={'file': (io.BytesIO(csv_content.encode()), 'bad.csv')},
                            content_type='multipart/form-data')
-        result = resp.get_json()
+        assert resp.status_code == 202
+        job_id = resp.get_json()['job_id']
+        result = _await_job(client, realm_name, job_id)
         assert result['skipped'] == 1
 
     def test_import_custom_attribute_columns(self, app, client, admin_user, test_realm):
@@ -195,8 +226,10 @@ class TestImportUsers:
         url = self._import_url(realm_name)
         resp = client.post(url, data={'file': (io.BytesIO(csv_content.encode()), 'attrs.csv')},
                            content_type='multipart/form-data')
-        assert resp.status_code == 200
-        assert resp.get_json()['imported'] == 1
+        assert resp.status_code == 202
+        job_id = resp.get_json()['job_id']
+        result = _await_job(client, realm_name, job_id)
+        assert result['imported'] == 1
 
         with app.app_context():
             u = User.find_by_username(realm_id, 'attruser1')
@@ -231,8 +264,10 @@ class TestImportUsers:
         url = self._import_url(realm_name)
         resp = client.post(url, data={'file': (io.BytesIO(csv_content.encode()), 'roles.csv')},
                            content_type='multipart/form-data')
-        assert resp.status_code == 200
-        assert resp.get_json()['imported'] == 1
+        assert resp.status_code == 202
+        job_id = resp.get_json()['job_id']
+        result = _await_job(client, realm_name, job_id)
+        assert result['imported'] == 1
 
         with app.app_context():
             u = User.find_by_username(realm_id, 'roleuser1')
@@ -262,8 +297,10 @@ class TestImportUsers:
         url = self._import_url(realm_name)
         resp = client.post(url, data={'file': (io.BytesIO(csv_content.encode()), 'groups.csv')},
                            content_type='multipart/form-data')
-        assert resp.status_code == 200
-        assert resp.get_json()['imported'] == 1
+        assert resp.status_code == 202
+        job_id = resp.get_json()['job_id']
+        result = _await_job(client, realm_name, job_id)
+        assert result['imported'] == 1
 
         with app.app_context():
             u = User.find_by_username(realm_id, 'groupuser1')
@@ -286,7 +323,9 @@ class TestImportUsers:
         url = self._import_url(realm_name)
         resp = client.post(url, data={'file': (io.BytesIO(csv_content.encode()), 'attrcheck.csv')},
                            content_type='multipart/form-data')
-        assert resp.status_code == 200
+        assert resp.status_code == 202
+        job_id = resp.get_json()['job_id']
+        _await_job(client, realm_name, job_id)
 
         with app.app_context():
             u = User.find_by_username(realm_id, 'attrcheck1')

@@ -18,6 +18,7 @@ from apps.models.federation import (
     FederationRoleMapping, FederationRoleFormatConfig, FederatedRoleSync
 )
 from apps.models.backup import BackupConfig, BackupRecord
+from apps.models.import_job import ImportJob
 
 __all__ = [
     # Realm
@@ -43,4 +44,6 @@ __all__ = [
     'FederationRoleMapping', 'FederationRoleFormatConfig', 'FederatedRoleSync',
     # Backup
     'BackupConfig', 'BackupRecord',
+    # Import Job
+    'ImportJob',
 ]
