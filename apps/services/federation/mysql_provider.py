@@ -213,6 +213,11 @@ class MySQLFederationProvider(BaseFederationProvider):
             if role_col and role_col not in columns:
                 columns.append(role_col)
         
+        # External match column for sync key matching
+        ext_match_col = self.config.get('external_match_column', '')
+        if ext_match_col and ext_match_col not in columns:
+            columns.append(ext_match_col)
+        
         return [c for c in columns if c]
     
     def _build_base_query(self) -> str:
@@ -256,6 +261,10 @@ class MySQLFederationProvider(BaseFederationProvider):
         if include_roles and self.config.get('role_sync_enabled', False):
             roles = self._get_user_roles(external_id, row)
         
+        # External match column value for sync key matching
+        ext_match_col = self.config.get('external_match_column', '')
+        external_match_value = str(row.get(ext_match_col, '')) if ext_match_col else ''
+        
         return {
             'external_id': external_id,
             'username': row.get(username_col, ''),
@@ -267,6 +276,7 @@ class MySQLFederationProvider(BaseFederationProvider):
             'roles': roles,
             '_password_hash': row.get(self.config.get('password_column', 'password'), ''),
             '_salt': row.get(self.config.get('salt_column', ''), '') if self.config.get('salt_column') else '',
+            'external_match_value': external_match_value,
         }
     
     def _get_user_roles(self, external_id: str, row: Dict = None) -> List[str]:

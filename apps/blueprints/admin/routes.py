@@ -1628,6 +1628,9 @@ def _build_provider_config(provider_type, form):
             'role_delimiter': form.get('role_delimiter', ','),
             'create_missing_roles': form.get('create_missing_roles') == 'on',
             'default_role_if_empty': form.get('default_role_if_empty', ''),
+            # Sync key matching
+            'realm_match_field': form.get('realm_match_field', 'username'),
+            'external_match_column': form.get('external_match_column', ''),
         }
     
     elif provider_type == 'postgresql':
@@ -1661,6 +1664,9 @@ def _build_provider_config(provider_type, form):
             'role_delimiter': form.get('role_delimiter', ','),
             'create_missing_roles': form.get('create_missing_roles') == 'on',
             'default_role_if_empty': form.get('default_role_if_empty', ''),
+            # Sync key matching
+            'realm_match_field': form.get('realm_match_field', 'username'),
+            'external_match_column': form.get('external_match_column', ''),
         }
     
     return config

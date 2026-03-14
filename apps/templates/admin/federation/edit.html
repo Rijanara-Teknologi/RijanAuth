@@ -176,6 +176,35 @@
                                                     </div>
                                                     {% endif %}
 
+                                                    {% if provider.provider_type in ['mysql', 'postgresql'] %}
+                                                    <hr>
+
+                                                    <!-- Sync Key Matching -->
+                                                    <h6 class="mb-3">Sync Key Matching</h6>
+                                                    <p class="text-muted small">Configure how RijanAuth identifies existing Realm users when syncing rows from the external table.</p>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>Realm User Field</label>
+                                                                <select class="form-control" name="realm_match_field">
+                                                                    <option value="username" {% if config.get('realm_match_field', 'username') == 'username' %}selected{% endif %}>Username</option>
+                                                                    <option value="id" {% if config.get('realm_match_field') == 'id' %}selected{% endif %}>ID</option>
+                                                                </select>
+                                                                <small class="form-text text-muted">Realm user field used as the matching key.</small>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="form-group">
+                                                                <label>External Match Column</label>
+                                                                <input type="text" class="form-control" name="external_match_column"
+                                                                       value="{{ config.get('external_match_column', '') }}"
+                                                                       placeholder="e.g., nip">
+                                                                <small class="form-text text-muted">Column in the external table whose value matches the Realm user field above.</small>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    {% endif %}
+
                                                     <hr>
 
                                                     <!-- Sync Settings -->

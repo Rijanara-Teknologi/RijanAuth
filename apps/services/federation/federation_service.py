@@ -249,15 +249,29 @@ class FederationService:
                 
                 return user
         
-        # Check if user exists locally by username or email
-        username = external_user.get('username', '')
-        email = external_user.get('email', '')
+        # Check if user exists locally using configured sync key matching, then fall back to username/email
+        realm_match_field = provider_config.config.get('realm_match_field', '') if provider_config else ''
+        external_match_value = external_user.get('external_match_value', '')
         
         user = None
-        if username:
-            user = User.find_by_username(realm_id, username)
-        if not user and email:
-            user = User.find_by_email(realm_id, email)
+        if realm_match_field and external_match_value:
+            # Use configured sync key matching
+            if realm_match_field == 'username':
+                user = User.find_by_username(realm_id, external_match_value)
+            elif realm_match_field == 'id':
+                candidate = User.find_by_id(external_match_value)
+                # Ensure the candidate belongs to the correct realm
+                if candidate and str(candidate.realm_id) == str(realm_id):
+                    user = candidate
+        
+        if not user:
+            # Fall back to matching by username and email from the external user data
+            username = external_user.get('username', '')
+            email = external_user.get('email', '')
+            if username:
+                user = User.find_by_username(realm_id, username)
+            if not user and email:
+                user = User.find_by_email(realm_id, email)
         
         if user:
             # Link existing local user to federation
