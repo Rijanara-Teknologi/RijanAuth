@@ -298,6 +298,13 @@ def create_app(config):
     except Exception as _e:
         pass
     
+    # Start federation sync scheduler
+    try:
+        from apps.services.federation import SyncService
+        SyncService.init_scheduler(app)
+    except Exception as _e:
+        pass
+    
     # Add RijanAuth context
     @app.context_processor
     def inject_rijanauth_context():
