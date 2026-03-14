@@ -1168,34 +1168,37 @@ def federation_create(realm_name, provider_type):
         return redirect(url_for('admin.federation_list', realm_name=realm_name))
     
     if request.method == 'POST':
-        name = request.form.get('name', '').strip()
+        name = request.form.get('name', '').strip() or provider_type
         display_name = request.form.get('display_name', '').strip()
-        
-        if not name:
-            flash('Provider name is required', 'error')
-        elif UserFederationProvider.find_by_name(realm.id, name):
-            flash(f'Provider "{name}" already exists', 'error')
-        else:
-            # Build config from form
-            config = _build_provider_config(provider_type, request.form)
-            
-            try:
-                provider = FederationService.create_provider(
-                    realm_id=realm.id,
-                    name=name,
-                    provider_type=provider_type,
-                    config=config,
-                    display_name=display_name or name,
-                    enabled=request.form.get('enabled') == 'on',
-                    priority=int(request.form.get('priority', 0)),
-                    import_enabled=request.form.get('import_enabled') == 'on',
-                    full_sync_period=int(request.form.get('full_sync_period', -1)),
-                    changed_sync_period=int(request.form.get('changed_sync_period', -1)),
-                )
-                flash(f'Provider "{name}" created successfully', 'success')
-                return redirect(url_for('admin.federation_edit', realm_name=realm_name, provider_id=provider.id))
-            except Exception as e:
-                flash(f'Error creating provider: {str(e)}', 'error')
+
+        # Auto-resolve duplicate names by appending a counter
+        if UserFederationProvider.find_by_name(realm.id, name):
+            base_name = name
+            counter = 2
+            while UserFederationProvider.find_by_name(realm.id, f"{base_name}-{counter}"):
+                counter += 1
+            name = f"{base_name}-{counter}"
+
+        # Build config from form
+        config = _build_provider_config(provider_type, request.form)
+
+        try:
+            provider = FederationService.create_provider(
+                realm_id=realm.id,
+                name=name,
+                provider_type=provider_type,
+                config=config,
+                display_name=display_name or name,
+                enabled=request.form.get('enabled') == 'on',
+                priority=int(request.form.get('priority', 0)),
+                import_enabled=request.form.get('import_enabled') == 'on',
+                full_sync_period=int(request.form.get('full_sync_period', -1)),
+                changed_sync_period=int(request.form.get('changed_sync_period', -1)),
+            )
+            flash(f'Provider "{name}" created successfully', 'success')
+            return redirect(url_for('admin.federation_edit', realm_name=realm_name, provider_id=provider.id))
+        except Exception as e:
+            flash(f'Error creating provider: {str(e)}', 'error')
     
     # Get provider config schema
     provider_class = FederationService.get_provider_class(provider_type)
