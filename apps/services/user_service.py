@@ -4,7 +4,7 @@ RijanAuth - User Service
 Business logic for user management
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from apps import db
 from apps.models.user import User, UserAttribute, Credential
 from apps.models.role import Role, RoleMapping
@@ -171,15 +171,27 @@ class UserService:
         user.set_attribute(name, value)
     
     @staticmethod
-    def set_attributes(user: User, attributes: Dict[str, List[str]]) -> None:
-        """Set multiple user attributes (replaces existing)"""
+    def set_attributes(user: User, attributes: Dict[str, Union[str, List[str]]]) -> None:
+        """Set multiple user attributes (replaces existing).
+
+        ``attributes`` may map each name to either a list of values
+        (e.g. ``{'phone': ['555-1234']}``) or a single scalar value
+        (e.g. ``{'photo': 'https://…'}``).  Both forms are handled
+        transparently so that callers – in particular federation sync
+        code – do not need to pre-wrap scalars.
+        """
         # Remove existing attributes
         UserAttribute.query.filter_by(user_id=user.id).delete()
         
         # Add new attributes
         for name, values in attributes.items():
+            # Accept both scalar values and lists of values
+            if not isinstance(values, (list, tuple)):
+                values = [values]
             for value in values:
-                attr = UserAttribute(user_id=user.id, name=name, value=value)
+                if value is None:
+                    continue
+                attr = UserAttribute(user_id=user.id, name=name, value=str(value))
                 db.session.add(attr)
         
         db.session.commit()

@@ -247,6 +247,9 @@ class BaseFederationProvider(ABC):
         Returns:
             Dict with mapped user attributes
         """
+        # Preserve any attributes that the provider already parsed (e.g. via
+        # attribute_columns in DB providers or LDAP attribute extraction).
+        # Explicit mappers below may override individual entries.
         mapped = {
             'external_id': external_user.get('external_id'),
             'username': external_user.get('username'),
@@ -254,8 +257,13 @@ class BaseFederationProvider(ABC):
             'first_name': external_user.get('first_name'),
             'last_name': external_user.get('last_name'),
             'enabled': external_user.get('enabled', True),
-            'attributes': {},
+            'attributes': dict(external_user.get('attributes', {})),
         }
+        
+        # Nested attributes dict – checked as a fallback when the key is not
+        # found at the top level of external_user (DB/LDAP providers place
+        # custom columns/attributes here).
+        nested_attrs = external_user.get('attributes', {})
         
         for mapper in mappers:
             mapper_type = mapper.get('mapper_type')
@@ -264,8 +272,14 @@ class BaseFederationProvider(ABC):
             config = mapper.get('config', {})
             
             if mapper_type == 'user-attribute-ldap-mapper' or mapper_type == 'user-attribute-db-mapper':
-                if external_attr and external_attr in external_user:
-                    value = external_user[external_attr]
+                if external_attr:
+                    # Search top-level first, then fall back to nested attributes
+                    if external_attr in external_user:
+                        value = external_user[external_attr]
+                    elif external_attr in nested_attrs:
+                        value = nested_attrs[external_attr]
+                    else:
+                        continue
                     if internal_attr in ['username', 'email', 'first_name', 'last_name', 'enabled']:
                         mapped[internal_attr] = value
                     else:
