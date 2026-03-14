@@ -889,14 +889,25 @@ def roles_list(realm_name):
         
         return redirect(url_for('admin.roles_list', realm_name=realm_name))
     
-    roles = Role.get_realm_roles(realm.id)
-    
+    search = request.args.get('search', '').strip()
+    if search:
+        search_pattern = f'%{search}%'
+        roles = Role.query.filter_by(realm_id=realm.id, client_id=None).filter(
+            db.or_(
+                Role.name.ilike(search_pattern),
+                Role.description.ilike(search_pattern)
+            )
+        ).all()
+    else:
+        roles = Role.get_realm_roles(realm.id)
+
     realms = Realm.query.all()
     return render_template(
         'admin/roles/list.html',
         realm=realm,
         realms=realms,
         roles=roles,
+        search=search,
         segment='roles'
     )
 
@@ -1004,14 +1015,21 @@ def groups_list(realm_name):
         
         return redirect(url_for('admin.groups_list', realm_name=realm_name))
     
-    groups = Group.get_top_level_groups(realm.id)
-    
+    search = request.args.get('search', '').strip()
+    if search:
+        groups = Group.query.filter_by(realm_id=realm.id).filter(
+            Group.name.ilike(f'%{search}%')
+        ).all()
+    else:
+        groups = Group.get_top_level_groups(realm.id)
+
     realms = Realm.query.all()
     return render_template(
         'admin/groups/list.html',
         realm=realm,
         realms=realms,
         groups=groups,
+        search=search,
         segment='groups'
     )
 

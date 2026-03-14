@@ -56,6 +56,26 @@
                                         </div>
                                     </div>
                                     <div class="card-body">
+                                        <!-- Search -->
+                                        <form method="GET" class="mb-4">
+                                            <div class="input-group">
+                                                <input type="text" name="search" class="form-control"
+                                                    placeholder="Search by name or description..."
+                                                    value="{{ search }}">
+                                                <div class="input-group-append">
+                                                    <button class="btn btn-primary" type="submit">
+                                                        <i class="feather icon-search"></i> Search
+                                                    </button>
+                                                    {% if search %}
+                                                    <a href="{{ url_for('admin.roles_list', realm_name=realm.name) }}"
+                                                        class="btn btn-outline-secondary">
+                                                        Clear
+                                                    </a>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        </form>
+
                                         {% if roles %}
                                         <div class="table-responsive">
                                             <table class="table table-hover">
@@ -125,11 +145,19 @@
                                         {% else %}
                                         <div class="text-center text-muted py-5">
                                             <i class="feather icon-award f-48 mb-3"></i>
+                                            {% if search %}
+                                            <p class="mb-3">No roles found matching "<strong>{{ search }}</strong>"</p>
+                                            <a href="{{ url_for('admin.roles_list', realm_name=realm.name) }}"
+                                                class="btn btn-outline-secondary">
+                                                <i class="feather icon-x mr-1"></i> Clear Search
+                                            </a>
+                                            {% else %}
                                             <p class="mb-3">No realm roles defined</p>
                                             <button class="btn btn-primary" data-toggle="modal"
                                                 data-target="#createRoleModal">
                                                 <i class="feather icon-plus mr-1"></i> Create First Role
                                             </button>
+                                            {% endif %}
                                         </div>
                                         {% endif %}
                                     </div>
