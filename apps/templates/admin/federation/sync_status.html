@@ -34,6 +34,18 @@
                             </div>
                         </div>
 
+                        <!-- Flash Messages -->
+                        {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                        {% for category, message in messages %}
+                        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible" role="alert">
+                            {{ message }}
+                            <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
+                        </div>
+                        {% endfor %}
+                        {% endif %}
+                        {% endwith %}
+
                         <!-- Content -->
                         <div class="row">
                             <div class="col-lg-8">
@@ -139,8 +151,18 @@
                                                 <i class="feather icon-refresh-cw mr-1"></i> Full Sync Now
                                             </button>
                                         </form>
-                                        <p class="text-muted small">
+                                        <p class="text-muted small mb-3">
                                             Synchronize all users from the external source
+                                        </p>
+                                        <form action="{{ url_for('admin.federation_edit', realm_name=realm.name, provider_id=provider.id) }}" 
+                                              method="POST" class="mb-2">
+                                            <input type="hidden" name="action" value="sync_changed">
+                                            <button type="submit" class="btn btn-outline-primary btn-block">
+                                                <i class="feather icon-refresh-cw mr-1"></i> Sync Changed Users Now
+                                            </button>
+                                        </form>
+                                        <p class="text-muted small">
+                                            Synchronize only users modified since the last sync
                                         </p>
                                     </div>
                                 </div>

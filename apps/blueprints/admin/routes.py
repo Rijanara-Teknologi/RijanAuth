@@ -1263,7 +1263,7 @@ def federation_edit(realm_name, provider_id):
                 flash(f'Connection failed: {result["message"]}', 'error')
         
         elif action == 'sync':
-            # Trigger manual sync
+            # Trigger manual full sync
             from apps.services.federation import SyncService
             result = SyncService.sync_all_users(provider.id)
             if result['success']:
@@ -1272,6 +1272,17 @@ def federation_edit(realm_name, provider_id):
                       f'{stats["users_created"]} created, {stats["users_updated"]} updated', 'success')
             else:
                 flash(f'Sync failed: {result.get("error", "Unknown error")}', 'error')
+        
+        elif action == 'sync_changed':
+            # Trigger manual changed sync
+            from apps.services.federation import SyncService
+            result = SyncService.sync_changed_users(provider.id)
+            if result['success']:
+                stats = result['stats']
+                flash(f'Changed sync completed: {stats["users_processed"]} processed, '
+                      f'{stats["users_created"]} created, {stats["users_updated"]} updated', 'success')
+            else:
+                flash(f'Changed sync failed: {result.get("error", "Unknown error")}', 'error')
         
         elif action == 'delete':
             FederationService.delete_provider(provider.id)

@@ -112,11 +112,11 @@ class Realm(BaseModel):
     default_locale = Column(String(50), nullable=True)
     
     # Events
-    events_enabled = Column(Boolean, default=False)
+    events_enabled = Column(Boolean, default=True)
     events_expiration = Column(Integer, default=0)
     events_listeners = Column(JSON, default=list)
     enabled_event_types = Column(JSON, default=list)
-    admin_events_enabled = Column(Boolean, default=False)
+    admin_events_enabled = Column(Boolean, default=True)
     admin_events_details_enabled = Column(Boolean, default=False)
     
     # Browser Security Headers

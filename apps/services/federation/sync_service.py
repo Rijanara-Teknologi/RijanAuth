@@ -43,6 +43,7 @@ class SyncService:
     
     _scheduler = None
     _scheduler_lock = threading.Lock()
+    _app = None  # Stored Flask app reference for background-thread context
     
     # ==================== Scheduler Management ====================
     
@@ -52,7 +53,7 @@ class SyncService:
         Initialize the background scheduler for periodic syncs.
         
         Args:
-            app: Flask app instance (optional, for context)
+            app: Flask app instance (required for background-thread DB access)
         """
         if not SCHEDULER_AVAILABLE:
             logger.warning("APScheduler not installed. Scheduled sync disabled.")
@@ -62,12 +63,18 @@ class SyncService:
             if cls._scheduler is not None:
                 return
             
+            cls._app = app  # Keep a real reference so background threads can push a context
+            
             cls._scheduler = BackgroundScheduler()
             cls._scheduler.start()
             logger.info("Federation sync scheduler started")
             
-            # Schedule sync jobs for all providers
-            cls._schedule_all_providers()
+            # Schedule sync jobs for all active providers
+            if app:
+                with app.app_context():
+                    cls._schedule_all_providers()
+            else:
+                cls._schedule_all_providers()
     
     @classmethod
     def shutdown_scheduler(cls):
@@ -122,19 +129,21 @@ class SyncService:
     
     @classmethod
     def _run_scheduled_sync(cls, provider_id: str, sync_type: str):
-        """Run a scheduled sync (called by scheduler)"""
-        from flask import current_app
-        
-        # Need app context for database access
-        try:
-            with current_app.app_context():
-                if sync_type == 'full':
-                    cls.sync_all_users(provider_id)
-                else:
-                    cls.sync_changed_users(provider_id)
-        except RuntimeError:
-            # No app context - try to create one
-            logger.warning("No app context for scheduled sync")
+        """Run a scheduled sync (called by scheduler in a background thread)"""
+        if cls._app is None:
+            logger.critical(
+                "No Flask app reference stored; cannot run scheduled sync "
+                "(provider=%s type=%s). Ensure init_scheduler(app) was called "
+                "with the Flask app instance.",
+                provider_id, sync_type
+            )
+            return
+
+        with cls._app.app_context():
+            if sync_type == 'full':
+                cls.sync_all_users(provider_id)
+            else:
+                cls.sync_changed_users(provider_id)
     
     @classmethod
     def reschedule_provider(cls, provider: UserFederationProvider):

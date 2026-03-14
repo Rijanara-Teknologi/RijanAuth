@@ -8,6 +8,7 @@ from flask_login import login_user, logout_user, current_user
 from apps.blueprints.auth import auth_bp
 from apps.models.user import User
 from apps.models.realm import Realm
+from apps.models.event import Event
 from apps.utils.customization_renderer import get_page_customization
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
@@ -103,7 +104,21 @@ def login():
                 next_url = request.args.get('next')
                 if not next_url or not next_url.startswith('/'):
                     next_url = url_for('admin.index')
-                    
+
+                try:
+                    if master_realm and master_realm.events_enabled:
+                        event_type = 'LOGIN'
+                        if not master_realm.enabled_event_types or event_type in master_realm.enabled_event_types:
+                            Event.log_event(
+                                realm_id=master_realm.id,
+                                event_type=event_type,
+                                user_id=user.id,
+                                ip_address=request.remote_addr,
+                                details={'username': user.username, 'auth_method': 'password'}
+                            )
+                except Exception as e:
+                    current_app.logger.error(f"Failed to record login event: {e}")
+
                 current_app.logger.info("LOGIN SUCCESSFUL", extra={
                     'user_id': user.id,
                     'username': user.username,
@@ -119,6 +134,20 @@ def login():
         })
         # Get customization for master realm
         master_realm = Realm.find_by_name('master')
+        try:
+            if master_realm and master_realm.events_enabled:
+                event_type = 'LOGIN_ERROR'
+                if not master_realm.enabled_event_types or event_type in master_realm.enabled_event_types:
+                    Event.log_event(
+                        realm_id=master_realm.id,
+                        event_type=event_type,
+                        user_id=user.id if user else None,
+                        ip_address=request.remote_addr,
+                        error='invalid_user_credentials',
+                        details={'username': username}
+                    )
+        except Exception as e:
+            current_app.logger.error(f"Failed to record login error event: {e}")
         customization = get_page_customization(master_realm.id, 'login') if master_realm else None
         return render_template('auth/login.html', msg='Invalid credentials',
                              realm=master_realm, customization=customization)
@@ -134,5 +163,19 @@ def login():
 
 @auth_bp.route('/logout')
 def logout():
+    try:
+        if current_user.is_authenticated:
+            master_realm = Realm.find_by_name('master')
+            if master_realm and master_realm.events_enabled:
+                event_type = 'LOGOUT'
+                if not master_realm.enabled_event_types or event_type in master_realm.enabled_event_types:
+                    Event.log_event(
+                        realm_id=master_realm.id,
+                        event_type=event_type,
+                        user_id=current_user.id,
+                        ip_address=request.remote_addr
+                    )
+    except Exception as e:
+        current_app.logger.error(f"Failed to record logout event: {e}")
     logout_user()
     return redirect(url_for('auth_bp.login'))

@@ -20,6 +20,7 @@ from apps.blueprints.oidc import oidc_bp
 from apps.models.realm import Realm
 from apps.models.user import User
 from apps.models.client import Client
+from apps.models.event import Event
 from apps.models.session import AuthorizationCode, RefreshToken, UserSession, AuthenticatedClientSession
 from apps.utils.crypto import generate_token, create_jwt, decode_jwt
 from apps import db
@@ -150,15 +151,44 @@ def authorize(realm_name):
             user = User.find_by_username(realm.id, username)
             if not user:
                 user = User.find_by_email(realm.id, username)
-            
+
             if user and user.verify_password(password) and user.enabled:
                 login_user(user, remember=True)
+                try:
+                    if realm.events_enabled:
+                        event_type = 'LOGIN'
+                        if not realm.enabled_event_types or event_type in realm.enabled_event_types:
+                            Event.log_event(
+                                realm_id=realm.id,
+                                event_type=event_type,
+                                user_id=user.id,
+                                client_id=client_id,
+                                ip_address=request.remote_addr,
+                                details={'username': user.username, 'auth_method': 'password', 'response_type': response_type}
+                            )
+                except Exception as e:
+                    current_app.logger.error(f"Failed to record login event: {e}")
                 return _generate_auth_response(
                     realm, client, user, redirect_uri, response_type,
                     scope, state, nonce, code_challenge, code_challenge_method
                 )
-            
+
             # Invalid credentials
+            try:
+                if realm.events_enabled:
+                    event_type = 'LOGIN_ERROR'
+                    if not realm.enabled_event_types or event_type in realm.enabled_event_types:
+                        Event.log_event(
+                            realm_id=realm.id,
+                            event_type=event_type,
+                            user_id=user.id if user else None,
+                            client_id=client_id,
+                            ip_address=request.remote_addr,
+                            error='invalid_user_credentials',
+                            details={'username': username}
+                        )
+            except Exception as e:
+                current_app.logger.error(f"Failed to record login error event: {e}")
             return render_template(
                 'oidc/login.html',
                 realm=realm,
@@ -580,16 +610,46 @@ def _handle_password_grant(realm):
             current_app.logger.error(f"Federation auth error in OIDC: {str(e)}")
     
     if not user_authenticated or not user:
+        try:
+            if realm.events_enabled:
+                event_type = 'LOGIN_ERROR'
+                if not realm.enabled_event_types or event_type in realm.enabled_event_types:
+                    Event.log_event(
+                        realm_id=realm.id,
+                        event_type=event_type,
+                        client_id=client.client_id if client else None,
+                        ip_address=request.remote_addr,
+                        error='invalid_user_credentials',
+                        details={'username': username, 'grant_type': 'password'}
+                    )
+        except Exception as e:
+            current_app.logger.error(f"Failed to record login error event: {e}")
         return jsonify({'error': 'invalid_grant', 'error_description': 'Invalid username or password'}), 400
-    
+
     if not user.enabled:
         return jsonify({'error': 'invalid_grant', 'error_description': 'User account is disabled'}), 400
-    
+
     # Create user session for password grant
     user_session = _get_or_create_user_session(realm, user)
-    
+
     # Create authenticated client session
     _create_authenticated_client_session(user_session, client, None)
+
+    try:
+        if realm.events_enabled:
+            event_type = 'LOGIN'
+            if not realm.enabled_event_types or event_type in realm.enabled_event_types:
+                Event.log_event(
+                    realm_id=realm.id,
+                    event_type=event_type,
+                    user_id=user.id,
+                    client_id=client.client_id if client else None,
+                    session_id=user_session.id,
+                    ip_address=request.remote_addr,
+                    details={'username': username, 'grant_type': 'password'}
+                )
+    except Exception as e:
+        current_app.logger.error(f"Failed to record login event: {e}")
     
     # Generate tokens
     access_token = _generate_access_token(realm, client, user, scope)
@@ -866,6 +926,18 @@ def logout(realm_name):
     state = request.args.get('state') or request.form.get('state')
     
     # Clear session
+    try:
+        if realm.events_enabled and current_user.is_authenticated and current_user.realm_id == realm.id:
+            event_type = 'LOGOUT'
+            if not realm.enabled_event_types or event_type in realm.enabled_event_types:
+                Event.log_event(
+                    realm_id=realm.id,
+                    event_type=event_type,
+                    user_id=current_user.id,
+                    ip_address=request.remote_addr
+                )
+    except Exception as e:
+        current_app.logger.error(f"Failed to record logout event: {e}")
     from flask_login import logout_user
     logout_user()
     session.clear()
