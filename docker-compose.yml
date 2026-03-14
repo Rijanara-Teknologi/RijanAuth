@@ -10,9 +10,15 @@ services:
     # across container rebuilds.  To use a host bind-mount instead,
     # replace "sqlite_data:/data" with "./data:/data" (and create the
     # ./data directory on the host first).
+    #
+    # Storage persistence: the bind-mount below keeps logs and local
+    # backup archives (storage/logs/, storage/backups/) on the host so
+    # they survive container rebuilds.  The ./storage directory is
+    # created automatically by Docker Compose if it does not exist yet.
     # ----------------------------------------------------------------
     volumes:
       - sqlite_data:/data
+      - ./storage:/app/storage
 
 volumes:
   sqlite_data:
