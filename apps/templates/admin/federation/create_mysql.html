@@ -155,6 +155,31 @@
 
                                             <hr>
 
+                                            <!-- Sync Key Matching -->
+                                            <h6 class="mb-3">Sync Key Matching</h6>
+                                            <p class="text-muted small">Configure how RijanAuth identifies existing Realm users when syncing rows from the external table. The value of the <strong>External Match Column</strong> will be compared to the selected <strong>Realm User Field</strong>.</p>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>Realm User Field</label>
+                                                        <select class="form-control" name="realm_match_field">
+                                                            <option value="username">Username</option>
+                                                            <option value="id">ID</option>
+                                                        </select>
+                                                        <small class="form-text text-muted">Realm user field used as the matching key.</small>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label>External Match Column</label>
+                                                        <input type="text" class="form-control" name="external_match_column" placeholder="e.g., nip">
+                                                        <small class="form-text text-muted">Column in the external table whose value matches the Realm user field above.</small>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <hr>
+
                                             <!-- Password Settings -->
                                             <h6 class="mb-3">Password Settings</h6>
                                             <div class="form-group">
