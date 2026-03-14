@@ -242,6 +242,13 @@
                                                             </div>
                                                         </div>
                                                     </div>
+                                                    <div class="form-group">
+                                                        <label>Custom Attribute Columns</label>
+                                                        <input type="text" class="form-control" name="attribute_columns"
+                                                               value="{{ provider_config.get('attribute_columns', '') }}"
+                                                               placeholder="e.g. jpegPhoto,telephoneNumber,department (optional)">
+                                                        <small class="text-muted">Comma-separated LDAP attributes to sync as user attributes. Use a <strong>Protocol Mapper</strong> to expose them in JWT/userinfo.</small>
+                                                    </div>
 
                                                     <hr>
 
@@ -446,13 +453,21 @@
                                                         {% if provider.provider_type == 'postgresql' %}
                                                         <div class="col-md-6">
                                                             <div class="form-group">
-                                                                <label>Attributes Column</label>
+                                                                <label>JSONB Attributes Column</label>
                                                                 <input type="text" class="form-control" name="attributes_column"
                                                                        value="{{ provider_config.get('attributes_column', '') }}"
                                                                        placeholder="attributes (optional)">
+                                                                <small class="text-muted">Column containing a JSONB object whose keys/values are imported as user attributes.</small>
                                                             </div>
                                                         </div>
                                                         {% endif %}
+                                                    </div>
+                                                    <div class="form-group">
+                                                        <label>Custom Attribute Columns</label>
+                                                        <input type="text" class="form-control" name="attribute_columns"
+                                                               value="{{ provider_config.get('attribute_columns', '') }}"
+                                                               placeholder="e.g. photo,phone,department (optional)">
+                                                        <small class="text-muted">Comma-separated list of additional table columns to sync as individual user attributes. Use a <strong>Protocol Mapper</strong> to expose them in JWT/userinfo.</small>
                                                     </div>
 
                                                     <hr>

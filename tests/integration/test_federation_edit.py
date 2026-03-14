@@ -416,3 +416,107 @@ class TestFederationEditPasswordPreservation:
                     _db.session.delete(p)
                     _db.session.commit()
 
+
+# ---------------------------------------------------------------------------
+# Tests: attribute_columns field is saved and pre-populated in the edit form
+# ---------------------------------------------------------------------------
+
+class TestAttributeColumnsEditForm:
+    """Verify attribute_columns is saved via _build_provider_config and
+    pre-populated in the edit form for all three provider types."""
+
+    def _create_and_get_html(self, client, app, provider_type, form_data, field_checks):
+        """Helper: create a provider via the create form, then GET the edit page."""
+        _login_admin(client)
+        r = client.post(
+            f'/admin/master/user-federation/create/{provider_type}',
+            data=form_data,
+            follow_redirects=False,
+        )
+        assert r.status_code == 302, f"Create failed with {r.status_code}"
+        provider_id = r.headers['Location'].split('/')[-1]
+
+        try:
+            r2 = client.get(f'/admin/master/user-federation/{provider_id}')
+            assert r2.status_code == 200
+            html = r2.data.decode('utf-8')
+
+            for field_name, expected_value, label in field_checks:
+                assert f'name="{field_name}"' in html, (
+                    f"Field '{field_name}' ({label}) not found in edit form"
+                )
+                if expected_value is not None:
+                    assert expected_value in html, (
+                        f"Expected value '{expected_value}' for field '{field_name}' "
+                        f"({label}) not found in edit form"
+                    )
+        finally:
+            with app.app_context():
+                p = UserFederationProvider.find_by_id(provider_id)
+                if p:
+                    _db.session.delete(p)
+                    _db.session.commit()
+
+    def test_postgresql_attribute_columns_saved_and_shown(self, fed_client, fed_app):
+        self._create_and_get_html(
+            fed_client, fed_app, 'postgresql',
+            form_data={
+                'name': 'pg-attr-cols-test',
+                'display_name': 'PG Attr Test',
+                'host': 'localhost', 'port': '5432',
+                'database': 'testdb', 'db_username': 'user', 'db_password': 'pass',
+                'user_table': 'users',
+                'id_column': 'id', 'username_column': 'username',
+                'email_column': 'email', 'password_column': 'password',
+                'attribute_columns': 'photo,phone,department',
+                'full_sync_period': '-1', 'changed_sync_period': '-1',
+                'enabled': 'on', 'import_enabled': 'on',
+            },
+            field_checks=[
+                ('attribute_columns', 'photo,phone,department', 'Custom Attribute Columns'),
+            ],
+        )
+
+    def test_mysql_attribute_columns_saved_and_shown(self, fed_client, fed_app):
+        self._create_and_get_html(
+            fed_client, fed_app, 'mysql',
+            form_data={
+                'name': 'mysql-attr-cols-test',
+                'display_name': 'MySQL Attr Test',
+                'host': 'localhost', 'port': '3306',
+                'database': 'testdb', 'db_username': 'user', 'db_password': 'pass',
+                'user_table': 'users',
+                'id_column': 'id', 'username_column': 'username',
+                'email_column': 'email', 'password_column': 'password',
+                'attribute_columns': 'photo,job_title',
+                'full_sync_period': '-1', 'changed_sync_period': '-1',
+                'enabled': 'on', 'import_enabled': 'on',
+            },
+            field_checks=[
+                ('attribute_columns', 'photo,job_title', 'Custom Attribute Columns'),
+            ],
+        )
+
+    def test_ldap_attribute_columns_saved_and_shown(self, fed_client, fed_app):
+        self._create_and_get_html(
+            fed_client, fed_app, 'ldap',
+            form_data={
+                'name': 'ldap-attr-cols-test',
+                'display_name': 'LDAP Attr Test',
+                'connection_url': 'ldap://localhost',
+                'bind_dn': 'cn=admin,dc=example,dc=com',
+                'bind_credential': 'secret',
+                'users_dn': 'ou=users,dc=example,dc=com',
+                'username_ldap_attribute': 'uid',
+                'email_ldap_attribute': 'mail',
+                'first_name_ldap_attribute': 'givenName',
+                'last_name_ldap_attribute': 'sn',
+                'attribute_columns': 'jpegPhoto,telephoneNumber',
+                'full_sync_period': '-1', 'changed_sync_period': '-1',
+                'enabled': 'on', 'import_enabled': 'on',
+            },
+            field_checks=[
+                ('attribute_columns', 'jpegPhoto,telephoneNumber', 'Custom Attribute Columns'),
+            ],
+        )
+

@@ -164,6 +164,11 @@
                                                 <label>Enabled Column</label>
                                                 <input type="text" class="form-control" name="enabled_column" placeholder="enabled (optional)">
                                             </div>
+                                            <div class="form-group">
+                                                <label>Custom Attribute Columns</label>
+                                                <input type="text" class="form-control" name="attribute_columns" placeholder="e.g. photo,phone,department (optional)">
+                                                <small class="text-muted">Comma-separated list of additional table columns to sync as individual user attributes. Each column value will be stored as a user attribute with the same name as the column. Use a <strong>Protocol Mapper</strong> on the desired scope to expose these attributes as JWT/userinfo claims.</small>
+                                            </div>
 
                                             <hr>
 

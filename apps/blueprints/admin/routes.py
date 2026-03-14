@@ -1607,6 +1607,8 @@ def _build_provider_config(provider_type, form):
             'connection_timeout': int(form.get('connection_timeout', 30)),
             'batch_size': int(form.get('batch_size', 100)),
             'vendor': form.get('vendor', 'other'),
+            # Custom attribute columns to sync (comma-separated LDAP attribute names)
+            'attribute_columns': form.get('attribute_columns', ''),
             # Role sync settings
             'role_sync_enabled': form.get('role_sync_enabled') == 'on',
             'role_source': form.get('role_source', 'memberOf'),
@@ -1634,6 +1636,8 @@ def _build_provider_config(provider_type, form):
             'first_name_column': form.get('first_name_column', ''),
             'last_name_column': form.get('last_name_column', ''),
             'enabled_column': form.get('enabled_column', ''),
+            # Custom attribute columns to sync (comma-separated column names)
+            'attribute_columns': form.get('attribute_columns', ''),
             'password_hash_algorithm': form.get('password_hash_algorithm', 'bcrypt'),
             'batch_size': int(form.get('batch_size', 100)),
             # Role sync settings
@@ -1667,7 +1671,10 @@ def _build_provider_config(provider_type, form):
             'first_name_column': form.get('first_name_column', ''),
             'last_name_column': form.get('last_name_column', ''),
             'enabled_column': form.get('enabled_column', ''),
+            # JSONB column whose keys/values are merged as user attributes
             'attributes_column': form.get('attributes_column', ''),
+            # Plain columns to sync as individual user attributes (comma-separated)
+            'attribute_columns': form.get('attribute_columns', ''),
             'password_hash_algorithm': form.get('password_hash_algorithm', 'bcrypt'),
             'sslmode': form.get('sslmode', 'prefer'),
             'batch_size': int(form.get('batch_size', 100)),

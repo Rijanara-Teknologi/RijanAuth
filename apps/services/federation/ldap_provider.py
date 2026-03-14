@@ -257,6 +257,14 @@ class LDAPFederationProvider(BaseFederationProvider):
                 if role_attr and role_attr not in attrs:
                     attrs.append(role_attr)
         
+        # Add custom attribute_columns so they are fetched from LDAP
+        attr_cols = self.config.get('attribute_columns', '')
+        if attr_cols:
+            for col in attr_cols.split(','):
+                col = col.strip()
+                if col and col not in attrs:
+                    attrs.append(col)
+        
         return [a for a in attrs if a]
     
     def _parse_user_entry(self, entry, include_roles: bool = True) -> Dict[str, Any]:
@@ -308,6 +316,19 @@ class LDAPFederationProvider(BaseFederationProvider):
         if include_roles and self.config.get('role_sync_enabled', False):
             roles = self._get_user_roles(user_dn, attrs)
         
+        # Build user attributes dict.
+        # Only include LDAP attributes explicitly listed in attribute_columns —
+        # this avoids storing noisy system attributes (objectClass, memberOf,
+        # userAccountControl, etc.) as user attributes.
+        user_attributes = {}
+        attr_cols = self.config.get('attribute_columns', '')
+        if attr_cols:
+            for col in attr_cols.split(','):
+                col = col.strip()
+                if col and col in attrs:
+                    raw = attrs[col]
+                    user_attributes[col] = raw[0] if len(raw) == 1 else raw
+        
         return {
             'external_id': external_id,
             'dn': user_dn,
@@ -319,7 +340,7 @@ class LDAPFederationProvider(BaseFederationProvider):
             'enabled': enabled,
             'roles': roles,
             'memberOf': attrs.get('memberOf', []),  # Raw memberOf for debugging
-            'attributes': {k: v[0] if len(v) == 1 else v for k, v in attrs.items()},
+            'attributes': user_attributes,
         }
     
     def _get_user_roles(self, user_dn: str, attrs: Dict = None) -> List[str]:

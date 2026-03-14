@@ -110,6 +110,12 @@
                                                     <i class="feather icon-monitor mr-1"></i> Sessions
                                                 </a>
                                             </li>
+                                            <li class="nav-item">
+                                                <a class="nav-link" id="attributes-tab" data-toggle="tab" href="#attributes"
+                                                    role="tab">
+                                                    <i class="feather icon-tag mr-1"></i> Attributes
+                                                </a>
+                                            </li>
                                         </ul>
                                     </div>
                                     <div class="card-body">
@@ -328,6 +334,62 @@
                                                 <p class="text-muted">No active sessions</p>
                                                 {% endif %}
                                             </div>
+
+                                            <!-- Attributes Tab -->
+                                            <div class="tab-pane fade" id="attributes" role="tabpanel">
+                                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                                    <h6 class="mb-0">User Attributes</h6>
+                                                    <button class="btn btn-sm btn-primary" data-toggle="modal" data-target="#addAttributeModal">
+                                                        <i class="feather icon-plus mr-1"></i> Add Attribute
+                                                    </button>
+                                                </div>
+                                                <p class="text-muted small mb-3">
+                                                    Custom attributes are synced from the federation source or set manually. 
+                                                    To expose an attribute in the JWT token or <code>/userinfo</code> endpoint, 
+                                                    add a <strong>Protocol Mapper</strong> (type: <em>User Attribute</em>) to the 
+                                                    relevant client scope (e.g. <em>profile</em>).
+                                                </p>
+                                                {% set user_attrs = user.attributes.all() %}
+                                                {% if user_attrs %}
+                                                <div class="table-responsive">
+                                                    <table class="table table-sm" id="attributesTable">
+                                                        <thead>
+                                                            <tr>
+                                                                <th style="width:35%">Name</th>
+                                                                <th>Value</th>
+                                                                <th style="width:80px"></th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {% for attr in user_attrs %}
+                                                            <tr>
+                                                                <td><code>{{ attr.name }}</code></td>
+                                                                <td class="text-break">
+                                                                    {% if attr.value and (attr.value.startswith('https://') or attr.value.startswith('http://')) %}
+                                                                    <a href="{{ attr.value }}" target="_blank" rel="noopener noreferrer">{{ attr.value }}</a>
+                                                                    {% else %}
+                                                                    {{ attr.value }}
+                                                                    {% endif %}
+                                                                </td>
+                                                                <td>
+                                                                    <button class="btn btn-sm btn-outline-danger"
+                                                                            onclick="deleteAttribute('{{ attr.name }}')">
+                                                                        <i class="feather icon-trash-2"></i>
+                                                                    </button>
+                                                                </td>
+                                                            </tr>
+                                                            {% endfor %}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                                {% else %}
+                                                <div class="text-center py-4 text-muted">
+                                                    <i class="feather icon-tag" style="font-size:2rem;"></i>
+                                                    <p class="mt-2 mb-0">No attributes set.</p>
+                                                    <p class="small">Attributes are synced automatically during a federation sync, or you can add them manually.</p>
+                                                </div>
+                                                {% endif %}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -336,6 +398,38 @@
 
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Attribute Modal -->
+<div class="modal fade" id="addAttributeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="feather icon-tag mr-2"></i>Add Attribute to {{ user.username }}
+                </h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Attribute Name <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="newAttrName" placeholder="e.g. photo, phone, department" required>
+                    <small class="text-muted">Use the same name you configured as the <strong>User Attribute</strong> in your Protocol Mapper.</small>
+                </div>
+                <div class="form-group">
+                    <label>Attribute Value <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="newAttrValue" placeholder="Value" required>
+                </div>
+                <div id="addAttrError" class="alert alert-danger d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="addAttribute()">
+                    <i class="feather icon-plus mr-1"></i> Add Attribute
+                </button>
             </div>
         </div>
     </div>
@@ -421,3 +515,70 @@
     </div>
 </div>
 {% endblock content %}
+
+{% block javascripts %}
+<script>
+const API_BASE = "{{ url_for('admin.api_update_user', realm_name=realm.name, user_id=user.id) }}";
+
+function getCurrentAttributes() {
+    /* Build current attribute dict from the table */
+    const attrs = {};
+    document.querySelectorAll('#attributesTable tbody tr').forEach(row => {
+        const name = row.cells[0].querySelector('code').textContent.trim();
+        const value = row.cells[1].textContent.trim();
+        attrs[name] = value;
+    });
+    return attrs;
+}
+
+function addAttribute() {
+    const name = document.getElementById('newAttrName').value.trim();
+    const value = document.getElementById('newAttrValue').value.trim();
+    const errEl = document.getElementById('addAttrError');
+    errEl.classList.add('d-none');
+
+    if (!name || !value) {
+        errEl.textContent = 'Both name and value are required.';
+        errEl.classList.remove('d-none');
+        return;
+    }
+
+    const attrs = getCurrentAttributes();
+    attrs[name] = value;
+
+    fetch(API_BASE, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({attributes: attrs})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) throw new Error(data.error);
+        location.reload();
+    })
+    .catch(err => {
+        errEl.textContent = err.message || 'Failed to add attribute.';
+        errEl.classList.remove('d-none');
+    });
+}
+
+function deleteAttribute(name) {
+    if (!confirm('Delete attribute "' + name + '"?')) return;
+
+    const attrs = getCurrentAttributes();
+    delete attrs[name];
+
+    fetch(API_BASE, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({attributes: attrs})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) throw new Error(data.error);
+        location.reload();
+    })
+    .catch(err => alert('Failed to delete attribute: ' + (err.message || err)));
+}
+</script>
+{% endblock javascripts %}
