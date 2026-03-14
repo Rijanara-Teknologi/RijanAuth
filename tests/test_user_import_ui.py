@@ -2,13 +2,11 @@
 
 Covers:
 * GET  /<realm>/users/import-template  – CSV template download
-* POST /api/<realm>/users/import       – already tested in test_user_import_update.py;
-  here we add a smoke-test that confirms the same endpoint is reachable from the
-  context of the users-list page (same session / login flow used by the UI).
+* POST /api/<realm>/users/import       – synchronous import returning results
+  directly (no polling required).
 """
 
 import io
-import time
 import pytest
 from apps.models.user import User
 
@@ -20,19 +18,6 @@ from apps.models.user import User
 def _login(client, username='admin', password='testadmin123!'):
     client.post('/auth/login', data={'username': username, 'password': password},
                 follow_redirects=False)
-
-
-def _await_job(client, realm_name, job_id, max_retries=50, delay=0.1):
-    """Poll the import-job status endpoint until the job is done."""
-    url = f'/admin/api/{realm_name}/import-jobs/{job_id}'
-    for _ in range(max_retries):
-        resp = client.get(url)
-        assert resp.status_code == 200
-        data = resp.get_json()
-        if data['status'] in ('completed', 'failed'):
-            return data
-        time.sleep(delay)
-    raise AssertionError(f"Import job {job_id} did not finish within {max_retries * delay:.1f}s")
 
 
 # ---------------------------------------------------------------------------
@@ -98,9 +83,8 @@ class TestUIImportUsers:
             data=data,
             content_type='multipart/form-data',
         )
-        assert resp.status_code == 202
-        job_id = resp.get_json()['job_id']
-        result = _await_job(client, realm_name, job_id)
+        assert resp.status_code == 200
+        result = resp.get_json()
         assert result['imported'] == 1
         assert result['skipped'] == 0
 
@@ -132,9 +116,8 @@ class TestUIImportUsers:
             data=data,
             content_type='multipart/form-data',
         )
-        assert resp.status_code == 202
-        job_id = resp.get_json()['job_id']
-        result = _await_job(client, realm_name, job_id)
+        assert resp.status_code == 200
+        result = resp.get_json()
         assert result['imported'] == 2
         assert result['skipped'] == 0
 
@@ -152,9 +135,8 @@ class TestUIImportUsers:
             data=data,
             content_type='multipart/form-data',
         )
-        assert resp.status_code == 202
-        job_id = resp.get_json()['job_id']
-        result = _await_job(client, realm_name, job_id)
+        assert resp.status_code == 200
+        result = resp.get_json()
         assert result['updated'] == 1
         assert result['imported'] == 0
         assert result['skipped'] == 0

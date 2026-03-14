@@ -42,6 +42,10 @@ class Config(object):
     SQLALCHEMY_ECHO = True
     SQLALCHEMY_RECORD_QUERIES = True
 
+    # Maximum size for uploaded files (e.g. CSV imports).
+    # 50 MB is sufficient for very large user/role/group CSV files.
+    MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50 MB
+
     # Default location is inside the app package folder, but can be
     # overridden with the DB_PATH environment variable so that the file
     # can be placed on a Docker volume (or any host-mounted directory)

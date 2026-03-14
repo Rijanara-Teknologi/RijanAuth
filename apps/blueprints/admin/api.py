@@ -7,7 +7,7 @@ REST API endpoints for admin console
 import csv
 import io
 
-from flask import jsonify, request, Response, current_app
+from flask import jsonify, request, Response
 from flask_login import login_required
 from sqlalchemy.exc import SQLAlchemyError
 from apps.blueprints.admin import admin_bp
@@ -255,7 +255,7 @@ def api_reset_password(realm_name, user_id):
 @login_required
 @log_action(action="import_users", resource_type="user")
 def api_import_users(realm_name):
-    """Import users from a CSV file (asynchronous, chunked).
+    """Import users from a CSV file.
 
     The CSV must contain at minimum a ``username`` column.  All other
     columns are optional but recognised:
@@ -278,17 +278,15 @@ def api_import_users(realm_name):
     Upload the file using ``multipart/form-data`` with the field name
     ``file``, or send raw CSV text with ``Content-Type: text/csv``.
 
-    The import is processed in background chunks of 20 rows each.
-    The endpoint returns immediately with a job ID::
+    Returns the import result directly::
 
         {
-            "job_id": "<uuid>",
-            "status": "queued",
             "total_rows": 300,
-            "message": "Import queued. Poll /api/<realm>/import-jobs/<job_id> for status."
+            "imported":   295,
+            "updated":      5,
+            "skipped":      0,
+            "errors":      []
         }
-
-    Poll ``GET /api/<realm>/import-jobs/<job_id>`` to track progress.
     """
     realm = Realm.find_by_name(realm_name)
     if not realm:
@@ -303,15 +301,8 @@ def api_import_users(realm_name):
     else:
         return jsonify({'error': 'Provide a CSV file via multipart/form-data (field "file") or raw CSV with Content-Type: text/csv'}), 400
 
-    app = current_app._get_current_object()  # unwrap LocalProxy for thread-safe access
-    job = ImportService.enqueue_users(app, realm.id, raw)
-
-    return jsonify({
-        'job_id': job.id,
-        'status': 'queued',
-        'total_rows': job.total_rows,
-        'message': f'Import queued. Poll /api/{realm_name}/import-jobs/{job.id} for status.',
-    }), 202
+    result = ImportService.import_users(realm.id, raw)
+    return jsonify(result), 200
 
 
 @admin_bp.route('/api/<realm_name>/users/export', methods=['GET'])
@@ -501,7 +492,7 @@ def api_export_roles(realm_name):
 @login_required
 @log_action(action="import_roles", resource_type="role")
 def api_import_roles(realm_name):
-    """Import realm roles from a CSV file (asynchronous, chunked).
+    """Import realm roles from a CSV file.
 
     The CSV must contain at minimum a ``name`` column.  The optional
     ``description`` column is also recognised.
@@ -514,14 +505,14 @@ def api_import_roles(realm_name):
     Upload the file using ``multipart/form-data`` with the field name
     ``file``, or send raw CSV text with ``Content-Type: text/csv``.
 
-    The import is processed in background chunks of 20 rows each.
-    Returns a job descriptor immediately::
+    Returns the import result directly::
 
         {
-            "job_id": "<uuid>",
-            "status": "queued",
             "total_rows": 50,
-            "message": "Import queued. Poll /api/<realm>/import-jobs/<job_id> for status."
+            "imported":   48,
+            "updated":     0,
+            "skipped":     2,
+            "errors":     [...]
         }
     """
     realm = Realm.find_by_name(realm_name)
@@ -536,15 +527,8 @@ def api_import_roles(realm_name):
     else:
         return jsonify({'error': 'Provide a CSV file via multipart/form-data (field "file") or raw CSV with Content-Type: text/csv'}), 400
 
-    app = current_app._get_current_object()  # unwrap LocalProxy for thread-safe access
-    job = ImportService.enqueue_roles(app, realm.id, raw)
-
-    return jsonify({
-        'job_id': job.id,
-        'status': 'queued',
-        'total_rows': job.total_rows,
-        'message': f'Import queued. Poll /api/{realm_name}/import-jobs/{job.id} for status.',
-    }), 202
+    result = ImportService.import_roles(realm.id, raw)
+    return jsonify(result), 200
 
 
 # =============================================================================
@@ -600,7 +584,7 @@ def api_export_groups(realm_name):
 @login_required
 @log_action(action="import_groups", resource_type="group")
 def api_import_groups(realm_name):
-    """Import realm groups from a CSV file (asynchronous, chunked).
+    """Import realm groups from a CSV file.
 
     The CSV must contain at minimum a ``name`` column.  Group names are
     stored exactly as provided (no formatting is applied).
@@ -611,14 +595,14 @@ def api_import_groups(realm_name):
     Upload the file using ``multipart/form-data`` with the field name
     ``file``, or send raw CSV text with ``Content-Type: text/csv``.
 
-    The import is processed in background chunks of 20 rows each.
-    Returns a job descriptor immediately::
+    Returns the import result directly::
 
         {
-            "job_id": "<uuid>",
-            "status": "queued",
             "total_rows": 50,
-            "message": "Import queued. Poll /api/<realm>/import-jobs/<job_id> for status."
+            "imported":   48,
+            "updated":     0,
+            "skipped":     2,
+            "errors":     [...]
         }
     """
     realm = Realm.find_by_name(realm_name)
@@ -633,15 +617,8 @@ def api_import_groups(realm_name):
     else:
         return jsonify({'error': 'Provide a CSV file via multipart/form-data (field "file") or raw CSV with Content-Type: text/csv'}), 400
 
-    app = current_app._get_current_object()  # unwrap LocalProxy for thread-safe access
-    job = ImportService.enqueue_groups(app, realm.id, raw)
-
-    return jsonify({
-        'job_id': job.id,
-        'status': 'queued',
-        'total_rows': job.total_rows,
-        'message': f'Import queued. Poll /api/{realm_name}/import-jobs/{job.id} for status.',
-    }), 202
+    result = ImportService.import_groups(realm.id, raw)
+    return jsonify(result), 200
 
 
 # =============================================================================
