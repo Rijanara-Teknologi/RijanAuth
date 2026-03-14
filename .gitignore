@@ -38,3 +38,5 @@ apps/static/assets/.temp
 migrations
 
 apps/static/media/
+apps/db.sqlite3-shm
+apps/db.sqlite3-wal
