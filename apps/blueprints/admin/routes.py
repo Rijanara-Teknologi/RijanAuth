@@ -1362,6 +1362,12 @@ def federation_mappers(realm_name, provider_id):
                 db.session.add(mapper)
                 db.session.commit()
                 flash(f'Mapper "{name}" created', 'success')
+                # Auto-create a corresponding protocol mapper so the custom
+                # attribute appears in JWT tokens and userinfo responses.
+                from apps.services.federation.federation_service import FederationService
+                FederationService.ensure_protocol_mapper_for_attribute(
+                    realm.id, internal_attribute, mapper_type
+                )
         
         elif action == 'delete':
             mapper_id = request.form.get('mapper_id')

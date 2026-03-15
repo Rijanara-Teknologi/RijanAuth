@@ -522,3 +522,236 @@ class TestCustomAttributeAppearsInUserinfo:
                 if r:
                     db.session.delete(r)
                     db.session.commit()
+
+
+# ---------------------------------------------------------------------------
+# Auto-creation of protocol mappers for custom federation attributes
+# ---------------------------------------------------------------------------
+
+class TestEnsureProtocolMapperForAttribute:
+    """
+    FederationService.ensure_protocol_mapper_for_attribute must automatically
+    create an oidc-usermodel-attribute-mapper protocol mapper in the realm's
+    profile scope when a custom federation attribute mapper is registered.
+    """
+
+    def test_creates_protocol_mapper_for_custom_attribute(self, app):
+        """A protocol mapper must be created for a new custom attribute."""
+        from apps.services.federation.federation_service import FederationService
+        from apps.services.realm_service import RealmService
+        from apps.models.client import ClientScope, ProtocolMapper
+
+        with app.app_context():
+            realm = RealmService.create_realm('pm-auto-test-realm', 'PM Auto Test')
+            realm_id = realm.id
+            try:
+                created = FederationService.ensure_protocol_mapper_for_attribute(
+                    realm_id=realm_id,
+                    internal_attribute='photo',
+                    mapper_type='user-attribute-db-mapper',
+                )
+
+                assert created is True, (
+                    "ensure_protocol_mapper_for_attribute must return True "
+                    "when a new protocol mapper is created"
+                )
+
+                profile_scope = ClientScope.query.filter_by(
+                    realm_id=realm_id, name='profile'
+                ).first()
+                assert profile_scope is not None
+
+                all_pms = ProtocolMapper.query.filter_by(
+                    client_scope_id=profile_scope.id,
+                    protocol_mapper='oidc-usermodel-attribute-mapper',
+                ).all()
+                pm = next(
+                    (m for m in all_pms
+                     if (m.config or {}).get('user.attribute') == 'photo'),
+                    None,
+                )
+
+                assert pm is not None, (
+                    "An oidc-usermodel-attribute-mapper for 'photo' must exist "
+                    "in the profile scope after calling ensure_protocol_mapper_for_attribute"
+                )
+                assert pm.config.get('claim.name') == 'photo'
+                assert pm.config.get('userinfo.token.claim') == 'true'
+                assert pm.config.get('access.token.claim') == 'true'
+                assert pm.config.get('id.token.claim') == 'true'
+            finally:
+                from apps.models.realm import Realm as RealmModel
+                r = RealmModel.query.get(realm_id)
+                if r:
+                    db.session.delete(r)
+                    db.session.commit()
+
+    def test_idempotent_for_duplicate_calls(self, app):
+        """Calling ensure twice for the same attribute must not create duplicates."""
+        from apps.services.federation.federation_service import FederationService
+        from apps.services.realm_service import RealmService
+        from apps.models.client import ClientScope, ProtocolMapper
+
+        with app.app_context():
+            realm = RealmService.create_realm('pm-idem-test-realm', 'PM Idem Test')
+            realm_id = realm.id
+            try:
+                first = FederationService.ensure_protocol_mapper_for_attribute(
+                    realm_id=realm_id,
+                    internal_attribute='department',
+                    mapper_type='user-attribute-db-mapper',
+                )
+                second = FederationService.ensure_protocol_mapper_for_attribute(
+                    realm_id=realm_id,
+                    internal_attribute='department',
+                    mapper_type='user-attribute-db-mapper',
+                )
+
+                assert first is True
+                assert second is False, (
+                    "The second call must return False (mapper already exists)"
+                )
+
+                profile_scope = ClientScope.query.filter_by(
+                    realm_id=realm_id, name='profile'
+                ).first()
+                all_count_pms = ProtocolMapper.query.filter_by(
+                    client_scope_id=profile_scope.id,
+                    protocol_mapper='oidc-usermodel-attribute-mapper',
+                ).all()
+                count = sum(
+                    1 for m in all_count_pms
+                    if (m.config or {}).get('user.attribute') == 'department'
+                )
+                assert count == 1, "Only one protocol mapper must exist for 'department'"
+            finally:
+                from apps.models.realm import Realm as RealmModel
+                r = RealmModel.query.get(realm_id)
+                if r:
+                    db.session.delete(r)
+                    db.session.commit()
+
+    def test_skips_standard_attributes(self, app):
+        """Standard attributes (username, email, …) must not get a protocol mapper."""
+        from apps.services.federation.federation_service import FederationService
+        from apps.services.realm_service import RealmService
+        from apps.models.client import ClientScope, ProtocolMapper
+
+        with app.app_context():
+            realm = RealmService.create_realm('pm-skip-test-realm', 'PM Skip Test')
+            realm_id = realm.id
+            try:
+                for attr in ('username', 'email', 'first_name', 'last_name', 'enabled'):
+                    result = FederationService.ensure_protocol_mapper_for_attribute(
+                        realm_id=realm_id,
+                        internal_attribute=attr,
+                        mapper_type='user-attribute-db-mapper',
+                    )
+                    assert result is False, (
+                        f"Standard attribute '{attr}' must not trigger auto-creation "
+                        "of a protocol mapper"
+                    )
+            finally:
+                from apps.models.realm import Realm as RealmModel
+                r = RealmModel.query.get(realm_id)
+                if r:
+                    db.session.delete(r)
+                    db.session.commit()
+
+    def test_skips_non_attribute_mapper_types(self, app):
+        """Non-attribute mapper types (e.g. role-ldap-mapper) must be skipped."""
+        from apps.services.federation.federation_service import FederationService
+        from apps.services.realm_service import RealmService
+
+        with app.app_context():
+            realm = RealmService.create_realm('pm-notype-test-realm', 'PM NoType Test')
+            realm_id = realm.id
+            try:
+                result = FederationService.ensure_protocol_mapper_for_attribute(
+                    realm_id=realm_id,
+                    internal_attribute='photo',
+                    mapper_type='role-ldap-mapper',
+                )
+                assert result is False, (
+                    "Non-attribute mapper types must not trigger auto-creation "
+                    "of a protocol mapper"
+                )
+            finally:
+                from apps.models.realm import Realm as RealmModel
+                r = RealmModel.query.get(realm_id)
+                if r:
+                    db.session.delete(r)
+                    db.session.commit()
+
+    def test_api_endpoint_creates_protocol_mapper(self, client, app):
+        """
+        POST /api/<realm>/user-federation/<provider>/mappers must
+        automatically create a protocol mapper for custom attributes.
+        """
+        from apps.services.realm_service import RealmService
+        from apps.services.federation.federation_service import FederationService
+        from apps.models.client import ClientScope, ProtocolMapper
+        from apps.models.federation import UserFederationProvider
+
+        with app.app_context():
+            realm = RealmService.create_realm('pm-api-test-realm', 'PM API Test')
+            realm_id = realm.id
+            realm_name = realm.name
+
+            provider = FederationService.create_provider(
+                realm_id=realm_id,
+                name='test-pgsql',
+                provider_type='postgresql',
+                config={'host': 'localhost', 'database': 'testdb', 'user_table': 'users'},
+            )
+            provider_id = provider.id
+
+        try:
+            # Log in as admin to get session cookie
+            login_resp = client.post('/auth/login', data={
+                'username': 'admin',
+                'password': 'testadmin123!',
+            }, follow_redirects=True)
+            assert login_resp.status_code == 200
+
+            resp = client.post(
+                f'/admin/api/{realm_name}/user-federation/{provider_id}/mappers',
+                json={
+                    'name': 'photo-mapper',
+                    'mapperType': 'user-attribute-db-mapper',
+                    'internalAttribute': 'photo',
+                    'externalAttribute': 'photo',
+                },
+                content_type='application/json',
+            )
+            assert resp.status_code == 201, (
+                f"API mapper creation failed: {resp.get_data(as_text=True)}"
+            )
+
+            with app.app_context():
+                profile_scope = ClientScope.query.filter_by(
+                    realm_id=realm_id, name='profile'
+                ).first()
+                assert profile_scope is not None
+
+                all_pms = ProtocolMapper.query.filter_by(
+                    client_scope_id=profile_scope.id,
+                    protocol_mapper='oidc-usermodel-attribute-mapper',
+                ).all()
+                pm = next(
+                    (m for m in all_pms
+                     if (m.config or {}).get('user.attribute') == 'photo'),
+                    None,
+                )
+
+                assert pm is not None, (
+                    "API endpoint must auto-create an oidc-usermodel-attribute-mapper "
+                    "for the 'photo' attribute in the profile scope"
+                )
+        finally:
+            with app.app_context():
+                from apps.models.realm import Realm as RealmModel
+                r = RealmModel.query.get(realm_id)
+                if r:
+                    db.session.delete(r)
+                    db.session.commit()
