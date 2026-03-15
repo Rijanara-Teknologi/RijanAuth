@@ -164,7 +164,11 @@ class MapperService:
                                      user: User) -> Dict[str, Any]:
         """Map a user attribute to a token claim"""
         user_attr = config.get('user.attribute', '')
-        claim_name = config.get('claim.name', user_attr)
+        # Fall back to the attribute name when claim.name is absent OR empty
+        # (e.g. the admin left the field blank).  This mirrors Keycloak behaviour
+        # and ensures the claim always appears with a predictable name that
+        # matches the configured mapper rather than being silently dropped.
+        claim_name = config.get('claim.name') or user_attr
         claim_value = config.get('claim.value', '')  # Optional hardcoded value override
         json_type = config.get('jsonType.label', 'String')
         multivalued = config.get('multivalued', 'false') == 'true'
