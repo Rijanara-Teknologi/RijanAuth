@@ -914,34 +914,134 @@ def userinfo(realm_name):
 def logout(realm_name):
     """
     OIDC Logout Endpoint
-    Ends the user session
+    Ends the user session.
+
+    Supports two usage modes:
+    1. Browser-based logout (OIDC RP-Initiated Logout): pass ``id_token_hint``
+       and optionally ``post_logout_redirect_uri`` as query / form parameters.
+    2. API logout: send ``Authorization: Bearer <access_token>`` in the request
+       header.  The server decodes the token, invalidates the corresponding
+       UserSession in the database, and revokes all associated refresh tokens.
     """
     realm = Realm.find_by_name(realm_name)
     if not realm:
         return jsonify({'error': 'invalid_request', 'error_description': 'Realm not found'}), 400
-    
+
     # Get parameters
     id_token_hint = request.args.get('id_token_hint') or request.form.get('id_token_hint')
     post_logout_redirect_uri = request.args.get('post_logout_redirect_uri') or request.form.get('post_logout_redirect_uri')
     state = request.args.get('state') or request.form.get('state')
-    
-    # Clear session
+
+    # ------------------------------------------------------------------
+    # Identify the session to invalidate
+    # ------------------------------------------------------------------
+    # Priority: Bearer access token in Authorization header → id_token_hint
+    # → currently authenticated Flask-Login user.
+    user_id_to_logout = None
+    user_session_to_logout = None
+
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        bearer_token = auth_header[7:]
+        try:
+            token_payload = decode_jwt(bearer_token, current_app.config.get('SECRET_KEY', 'secret'))
+            user_id_to_logout = token_payload.get('sub')
+            session_id = token_payload.get('session_state') or token_payload.get('sid')
+            if session_id:
+                user_session_to_logout = UserSession.query.filter_by(
+                    id=session_id, realm_id=realm.id
+                ).first()
+            if not user_session_to_logout and user_id_to_logout:
+                # Fall back to the most recent active session for this user
+                user_session_to_logout = UserSession.query.filter_by(
+                    user_id=user_id_to_logout,
+                    realm_id=realm.id,
+                    state='ACTIVE'
+                ).order_by(UserSession.started.desc()).first()
+        except Exception as e:
+            current_app.logger.warning(f"Could not decode Bearer token on logout: {e}")
+    elif id_token_hint:
+        try:
+            token_payload = decode_jwt(id_token_hint, current_app.config.get('SECRET_KEY', 'secret'))
+            user_id_to_logout = token_payload.get('sub')
+            session_id = token_payload.get('session_state') or token_payload.get('sid')
+            if session_id:
+                user_session_to_logout = UserSession.query.filter_by(
+                    id=session_id, realm_id=realm.id
+                ).first()
+            if not user_session_to_logout and user_id_to_logout:
+                user_session_to_logout = UserSession.query.filter_by(
+                    user_id=user_id_to_logout,
+                    realm_id=realm.id,
+                    state='ACTIVE'
+                ).order_by(UserSession.started.desc()).first()
+        except Exception as e:
+            current_app.logger.warning(f"Could not decode id_token_hint on logout: {e}")
+
+    # Fall back to the currently authenticated Flask-Login user
+    if not user_id_to_logout and current_user.is_authenticated:
+        user_id_to_logout = current_user.id
+
+    # ------------------------------------------------------------------
+    # Invalidate the UserSession and revoke its refresh tokens
+    # ------------------------------------------------------------------
+    if user_session_to_logout and user_session_to_logout.state == 'ACTIVE':
+        try:
+            # Revoke all refresh tokens tied to this session
+            RefreshToken.query.filter_by(
+                user_session_id=user_session_to_logout.id,
+                revoked=False
+            ).update({'revoked': True, 'revoked_at': datetime.utcnow()})
+            db.session.commit()
+        except Exception as e:
+            current_app.logger.error(f"Failed to revoke refresh tokens on logout: {e}")
+        try:
+            user_session_to_logout.logout()
+        except Exception as e:
+            current_app.logger.error(f"Failed to mark user session as logged out: {e}")
+    elif user_id_to_logout:
+        # Invalidate all active sessions for this user in the realm (belt-and-suspenders)
+        try:
+            active_sessions = UserSession.query.filter_by(
+                user_id=user_id_to_logout,
+                realm_id=realm.id,
+                state='ACTIVE'
+            ).all()
+            for us in active_sessions:
+                RefreshToken.query.filter_by(
+                    user_session_id=us.id,
+                    revoked=False
+                ).update({'revoked': True, 'revoked_at': datetime.utcnow()})
+                us.logout()
+            if active_sessions:
+                db.session.commit()
+        except Exception as e:
+            current_app.logger.error(f"Failed to invalidate sessions on logout: {e}")
+
+    # ------------------------------------------------------------------
+    # Log the LOGOUT event
+    # ------------------------------------------------------------------
     try:
-        if realm.events_enabled and current_user.is_authenticated and current_user.realm_id == realm.id:
+        log_user_id = user_id_to_logout or (current_user.id if current_user.is_authenticated else None)
+        if realm.events_enabled and log_user_id:
             event_type = 'LOGOUT'
             if not realm.enabled_event_types or event_type in realm.enabled_event_types:
                 Event.log_event(
                     realm_id=realm.id,
                     event_type=event_type,
-                    user_id=current_user.id,
+                    user_id=log_user_id,
                     ip_address=request.remote_addr
                 )
     except Exception as e:
         current_app.logger.error(f"Failed to record logout event: {e}")
+
+    # ------------------------------------------------------------------
+    # Clear Flask-Login / cookie session
+    # ------------------------------------------------------------------
     from flask_login import logout_user
     logout_user()
     session.clear()
-    
+
     # Redirect if post_logout_redirect_uri provided
     if post_logout_redirect_uri:
         redirect_url = post_logout_redirect_uri
@@ -949,7 +1049,7 @@ def logout(realm_name):
             separator = '&' if '?' in redirect_url else '?'
             redirect_url = f"{redirect_url}{separator}state={state}"
         return redirect(redirect_url)
-    
+
     return jsonify({'status': 'logged_out'})
 
 
