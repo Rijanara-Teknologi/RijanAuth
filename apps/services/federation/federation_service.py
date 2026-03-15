@@ -561,6 +561,123 @@ class FederationService:
         logger.info(f"Deleted federation provider: {provider.name}")
         return True
     
+    # ==================== Protocol Mapper Sync ====================
+
+    # Standard user fields that map to built-in OIDC claims and do not need
+    # an auto-generated protocol mapper.
+    _STANDARD_ATTRIBUTES = frozenset({
+        'username', 'email', 'first_name', 'last_name', 'enabled',
+    })
+
+    # Federation mapper types that carry user attributes into local storage.
+    _ATTRIBUTE_MAPPER_TYPES = frozenset({
+        'user-attribute-db-mapper',
+        'user-attribute-ldap-mapper',
+    })
+
+    @classmethod
+    def ensure_protocol_mapper_for_attribute(cls, realm_id: str,
+                                             internal_attribute: str,
+                                             mapper_type: str) -> bool:
+        """
+        Ensure a protocol mapper exists so the given custom federation
+        attribute is exposed in JWT access tokens, ID tokens, and the
+        userinfo endpoint.
+
+        For standard OIDC attributes (username, email, first_name,
+        last_name, enabled) this is a no-op – they are already handled
+        by built-in OIDC claim fallbacks.
+
+        For every other attribute a ``oidc-usermodel-attribute-mapper``
+        is created inside the realm's ``profile`` ``ClientScope`` (the
+        same scope that holds the username / full-name mappers).  If the
+        scope does not exist yet it is created.  If a mapper for this
+        attribute already exists nothing is changed.
+
+        Args:
+            realm_id: Realm that owns the federation provider.
+            internal_attribute: The attribute name as it is stored in the
+                local ``user_attributes`` table (e.g. ``'photo'``).
+            mapper_type: The federation mapper type
+                (e.g. ``'user-attribute-db-mapper'``).
+
+        Returns:
+            True  – a new protocol mapper was created.
+            False – mapper already existed or was not applicable.
+        """
+        if not internal_attribute:
+            return False
+
+        if mapper_type not in cls._ATTRIBUTE_MAPPER_TYPES:
+            return False
+
+        if internal_attribute in cls._STANDARD_ATTRIBUTES:
+            return False
+
+        from apps.models.client import ClientScope, ProtocolMapper
+
+        # Find or create the 'profile' scope for this realm.
+        profile_scope = ClientScope.query.filter_by(
+            realm_id=realm_id, name='profile'
+        ).first()
+
+        if profile_scope is None:
+            profile_scope = ClientScope(
+                realm_id=realm_id,
+                name='profile',
+                description='OpenID Connect built-in scope: profile',
+                protocol='openid-connect',
+            )
+            db.session.add(profile_scope)
+            db.session.flush()
+
+        # Check whether a protocol mapper for this attribute already exists
+        # in ANY scope in this realm to avoid duplicates.
+        # Use Python-level filtering on the config JSON to stay compatible
+        # with both SQLite (tests) and PostgreSQL (production).
+        candidates = (
+            ProtocolMapper.query
+            .join(ClientScope,
+                  ProtocolMapper.client_scope_id == ClientScope.id)
+            .filter(
+                ClientScope.realm_id == realm_id,
+                ProtocolMapper.protocol_mapper == 'oidc-usermodel-attribute-mapper',
+            )
+            .all()
+        )
+        existing = next(
+            (m for m in candidates
+             if (m.config or {}).get('user.attribute') == internal_attribute),
+            None,
+        )
+
+        if existing:
+            return False
+
+        # Create the protocol mapper in the profile scope.
+        new_mapper = ProtocolMapper(
+            client_scope_id=profile_scope.id,
+            name=internal_attribute,
+            protocol='openid-connect',
+            protocol_mapper='oidc-usermodel-attribute-mapper',
+            config={
+                'user.attribute': internal_attribute,
+                'claim.name': internal_attribute,
+                'jsonType.label': 'String',
+                'access.token.claim': 'true',
+                'id.token.claim': 'true',
+                'userinfo.token.claim': 'true',
+            },
+        )
+        db.session.add(new_mapper)
+        db.session.commit()
+
+        logger.info(
+            f"Auto-created protocol mapper '{internal_attribute}' "
+            f"in profile scope for realm {realm_id}"
+        )
+        return True
+
     @classmethod
     def test_provider_connection(cls, provider_id: str) -> Dict[str, Any]:
         """

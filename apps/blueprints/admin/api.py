@@ -869,17 +869,27 @@ def api_create_federation_mapper(realm_name, provider_id):
     if not name:
         return jsonify({'error': 'Mapper name is required'}), 400
     
+    mapper_type = data.get('mapperType', 'user-attribute-ldap-mapper')
     mapper = UserFederationMapper(
         provider_id=provider.id,
         name=name,
-        mapper_type=data.get('mapperType', 'user-attribute-ldap-mapper'),
+        mapper_type=mapper_type,
         internal_attribute=data.get('internalAttribute'),
         external_attribute=data.get('externalAttribute'),
         config=data.get('config', {})
     )
     db.session.add(mapper)
     db.session.commit()
-    
+
+    # Auto-create a corresponding protocol mapper so the custom attribute
+    # appears in JWT tokens and userinfo responses.
+    from apps.services.federation.federation_service import FederationService
+    FederationService.ensure_protocol_mapper_for_attribute(
+        realm.id,
+        data.get('internalAttribute'),
+        mapper_type,
+    )
+
     return jsonify(mapper.to_dict()), 201
 
 
