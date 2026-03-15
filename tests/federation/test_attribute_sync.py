@@ -524,6 +524,446 @@ class TestCustomAttributeAppearsInUserinfo:
                     db.session.commit()
 
 
+class TestClaimNameAlwaysRespected:
+    """
+    Regression tests to ensure the configured claim.name is ALWAYS used in
+    tokens and userinfo responses — no hardcoding, no silent renaming.
+
+    Covers the user scenario: both the user-federation mapper and the
+    user-claim (protocol mapper) are named 'photo' with internal_attribute
+    and claim.name both set to 'photo'.  The token must expose the value
+    under the key 'photo', not under any other name.
+
+    Also covers the general case: any custom attribute/mapper configured with
+    a specific claim.name must appear under that exact name in tokens.
+    """
+
+    def _create_realm_client_user(self, app, realm_suffix, username, email,
+                                  first_name='Test', last_name='User'):
+        """Helper: create realm + client + user, return identifiers."""
+        from apps.services.realm_service import RealmService
+        from apps.services.client_service import ClientService
+        from apps.models.user import Credential
+        from apps.utils.crypto import hash_password
+
+        with app.app_context():
+            realm = RealmService.create_realm(
+                f'claim-name-{realm_suffix}', f'Claim Name {realm_suffix}'
+            )
+            realm_id = realm.id
+            realm_name = realm.name
+
+            oidc_client = ClientService.create_client(
+                realm_id=realm_id,
+                client_id=f'claim-client-{realm_suffix}',
+                name=f'Claim Client {realm_suffix}',
+                direct_access_grants_enabled=True,
+            )
+            client_id_str = oidc_client.client_id
+            client_secret = oidc_client.secret
+
+            user = User(
+                realm_id=realm_id,
+                username=username,
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+                enabled=True,
+                email_verified=True,
+            )
+            db.session.add(user)
+            db.session.flush()
+            cred = Credential.create_password(user.id, hash_password('testpass123!'))
+            db.session.add(cred)
+            db.session.commit()
+
+        return realm_id, realm_name, client_id_str, client_secret
+
+    def test_claim_name_equals_attribute_name(self, client, app):
+        """
+        When user.attribute and claim.name are BOTH 'photo' (no renaming),
+        the userinfo response must contain the key 'photo', not 'picture',
+        'avatar', or any other invented name.
+
+        This is the exact scenario the user describes: mapper on user
+        federation AND user claim both named 'photo'.
+        """
+        from apps.models.client import ClientScope, ProtocolMapper
+
+        realm_id, realm_name, client_id_str, client_secret = \
+            self._create_realm_client_user(
+                app, 'same', 'photo-same-user', 'same@example.com'
+            )
+
+        with app.app_context():
+            user = User.query.filter_by(
+                realm_id=realm_id, username='photo-same-user'
+            ).first()
+            UserService.set_attributes(user, {
+                'photo': 'https://example.com/photo.jpg',
+            })
+
+            profile_scope = ClientScope.query.filter_by(
+                realm_id=realm_id, name='profile'
+            ).first()
+            db.session.add(ProtocolMapper(
+                client_scope_id=profile_scope.id,
+                name='photo',
+                protocol='openid-connect',
+                protocol_mapper='oidc-usermodel-attribute-mapper',
+                config={
+                    'user.attribute': 'photo',
+                    'claim.name': 'photo',
+                    'jsonType.label': 'String',
+                    'access.token.claim': 'true',
+                    'id.token.claim': 'true',
+                    'userinfo.token.claim': 'true',
+                },
+            ))
+            db.session.commit()
+
+        try:
+            token_resp = client.post(
+                f'/auth/realms/{realm_name}/protocol/openid-connect/token',
+                data={
+                    'grant_type': 'password',
+                    'client_id': client_id_str,
+                    'client_secret': client_secret,
+                    'username': 'photo-same-user',
+                    'password': 'testpass123!',
+                    'scope': 'openid profile',
+                },
+            )
+            assert token_resp.status_code == 200, (
+                f"Token request failed: {token_resp.get_data(as_text=True)}"
+            )
+            access_token = token_resp.json['access_token']
+
+            userinfo_resp = client.get(
+                f'/auth/realms/{realm_name}/protocol/openid-connect/userinfo',
+                headers={'Authorization': f'Bearer {access_token}'},
+            )
+            assert userinfo_resp.status_code == 200
+            info = userinfo_resp.json
+
+            assert 'photo' in info, (
+                "The claim must appear under the EXACT key 'photo' when both "
+                "user.attribute and claim.name are configured as 'photo'. "
+                "The system must not rename it to 'picture', 'avatar', or anything else."
+            )
+            assert info['photo'] == 'https://example.com/photo.jpg'
+            # Ensure no unintended renaming has taken place
+            assert 'avatar' not in info, (
+                "The token must not contain an 'avatar' key — the claim name "
+                "must be exactly what was configured in the mapper."
+            )
+            assert 'picture' not in info, (
+                "The token must not contain a 'picture' key when claim.name='photo'."
+            )
+        finally:
+            with app.app_context():
+                from apps.models.realm import Realm as RealmModel
+                r = RealmModel.find_by_name(realm_name)
+                if r:
+                    db.session.delete(r)
+                    db.session.commit()
+
+    def test_claim_name_empty_falls_back_to_attribute_name(self, client, app):
+        """
+        When claim.name is left empty (user forgot to fill in the field in the
+        admin UI), the mapper must fall back to using user.attribute as the
+        claim name instead of silently dropping the claim.
+        """
+        from apps.models.client import ClientScope, ProtocolMapper
+
+        realm_id, realm_name, client_id_str, client_secret = \
+            self._create_realm_client_user(
+                app, 'empty', 'photo-empty-user', 'empty@example.com'
+            )
+
+        with app.app_context():
+            user = User.query.filter_by(
+                realm_id=realm_id, username='photo-empty-user'
+            ).first()
+            UserService.set_attributes(user, {
+                'photo': 'https://example.com/photo.jpg',
+            })
+
+            profile_scope = ClientScope.query.filter_by(
+                realm_id=realm_id, name='profile'
+            ).first()
+            # Deliberately leave claim.name as empty string (simulates a
+            # user who forgot to fill in the 'Claim Name' field in the UI)
+            db.session.add(ProtocolMapper(
+                client_scope_id=profile_scope.id,
+                name='photo-empty-claim',
+                protocol='openid-connect',
+                protocol_mapper='oidc-usermodel-attribute-mapper',
+                config={
+                    'user.attribute': 'photo',
+                    'claim.name': '',
+                    'jsonType.label': 'String',
+                    'access.token.claim': 'true',
+                    'id.token.claim': 'true',
+                    'userinfo.token.claim': 'true',
+                },
+            ))
+            db.session.commit()
+
+        try:
+            token_resp = client.post(
+                f'/auth/realms/{realm_name}/protocol/openid-connect/token',
+                data={
+                    'grant_type': 'password',
+                    'client_id': client_id_str,
+                    'client_secret': client_secret,
+                    'username': 'photo-empty-user',
+                    'password': 'testpass123!',
+                    'scope': 'openid profile',
+                },
+            )
+            assert token_resp.status_code == 200, (
+                f"Token request failed: {token_resp.get_data(as_text=True)}"
+            )
+            access_token = token_resp.json['access_token']
+
+            userinfo_resp = client.get(
+                f'/auth/realms/{realm_name}/protocol/openid-connect/userinfo',
+                headers={'Authorization': f'Bearer {access_token}'},
+            )
+            assert userinfo_resp.status_code == 200
+            info = userinfo_resp.json
+
+            assert 'photo' in info, (
+                "When claim.name is empty, the mapper must fall back to "
+                "user.attribute ('photo') as the claim name rather than "
+                "silently dropping the claim from the token."
+            )
+            assert info['photo'] == 'https://example.com/photo.jpg'
+        finally:
+            with app.app_context():
+                from apps.models.realm import Realm as RealmModel
+                r = RealmModel.find_by_name(realm_name)
+                if r:
+                    db.session.delete(r)
+                    db.session.commit()
+
+    def test_any_custom_attribute_uses_configured_claim_name(self, client, app):
+        """
+        The system must respect the configured claim.name for ANY custom
+        attribute, not just 'photo'.  If the user adds a mapper for
+        'department' with claim.name='department', the token must contain
+        'department'.  This validates the general case raised in the issue:
+        "what if I add user attribute, realm claim or other user federation
+        mapper and it still fails to appear in access_token or userinfo?"
+        """
+        from apps.models.client import ClientScope, ProtocolMapper
+
+        realm_id, realm_name, client_id_str, client_secret = \
+            self._create_realm_client_user(
+                app, 'custom', 'custom-attr-user', 'custom@example.com'
+            )
+
+        with app.app_context():
+            user = User.query.filter_by(
+                realm_id=realm_id, username='custom-attr-user'
+            ).first()
+            UserService.set_attributes(user, {
+                'department': 'Engineering',
+                'employee_id': 'EMP-001',
+            })
+
+            profile_scope = ClientScope.query.filter_by(
+                realm_id=realm_id, name='profile'
+            ).first()
+            for attr_name in ('department', 'employee_id'):
+                db.session.add(ProtocolMapper(
+                    client_scope_id=profile_scope.id,
+                    name=attr_name,
+                    protocol='openid-connect',
+                    protocol_mapper='oidc-usermodel-attribute-mapper',
+                    config={
+                        'user.attribute': attr_name,
+                        'claim.name': attr_name,
+                        'jsonType.label': 'String',
+                        'access.token.claim': 'true',
+                        'id.token.claim': 'true',
+                        'userinfo.token.claim': 'true',
+                    },
+                ))
+            db.session.commit()
+
+        try:
+            token_resp = client.post(
+                f'/auth/realms/{realm_name}/protocol/openid-connect/token',
+                data={
+                    'grant_type': 'password',
+                    'client_id': client_id_str,
+                    'client_secret': client_secret,
+                    'username': 'custom-attr-user',
+                    'password': 'testpass123!',
+                    'scope': 'openid profile',
+                },
+            )
+            assert token_resp.status_code == 200, (
+                f"Token request failed: {token_resp.get_data(as_text=True)}"
+            )
+            access_token = token_resp.json['access_token']
+
+            userinfo_resp = client.get(
+                f'/auth/realms/{realm_name}/protocol/openid-connect/userinfo',
+                headers={'Authorization': f'Bearer {access_token}'},
+            )
+            assert userinfo_resp.status_code == 200
+            info = userinfo_resp.json
+
+            assert 'department' in info, (
+                "The 'department' claim must appear in userinfo exactly as "
+                "configured in the mapper — the system must not rename it."
+            )
+            assert info['department'] == 'Engineering'
+
+            assert 'employee_id' in info, (
+                "The 'employee_id' claim must appear in userinfo exactly as "
+                "configured in the mapper."
+            )
+            assert info['employee_id'] == 'EMP-001'
+        finally:
+            with app.app_context():
+                from apps.models.realm import Realm as RealmModel
+                r = RealmModel.find_by_name(realm_name)
+                if r:
+                    db.session.delete(r)
+                    db.session.commit()
+
+    def test_federation_mapper_auto_creates_correct_claim_name(self, client, app):
+        """
+        When a user federation mapper is created for internal_attribute='photo',
+        ensure_protocol_mapper_for_attribute must auto-create a protocol mapper
+        whose claim.name is 'photo' (the exact same name), not 'avatar' or
+        'picture' or any other invented name.
+
+        Then, after the user attribute is stored in user_attributes (as
+        federation sync would do), the userinfo response must expose the value
+        under the key 'photo'.
+        """
+        from apps.services.federation.federation_service import FederationService
+        from apps.services.realm_service import RealmService
+        from apps.services.client_service import ClientService
+        from apps.models.client import ClientScope, ProtocolMapper
+        from apps.models.user import Credential
+        from apps.utils.crypto import hash_password
+
+        with app.app_context():
+            realm = RealmService.create_realm(
+                'fed-claim-name-realm', 'Fed Claim Name Realm'
+            )
+            realm_id = realm.id
+            realm_name = realm.name
+
+            oidc_client = ClientService.create_client(
+                realm_id=realm_id,
+                client_id='fed-claim-client',
+                name='Fed Claim Client',
+                direct_access_grants_enabled=True,
+            )
+            client_id_str = oidc_client.client_id
+            client_secret = oidc_client.secret
+
+            # Step 1: create user
+            user = User(
+                realm_id=realm_id,
+                username='fedclaimuser',
+                email='fedclaim@example.com',
+                first_name='Fed',
+                last_name='Claim',
+                enabled=True,
+                email_verified=True,
+            )
+            db.session.add(user)
+            db.session.flush()
+            cred = Credential.create_password(user.id, hash_password('testpass123!'))
+            db.session.add(cred)
+            db.session.flush()
+
+            # Step 2: simulate what federation sync does — store 'photo' attribute
+            UserService.set_attributes(user, {
+                'photo': 'https://example.com/fed_photo.jpg',
+            })
+
+            # Step 3: simulate admin creating a federation mapper for 'photo'.
+            # This auto-creates a protocol mapper whose claim.name must equal
+            # the internal_attribute value ('photo').
+            created = FederationService.ensure_protocol_mapper_for_attribute(
+                realm_id=realm_id,
+                internal_attribute='photo',
+                mapper_type='user-attribute-db-mapper',
+            )
+            assert created is True
+
+            # Verify the auto-created protocol mapper uses claim.name='photo'
+            profile_scope = ClientScope.query.filter_by(
+                realm_id=realm_id, name='profile'
+            ).first()
+            pm = next(
+                (m for m in ProtocolMapper.query.filter_by(
+                    client_scope_id=profile_scope.id,
+                    protocol_mapper='oidc-usermodel-attribute-mapper',
+                ).all() if (m.config or {}).get('user.attribute') == 'photo'),
+                None,
+            )
+            assert pm is not None
+            assert pm.config.get('claim.name') == 'photo', (
+                "The auto-created protocol mapper must use claim.name='photo' "
+                "(the exact internal_attribute name), not 'avatar', 'picture', "
+                "or any other invented name."
+            )
+
+            db.session.commit()
+
+        try:
+            token_resp = client.post(
+                f'/auth/realms/{realm_name}/protocol/openid-connect/token',
+                data={
+                    'grant_type': 'password',
+                    'client_id': client_id_str,
+                    'client_secret': client_secret,
+                    'username': 'fedclaimuser',
+                    'password': 'testpass123!',
+                    'scope': 'openid profile',
+                },
+            )
+            assert token_resp.status_code == 200, (
+                f"Token request failed: {token_resp.get_data(as_text=True)}"
+            )
+            access_token = token_resp.json['access_token']
+
+            userinfo_resp = client.get(
+                f'/auth/realms/{realm_name}/protocol/openid-connect/userinfo',
+                headers={'Authorization': f'Bearer {access_token}'},
+            )
+            assert userinfo_resp.status_code == 200
+            info = userinfo_resp.json
+
+            assert 'photo' in info, (
+                "The 'photo' claim must appear in userinfo after federation "
+                "sync stores the attribute and ensure_protocol_mapper_for_attribute "
+                "creates the protocol mapper with claim.name='photo'."
+            )
+            assert info['photo'] == 'https://example.com/fed_photo.jpg'
+            assert 'avatar' not in info, (
+                "Token must NOT contain 'avatar' — the claim name must match "
+                "the configured mapper exactly."
+            )
+        finally:
+            with app.app_context():
+                from apps.models.realm import Realm as RealmModel
+                r = RealmModel.find_by_name(realm_name)
+                if r:
+                    db.session.delete(r)
+                    db.session.commit()
+
+
 # ---------------------------------------------------------------------------
 # Auto-creation of protocol mappers for custom federation attributes
 # ---------------------------------------------------------------------------
