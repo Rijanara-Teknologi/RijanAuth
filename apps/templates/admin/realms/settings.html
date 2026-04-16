@@ -387,14 +387,25 @@ document.addEventListener('DOMContentLoaded', function() {
         const formData = new FormData(form);
         const data = {};
         
+        // Field name mapping: HTML form name -> API name
+        const fieldMapping = {
+            'sso_idle_timeout': 'sso_session_idle_timeout',
+            'sso_max': 'sso_session_max_lifespan',
+            'offline_idle': 'offline_session_idle_timeout',
+            'wait_increment': 'wait_increment_seconds'
+        };
+        
         formData.forEach((value, key) => {
+            // Map form field names to API field names
+            const apiField = fieldMapping[key] || key;
+            
             if (key === 'enabled' || key === 'registration_allowed' || key === 'verify_email' || 
                 key === 'login_with_email_allowed' || key === 'remember_me' || 
                 key === 'reset_password_allowed' || key === 'smtp_ssl' || 
                 key === 'smtp_starttls' || key === 'smtp_auth' || key === 'brute_force_protected') {
-                data[key] = value === 'on';
+                data[apiField] = value === 'on';
             } else {
-                data[key] = value;
+                data[apiField] = value;
             }
         });
         
