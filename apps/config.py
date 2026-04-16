@@ -9,6 +9,12 @@ class Config(object):
 
     basedir = os.path.abspath(os.path.dirname(__file__))
 
+    # RijanAuth Version
+    RIJANAUTH_VERSION = '2.7.3'
+    
+    # Environment (production, staging, development)
+    ENVIRONMENT = os.getenv('ENVIRONMENT', 'production')
+
     # Assets Management
     ASSETS_ROOT = os.getenv('ASSETS_ROOT', '/static/assets')
     
@@ -40,6 +46,12 @@ class Config(object):
         'enable_activity_console': True,
         'activity_log_level': 'INFO',
     }
+
+    # Sentry Error Tracking Configuration
+    # Auto-activates when SENTRY_DSN is set in environment
+    SENTRY_DSN = os.getenv('SENTRY_DSN', '')
+    SENTRY_SAMPLE_RATE = os.getenv('SENTRY_SAMPLE_RATE', '1.0')  # 100% error capture
+    SENTRY_TRACES_SAMPLE_RATE = os.getenv('SENTRY_TRACES_SAMPLE_RATE', '0.1')  # 10% performance traces
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ECHO = True

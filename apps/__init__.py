@@ -251,6 +251,12 @@ def configure_logging(app):
     LoggingMiddleware(app)
 
 
+def configure_sentry(app):
+    """Configure Sentry error tracking if SENTRY_DSN is set"""
+    from apps.sentry import configure_sentry as init_sentry
+    init_sentry(app)
+
+
 def configure_realm_middleware(app):
     """Configure realm context middleware"""
     from apps.middleware.realm import load_realm
@@ -278,6 +284,9 @@ def create_app(config):
     
     # Configure logging
     configure_logging(app)
+    
+    # Configure Sentry (auto-activates if SENTRY_DSN is set)
+    configure_sentry(app)
     
     # Register extensions
     register_extensions(app)

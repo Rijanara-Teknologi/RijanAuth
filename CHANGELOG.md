@@ -1,5 +1,70 @@
 # Change Log
 
+## [2.7.4] 2026-04-16 - Sentry Error Tracking Integration
+
+### New Features
+
+- **Sentry Error Tracking**:
+  - Auto-activates when `SENTRY_DSN` is set in environment
+  - Flask integration for automatic error capturing
+  - SQLAlchemy integration for database error tracking
+  - Logging integration (WARNING+ logs sync to Sentry)
+  - Sensitive data masking (passwords, tokens, secrets, smtp_password, client_secret)
+  - User context tracking (id, username, email)
+  - Realm context for multi-tenant apps
+  - Error handlers for 404, 500, 403, 401
+  - Release tracking with version tag
+  - Environment tagging (production/staging)
+  - Performance tracing support (configurable sample rate)
+
+### Configuration
+
+Environment variables:
+```bash
+SENTRY_DSN=https://xxx@sentry.io/xxx
+ENVIRONMENT=production
+SENTRY_SAMPLE_RATE=1.0  # 100% error capture
+SENTRY_TRACES_SAMPLE_RATE=0.1  # 10% performance traces
+```
+
+### New Files
+
+- `apps/sentry.py`: Sentry configuration module with helper functions
+
+---
+
+## [2.7.3] 2026-04-16 - Activity Logging System
+
+### New Features
+
+- **Console Activity Logging**:
+  - Real-time activity monitoring in terminal/stdout
+  - Compact single-line format: `[HH:MM:SS] [SOURCE] message`
+  - Color-coded output by source (BROWSER, SERVER, OIDC)
+
+- **Browser Activity Tracking** (`activity-logger.js`):
+  - Page load tracking
+  - Button click tracking
+  - AJAX call interception
+  - Form submission tracking
+  - Console output + server logging
+
+- **Server-Side Activity Logging**:
+  - `log_activity()` function for tracking user actions
+  - Enhanced `@log_action` decorator with compact output
+  - API endpoint `/api/log` for client-side log ingestion
+
+### Example Output
+
+```
+[16:45:30] [BROWSER] admin@master loaded /admin/master/users
+[16:45:35] [BROWSER] admin@master clicked "Create User" @ users
+[16:45:42] [BROWSER] admin@master AJAX POST /api/master/users -> 201
+[16:45:43] [SERVER]  admin performed update_user on user '123'
+```
+
+---
+
 ## [2.7.3] 2026-04-16 - Admin UI Button Fixes & Enhanced Realm Settings
 
 ### Bug Fixes
