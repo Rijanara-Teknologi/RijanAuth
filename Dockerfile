@@ -1,6 +1,9 @@
 # syntax=docker/dockerfile:1
 FROM python:3.9
 
+# Install sqlite3 CLI for database debugging
+RUN apt-get update && apt-get install -y sqlite3 && rm -rf /var/lib/apt/lists/*
+
 # set environment variables
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
