@@ -168,8 +168,9 @@
                                                             </button>
                                                         </div>
                                                     </div>
+                                                    <small class="text-muted">Copy the secret now. It cannot be retrieved later.</small>
                                                 </div>
-                                                <button class="btn btn-warning">
+                                                <button class="btn btn-warning" onclick="showRegenerateSecretModal()">
                                                     <i class="feather icon-refresh-cw mr-1"></i> Regenerate Secret
                                                 </button>
                                                 {% else %}
@@ -184,9 +185,12 @@
                                             <div class="tab-pane fade" id="roles">
                                                 <p class="text-muted">Client roles can be defined here and assigned to
                                                     users.</p>
-                                                <button class="btn btn-primary">
+                                                <button class="btn btn-primary" onclick="showCreateRoleModal()">
                                                     <i class="feather icon-plus mr-1"></i> Create Role
                                                 </button>
+                                                <div id="clientRolesList" class="mt-3">
+                                                    <!-- Roles will be loaded here -->
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -202,11 +206,71 @@
 </div>
 
 <script>
-    function copySecret() {
-        var input = document.getElementById('clientSecret');
-        input.select();
-        document.execCommand('copy');
-        alert('Secret copied to clipboard');
-    }
+const REALM_NAME = "{{ realm.name }}";
+const CLIENT_ID = "{{ client.id }}";
+
+function copySecret() {
+    var input = document.getElementById('clientSecret');
+    input.select();
+    document.execCommand('copy');
+    alert('Secret copied to clipboard');
+}
+
+function showRegenerateSecretModal() {
+    if (!confirm('WARNING: Regenerating the client secret will invalidate the current secret. Applications using the old secret will stop working until updated. Continue?')) return;
+    
+    fetch('/api/' + REALM_NAME + '/clients/' + CLIENT_ID + '/regenerate-secret', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) throw new Error(data.error);
+        document.getElementById('clientSecret').value = data.secret;
+        alert('New secret generated! Copy it now - it cannot be retrieved later.');
+    })
+    .catch(err => alert('Error: ' + err.message));
+}
+
+function showCreateRoleModal() {
+    const name = prompt('Enter role name:');
+    if (!name || !name.trim()) return;
+    
+    const description = prompt('Enter role description (optional):') || '';
+    
+    fetch('/api/' + REALM_NAME + '/clients/' + CLIENT_ID + '/roles', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: name.trim(), description: description.trim()})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) throw new Error(data.error);
+        alert('Role "' + data.role.name + '" created successfully!');
+        loadClientRoles();
+    })
+    .catch(err => alert('Error: ' + err.message));
+}
+
+function loadClientRoles() {
+    fetch('/api/' + REALM_NAME + '/clients/' + CLIENT_ID + '/roles')
+    .then(r => r.json())
+    .then(roles => {
+        const container = document.getElementById('clientRolesList');
+        if (roles.length === 0) {
+            container.innerHTML = '<p class="text-muted">No client roles defined.</p>';
+            return;
+        }
+        container.innerHTML = '<ul class="list-group">' + 
+            roles.map(r => '<li class="list-group-item d-flex justify-content-between"><span><i class="feather icon-shield text-primary mr-2"></i>' + r.name + (r.description ? '<small class="text-muted ml-2">' + r.description + '</small>' : '') + '</span></li>')
+                .join('') + '</ul>';
+    })
+    .catch(err => console.error('Error loading roles:', err));
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const rolesTab = document.querySelector('a[href="#roles"]');
+    rolesTab.addEventListener('shown.bs.tab', loadClientRoles);
+});
 </script>
 {% endblock content %}

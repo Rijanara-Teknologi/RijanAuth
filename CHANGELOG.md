@@ -1,5 +1,42 @@
 # Change Log
 
+## [2.7.3] 2026-04-16 - Admin UI Button Fixes & Enhanced Realm Settings
+
+### Bug Fixes
+
+- **Admin UI Broken Buttons**: Fixed 6 non-functional buttons discovered during comprehensive audit:
+  - **Set Password** (`users/detail.html`): Form was submitting to invalid `action="#"` - now uses AJAX to `PUT /api/{realm}/users/{id}/reset-password`
+  - **Revoke Session** (`users/detail.html`): Button had no onclick handler - now calls `POST /api/{realm}/users/{id}/logout`
+  - **Regenerate Secret** (`clients/detail.html`): Button was non-functional - now triggers AJAX call to regenerate client secret
+  - **Create Role** (`clients/detail.html`): Button opened no modal - now uses prompt() and calls `POST /api/{realm}/clients/{id}/roles`
+  - **Edit Group** (`groups/list.html`): Button had no onclick - now opens modal form calling `PUT /api/{realm}/groups/{id}`
+  - **Delete Group** (`groups/list.html`): Button had no confirmation or action - now confirms and calls `DELETE /api/{realm}/groups/{id}`
+
+### New Features
+
+- **Realm Settings API**: Added `PUT /api/realms/{realm_name}` endpoint for updating realm settings via AJAX
+  - Supports all realm configuration including token lifespans
+  - Returns JSON response with success/error feedback
+
+- **Enhanced Realm Settings UI** (`admin/realms/settings.html`):
+  - Save button now uses AJAX with loading state
+  - Displays success/error feedback message
+  - Works properly in all browser environments
+
+### New API Endpoints
+
+- `PUT /api/realms/{realm_name}` - Update realm settings
+- `POST /api/{realm}/users/{user_id}/logout` - Revoke user sessions
+- `GET /api/{realm}/sessions` - List active user sessions
+- `POST /api/{realm}/clients/{client_id}/regenerate-secret` - Regenerate client secret
+- `GET /api/{realm}/clients/{client_id}/roles` - List client roles
+- `POST /api/{realm}/clients/{client_id}/roles` - Create client role
+- `GET /api/{realm}/groups/{group_id}` - Get group details
+- `PUT /api/{realm}/groups/{group_id}` - Update group
+- `DELETE /api/{realm}/groups/{group_id}` - Delete group
+
+---
+
 ## [2.7.2] 2026-03-10 - Login Page Customization Test Suite
 
 ### New Features

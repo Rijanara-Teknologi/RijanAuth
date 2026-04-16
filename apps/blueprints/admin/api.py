@@ -16,6 +16,7 @@ from apps.models.user import User
 from apps.models.client import Client
 from apps.models.role import Role
 from apps.models.group import Group
+from apps.models.session import UserSession, AuthenticatedClientSession
 from apps.models.import_job import ImportJob
 from apps.services.user_service import UserService
 from apps.services.client_service import ClientService
@@ -326,6 +327,51 @@ def api_reset_password(realm_name, user_id):
     return '', 204
 
 
+@admin_bp.route('/api/<realm_name>/users/<user_id>/logout', methods=['POST'])
+@login_required
+@log_action(action="revoke_session", resource_type="user")
+def api_revoke_session(realm_name, user_id):
+    """Revoke all sessions for a user"""
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    user = User.find_by_id(user_id)
+    if not user or user.realm_id != realm.id:
+        return jsonify({'error': 'User not found'}), 404
+    
+    UserSession.query.filter_by(user_id=user_id, state='ACTIVE').update({'state': 'LOGGED_OUT'})
+    AuthenticatedClientSession.query.filter_by(user_id=user_id, state='ACTIVE').update({'state': 'LOGGED_OUT'})
+    db.session.commit()
+    return '', 204
+
+
+@admin_bp.route('/api/<realm_name>/sessions', methods=['GET'])
+@login_required
+def api_list_sessions(realm_name):
+    """List active sessions for a user"""
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    user_id = request.args.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'user_id is required'}), 400
+    
+    user = User.find_by_id(user_id)
+    if not user or user.realm_id != realm.id:
+        return jsonify({'error': 'User not found'}), 404
+    
+    sessions = UserSession.query.filter_by(user_id=user_id, state='ACTIVE').all()
+    return jsonify([{
+        'id': s.id,
+        'ip_address': s.ip_address,
+        'auth_method': s.auth_method,
+        'started': s.started.isoformat() if s.started else None,
+        'last_session_refresh': s.last_session_refresh.isoformat() if s.last_session_refresh else None
+    } for s in sessions])
+
+
 @admin_bp.route('/api/<realm_name>/users/import', methods=['POST'])
 @login_required
 @log_action(action="import_users", resource_type="user")
@@ -513,6 +559,75 @@ def api_get_client(realm_name, client_id):
     return jsonify(client.to_dict())
 
 
+@admin_bp.route('/api/<realm_name>/clients/<client_id>/regenerate-secret', methods=['POST'])
+@login_required
+@log_action(action="regenerate_client_secret", resource_type="client")
+def api_regenerate_client_secret(realm_name, client_id):
+    """Regenerate client secret"""
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    client = Client.find_by_id(client_id)
+    if not client or client.realm_id != realm.id:
+        return jsonify({'error': 'Client not found'}), 404
+    
+    if client.public_client:
+        return jsonify({'error': 'Cannot regenerate secret for public clients'}), 400
+    
+    new_secret = ClientService.regenerate_secret(client)
+    return jsonify({'success': True, 'secret': new_secret})
+
+
+@admin_bp.route('/api/<realm_name>/clients/<client_id>/roles', methods=['GET'])
+@login_required
+def api_list_client_roles(realm_name, client_id):
+    """List roles for a specific client"""
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    client = Client.find_by_id(client_id)
+    if not client or client.realm_id != realm.id:
+        return jsonify({'error': 'Client not found'}), 404
+    
+    roles = Role.get_client_roles(client.id)
+    return jsonify([r.to_dict() for r in roles])
+
+
+@admin_bp.route('/api/<realm_name>/clients/<client_id>/roles', methods=['POST'])
+@login_required
+@log_action(action="create_client_role", resource_type="role")
+def api_create_client_role(realm_name, client_id):
+    """Create a role for a specific client"""
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    client = Client.find_by_id(client_id)
+    if not client or client.realm_id != realm.id:
+        return jsonify({'error': 'Client not found'}), 404
+    
+    data = request.get_json()
+    if not data or not data.get('name'):
+        return jsonify({'error': 'Role name is required'}), 400
+    
+    name = data['name'].strip()
+    if Role.find_client_role(client.id, name):
+        return jsonify({'error': f'Role "{name}" already exists for this client'}), 409
+    
+    role = Role(
+        realm_id=realm.id,
+        name=name,
+        description=data.get('description', '').strip() or None,
+        client_id=client.id,
+        client_role=True,
+        composite=False
+    )
+    role.save()
+    return jsonify({'success': True, 'role': role.to_dict()}), 201
+
+
 # =============================================================================
 # Roles API
 # =============================================================================
@@ -694,6 +809,71 @@ def api_import_groups(realm_name):
 
     result = ImportService.import_groups(realm.id, raw)
     return jsonify(result), 200
+
+
+@admin_bp.route('/api/<realm_name>/groups/<group_id>', methods=['GET'])
+@login_required
+def api_get_group(realm_name, group_id):
+    """Get group details"""
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    group = Group.find_by_id(group_id)
+    if not group or group.realm_id != realm.id:
+        return jsonify({'error': 'Group not found'}), 404
+    
+    return jsonify(group.to_dict(include_subgroups=True, include_members=True))
+
+
+@admin_bp.route('/api/<realm_name>/groups/<group_id>', methods=['PUT'])
+@login_required
+@log_action(action="update_group", resource_type="group")
+def api_update_group(realm_name, group_id):
+    """Update a group"""
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    group = Group.find_by_id(group_id)
+    if not group or group.realm_id != realm.id:
+        return jsonify({'error': 'Group not found'}), 404
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    if 'name' in data:
+        group.name = data['name'].strip()
+    if 'path' in data:
+        group.path = data['path'].strip()
+    if 'parent_id' in data:
+        if data['parent_id']:
+            parent = Group.find_by_id(data['parent_id'])
+            if parent and parent.realm_id == realm.id:
+                group.parent_id = parent.id
+        else:
+            group.parent_id = None
+    
+    group.save()
+    return jsonify({'success': True, 'group': group.to_dict()})
+
+
+@admin_bp.route('/api/<realm_name>/groups/<group_id>', methods=['DELETE'])
+@login_required
+@log_action(action="delete_group", resource_type="group")
+def api_delete_group(realm_name, group_id):
+    """Delete a group"""
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    group = Group.find_by_id(group_id)
+    if not group or group.realm_id != realm.id:
+        return jsonify({'error': 'Group not found'}), 404
+    
+    group.delete()
+    return '', 204
 
 
 # =============================================================================

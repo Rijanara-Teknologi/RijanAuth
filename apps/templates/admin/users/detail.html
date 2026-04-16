@@ -159,17 +159,19 @@
                                             <!-- Credentials Tab -->
                                             <div class="tab-pane fade" id="credentials" role="tabpanel">
                                                 <h6 class="mb-3">Password</h6>
-                                                <form method="POST" action="#">
+                                                <form id="setPasswordForm">
                                                     <div class="form-group">
                                                         <label>New Password</label>
-                                                        <input type="password" class="form-control" name="new_password"
-                                                            placeholder="Enter new password">
+                                                        <input type="password" class="form-control" id="new_password"
+                                                            placeholder="Enter new password" required minlength="8">
                                                     </div>
                                                     <div class="form-group">
                                                         <label>Confirm Password</label>
                                                         <input type="password" class="form-control"
-                                                            name="confirm_password" placeholder="Confirm password">
+                                                            id="confirm_password" placeholder="Confirm password" required>
                                                     </div>
+                                                    <div id="passwordError" class="alert alert-danger d-none"></div>
+                                                    <div id="passwordSuccess" class="alert alert-success d-none"></div>
                                                     <button type="submit" class="btn btn-primary">
                                                         <i class="feather icon-save mr-1"></i> Set Password
                                                     </button>
@@ -321,7 +323,7 @@
                                                                 <td>{{ session.last_session_refresh.strftime('%H:%M') if
                                                                     session.last_session_refresh else '-' }}</td>
                                                                 <td>
-                                                                    <button class="btn btn-sm btn-outline-danger">
+                                                                    <button class="btn btn-sm btn-outline-danger" onclick="revokeSession('{{ session.id }}')">
                                                                         <i class="feather icon-x"></i> Revoke
                                                                     </button>
                                                                 </td>
@@ -519,6 +521,8 @@
 {% block javascripts %}
 <script>
 const API_BASE = "{{ url_for('admin.api_update_user', realm_name=realm.name, user_id=user.id) }}";
+const REALM_NAME = "{{ realm.name }}";
+const USER_ID = "{{ user.id }}";
 
 function getCurrentAttributes() {
     /* Build current attribute dict from the table */
@@ -579,6 +583,59 @@ function deleteAttribute(name) {
         location.reload();
     })
     .catch(err => alert('Failed to delete attribute: ' + (err.message || err)));
+}
+
+document.getElementById('setPasswordForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const newPass = document.getElementById('new_password').value;
+    const confirmPass = document.getElementById('confirm_password').value;
+    const errorEl = document.getElementById('passwordError');
+    const successEl = document.getElementById('passwordSuccess');
+    
+    errorEl.classList.add('d-none');
+    successEl.classList.add('d-none');
+    
+    if (newPass !== confirmPass) {
+        errorEl.textContent = 'Passwords do not match.';
+        errorEl.classList.remove('d-none');
+        return;
+    }
+    
+    if (newPass.length < 8) {
+        errorEl.textContent = 'Password must be at least 8 characters.';
+        errorEl.classList.remove('d-none');
+        return;
+    }
+    
+    fetch('/api/' + REALM_NAME + '/users/' + USER_ID + '/reset-password', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({value: newPass})
+    })
+    .then(r => {
+        if (!r.ok) throw new Error('Failed to set password');
+        successEl.textContent = 'Password updated successfully!';
+        successEl.classList.remove('d-none');
+        document.getElementById('new_password').value = '';
+        document.getElementById('confirm_password').value = '';
+    })
+    .catch(err => {
+        errorEl.textContent = err.message;
+        errorEl.classList.remove('d-none');
+    });
+});
+
+function revokeSession(sessionId) {
+    if (!confirm('Revoke this session? The user will be logged out.')) return;
+    
+    fetch('/api/' + REALM_NAME + '/users/' + USER_ID + '/logout', {
+        method: 'POST'
+    })
+    .then(r => {
+        if (!r.ok) throw new Error('Failed to revoke session');
+        location.reload();
+    })
+    .catch(err => alert('Failed to revoke session: ' + err.message));
 }
 </script>
 {% endblock javascripts %}
