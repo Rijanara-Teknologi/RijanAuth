@@ -726,6 +726,19 @@ def _apply_standard_oidc_claims_fallback(payload, user, scope):
     return payload
 
 
+def _get_effective_access_token_lifespan(realm, client=None):
+    """
+    Get effective access token lifespan.
+    Client setting overrides realm setting if set.
+    """
+    # Check client override first (if client has specific setting)
+    if client and client.access_token_lifespan is not None:
+        return client.access_token_lifespan
+    
+    # Fall back to realm setting
+    return realm.access_token_lifespan or 300
+
+
 def _generate_access_token(realm, client, user, scope):
     """Generate JWT access token with protocol mapper processing"""
     from apps.services.mapper_service import MapperService
@@ -735,9 +748,12 @@ def _generate_access_token(realm, client, user, scope):
     
     now = datetime.utcnow()
     
+    # Get effective token lifespan (client override > realm default)
+    effective_lifespan = _get_effective_access_token_lifespan(realm, client)
+    
     # Build base token with protected claims
     payload = {
-        'exp': now + timedelta(seconds=realm.access_token_lifespan),
+        'exp': now + timedelta(seconds=effective_lifespan),
         'iat': now,
         'auth_time': int(now.timestamp()),
         'jti': generate_token(16),
@@ -789,9 +805,12 @@ def _generate_id_token(realm, client, user, nonce, scope='openid'):
     
     now = datetime.utcnow()
     
+    # Get effective token lifespan (client override > realm default)
+    effective_lifespan = _get_effective_access_token_lifespan(realm, client)
+    
     # Build base token with protected claims
     payload = {
-        'exp': now + timedelta(seconds=realm.access_token_lifespan),
+        'exp': now + timedelta(seconds=effective_lifespan),
         'iat': now,
         'auth_time': int(now.timestamp()),
         'jti': generate_token(16),
@@ -823,8 +842,12 @@ def _generate_client_access_token(realm, client, scope):
     issuer = f"{base_url}/auth/realms/{realm.name}"
     
     now = datetime.utcnow()
+    
+    # Get effective token lifespan (client override > realm default)
+    effective_lifespan = _get_effective_access_token_lifespan(realm, client)
+    
     payload = {
-        'exp': now + timedelta(seconds=realm.access_token_lifespan),
+        'exp': now + timedelta(seconds=effective_lifespan),
         'iat': now,
         'jti': generate_token(16),
         'iss': issuer,

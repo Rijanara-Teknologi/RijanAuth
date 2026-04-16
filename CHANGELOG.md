@@ -1,5 +1,40 @@
 # Change Log
 
+## [2.7.5] 2026-04-16 - Token Lifetime Settings Fix
+
+### Bug Fixes
+
+- **Token Lifetime Not Saved**:
+  - Fixed field name mismatch between form and API in settings.html
+  - `sso_idle_timeout` → `sso_session_idle_timeout`
+  - `sso_max` → `sso_session_max_lifespan`
+  - `offline_idle` → `offline_session_idle_timeout`
+  - `wait_increment` → `wait_increment_seconds`
+
+- **Client Override Not Working**:
+  - Implemented client-level token lifespan override
+  - Client `access_token_lifespan` now takes precedence over realm setting
+  - Added `_get_effective_access_token_lifespan()` helper function
+
+### Enhanced Fields
+
+- Added missing fields to `Realm.to_dict()`:
+  - `accessTokenLifespanForImplicitFlow`
+  - `offlineSessionIdleTimeout`
+  - `accessCodeLifespan`
+  - `accessCodeLifespanUserAction`
+  - `accessCodeLifespanLogin`
+  - `waitIncrementSeconds`
+  - `maxLoginFailures`
+
+### Files Changed
+
+- `apps/templates/admin/realms/settings.html` - JavaScript field mapping
+- `apps/models/realm.py` - Added missing to_dict fields
+- `apps/blueprints/oidc/routes.py` - Client override support
+
+---
+
 ## [2.7.4] 2026-04-16 - Sentry Error Tracking Integration
 
 ### New Features
