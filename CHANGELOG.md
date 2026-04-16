@@ -1,5 +1,62 @@
 # Change Log
 
+## [2.8.0] 2026-04-16 - RijanAuth CLI Tool
+
+### New Features
+
+- **RijanAuth CLI** - Comprehensive command-line interface for managing RijanAuth:
+
+#### Commands
+
+- `doctor analyze` - Full system diagnostic with detailed report
+- `doctor repair` - Auto-fix common issues (token lifespan, brute force)
+- `doctor list-issues` - List all repairable issues
+- `realm list/get/set/create/update/delete/enable/disable` - Realm management
+- `realm list-keys` - List all configurable realm settings
+- `client list/get/create/update/delete/regenerate-secret` - Client management
+- `user list/get/create/delete/reset-password/set-password/toggle/logout/stats` - User management
+- `user add-role/remove-role` - Role assignment
+- `role list/create/delete/add-composite/remove-composite` - Role management
+- `group list/create/delete/add-member/remove-member/members` - Group management (with tree view)
+- `backup create/list/restore/config/cleanup` - Backup management
+- `smtp test/check` - SMTP configuration testing
+- `federation list/test/sync/status/providers` - Federation provider management
+- `export users/roles/groups` - Export data to CSV/JSON
+- `export template` - Generate import templates
+- `export import-users/import-roles/import-groups` - Import from CSV
+
+#### Features
+
+- Human-readable table output by default
+- JSON output with `--json` flag
+- Dry-run support with `--dry-run` flag
+- Confirmation prompts for destructive operations
+- Comprehensive diagnostic with color-coded issues (critical/warning/info)
+- Auto-repair capabilities for common misconfigurations
+
+### Dependencies Added
+
+- `click>=8.0.0` - CLI framework
+- `tabulate>=0.9.0` - Pretty table formatting
+
+### Files Added
+
+- `rijanauth/__init__.py` - CLI package
+- `rijanauth/cli.py` - Main CLI entry point
+- `rijanauth/commands/__init__.py` - Commands package
+- `rijanauth/commands/doctor.py` - Diagnostic & repair
+- `rijanauth/commands/realm.py` - Realm management
+- `rijanauth/commands/client.py` - Client management
+- `rijanauth/commands/user.py` - User management
+- `rijanauth/commands/role.py` - Role management
+- `rijanauth/commands/group_cmd.py` - Group management
+- `rijanauth/commands/backup.py` - Backup management
+- `rijanauth/commands/smtp.py` - SMTP testing
+- `rijanauth/commands/federation.py` - Federation management
+- `rijanauth/commands/export.py` - Import/export functionality
+
+---
+
 ## [2.7.5] 2026-04-16 - Token Lifetime Settings Fix
 
 ### Bug Fixes
