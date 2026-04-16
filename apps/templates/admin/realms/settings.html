@@ -352,9 +352,12 @@
                                             </div>
 
                                             <hr>
-                                            <button type="submit" class="btn btn-primary">
-                                                <i class="feather icon-save mr-1"></i> Save Settings
-                                            </button>
+                                            <div class="form-group">
+                                                <button type="button" id="saveSettingsBtn" class="btn btn-primary">
+                                                    <i class="feather icon-save mr-1"></i> Save Settings
+                                                </button>
+                                                <span id="saveStatus" class="ml-3" style="display: none;"></span>
+                                            </div>
                                         </form>
                                     </div>
                                 </div>
@@ -367,3 +370,68 @@
     </div>
 </div>
 {% endblock content %}
+
+{% block javascripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const saveBtn = document.getElementById('saveSettingsBtn');
+    const saveStatus = document.getElementById('saveStatus');
+    const form = saveBtn.closest('form');
+    const realmName = '{{ realm.name }}';
+    
+    saveBtn.addEventListener('click', function() {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="feather icon-loader mr-1 fa-spin"></i> Saving...';
+        saveStatus.style.display = 'none';
+        
+        const formData = new FormData(form);
+        const data = {};
+        
+        formData.forEach((value, key) => {
+            if (key === 'enabled' || key === 'registration_allowed' || key === 'verify_email' || 
+                key === 'login_with_email_allowed' || key === 'remember_me' || 
+                key === 'reset_password_allowed' || key === 'smtp_ssl' || 
+                key === 'smtp_starttls' || key === 'smtp_auth' || key === 'brute_force_protected') {
+                data[key] = value === 'on';
+            } else {
+                data[key] = value;
+            }
+        });
+        
+        const apiUrl = '/api/realms/' + realmName;
+        
+        fetch(apiUrl, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                saveStatus.textContent = '✓ Settings saved successfully';
+                saveStatus.className = 'ml-3 text-success';
+                saveStatus.style.display = 'inline';
+                setTimeout(() => {
+                    saveStatus.style.display = 'none';
+                }, 5000);
+            } else {
+                throw new Error(result.error || 'Failed to save settings');
+            }
+        })
+        .catch(error => {
+            console.error('Error saving settings:', error);
+            saveStatus.textContent = '✗ Error: ' + error.message;
+            saveStatus.className = 'ml-3 text-danger';
+            saveStatus.style.display = 'inline';
+        })
+        .finally(() => {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="feather icon-save mr-1"></i> Save Settings';
+        });
+    });
+});
+</script>
+{% endblock javascripts %}

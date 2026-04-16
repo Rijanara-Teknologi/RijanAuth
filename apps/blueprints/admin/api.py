@@ -74,6 +74,81 @@ def api_get_realm(realm_name):
     return jsonify(realm.to_dict())
 
 
+@admin_bp.route('/api/realms/<realm_name>', methods=['PUT'])
+@login_required
+@log_action(action="update_realm", resource_type="realm")
+def api_update_realm(realm_name):
+    """Update realm settings"""
+    realm = Realm.find_by_name(realm_name)
+    if not realm:
+        return jsonify({'error': 'Realm not found'}), 404
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    try:
+        if 'display_name' in data:
+            realm.display_name = data['display_name'].strip() or None
+        if 'enabled' in data:
+            realm.enabled = bool(data['enabled'])
+        
+        if 'registration_allowed' in data:
+            realm.registration_allowed = bool(data['registration_allowed'])
+        if 'verify_email' in data:
+            realm.verify_email = bool(data['verify_email'])
+        if 'login_with_email_allowed' in data:
+            realm.login_with_email_allowed = bool(data['login_with_email_allowed'])
+        if 'remember_me' in data:
+            realm.remember_me = bool(data['remember_me'])
+        if 'reset_password_allowed' in data:
+            realm.reset_password_allowed = bool(data['reset_password_allowed'])
+        
+        if 'smtp_server' in data:
+            realm.smtp_server = data['smtp_server'].strip() or None
+        if 'smtp_port' in data:
+            realm.smtp_port = str(data['smtp_port']) if data['smtp_port'] else None
+        if 'smtp_from' in data:
+            realm.smtp_from = data['smtp_from'].strip() or None
+        if 'smtp_from_display_name' in data:
+            realm.smtp_from_display_name = data['smtp_from_display_name'].strip() or None
+        if 'smtp_reply_to' in data:
+            realm.smtp_reply_to = data['smtp_reply_to'].strip() or None
+        if 'smtp_reply_to_display_name' in data:
+            realm.smtp_reply_to_display_name = data['smtp_reply_to_display_name'].strip() or None
+        if 'smtp_ssl' in data:
+            realm.smtp_ssl = bool(data['smtp_ssl'])
+        if 'smtp_starttls' in data:
+            realm.smtp_starttls = bool(data['smtp_starttls'])
+        if 'smtp_auth' in data:
+            realm.smtp_auth = bool(data['smtp_auth'])
+        if 'smtp_user' in data:
+            realm.smtp_user = data['smtp_user'].strip() or None
+        if 'smtp_password' in data and data['smtp_password']:
+            realm.smtp_password = data['smtp_password']
+        
+        if 'access_token_lifespan' in data:
+            realm.access_token_lifespan = int(data['access_token_lifespan'])
+        if 'sso_session_idle_timeout' in data:
+            realm.sso_session_idle_timeout = int(data['sso_session_idle_timeout'])
+        if 'sso_session_max_lifespan' in data:
+            realm.sso_session_max_lifespan = int(data['sso_session_max_lifespan'])
+        if 'offline_session_idle_timeout' in data:
+            realm.offline_session_idle_timeout = int(data['offline_session_idle_timeout'])
+        
+        if 'brute_force_protected' in data:
+            realm.brute_force_protected = bool(data['brute_force_protected'])
+        if 'max_login_failures' in data:
+            realm.max_login_failures = int(data['max_login_failures'])
+        if 'wait_increment_seconds' in data:
+            realm.wait_increment_seconds = int(data['wait_increment_seconds'])
+        
+        realm.save()
+        return jsonify({'success': True, 'message': 'Realm settings updated successfully', 'realm': realm.to_dict()})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # =============================================================================
 # Users API
 # =============================================================================
