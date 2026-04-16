@@ -35,7 +35,10 @@ class Config(object):
         'format': '[%(asctime)s] %(environment)s.%(levelname)s: %(message)s %(context)s',
         'sensitive_fields': ['password', 'token', 'secret', 'key', 'ssn', 'credit_card', 'authorization'],
         'mask_char': '*',
-        'mask_length': 4
+        'mask_length': 4,
+        # Activity Logging Configuration
+        'enable_activity_console': True,
+        'activity_log_level': 'INFO',
     }
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False

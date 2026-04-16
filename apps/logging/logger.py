@@ -2,9 +2,13 @@
 import logging
 import os
 import sys
-from .handlers import DailyRotatingFileHandler
-from .formatters import LaravelFormatter
+from .handlers import DailyRotatingFileHandler, ConsoleActivityHandler
+from .formatters import LaravelFormatter, ActivityFormatter
 from .filters import SensitiveDataFilter, ContextFilter
+
+
+_activity_logger = None
+
 
 def setup_logging(app):
     """
@@ -65,7 +69,44 @@ def setup_logging(app):
     
     app.logger.addHandler(handler)
     
+    # Setup console activity logging if enabled
+    if config.get('enable_activity_console', True):
+        setup_activity_logger(app)
+    
     # Also log startup message
     app.logger.info(f"Logging initialized. Level: {log_level_name}")
 
     return handler
+
+
+def setup_activity_logger(app):
+    """
+    Setup separate activity logger that outputs to console/stdout.
+    This logger captures user actions, page loads, button clicks, etc.
+    """
+    global _activity_logger
+    
+    config = app.config.get('LOGGING', {})
+    activity_level_name = config.get('activity_log_level', 'INFO')
+    activity_level = getattr(logging, activity_level_name.upper(), logging.INFO)
+    
+    _activity_logger = logging.getLogger('activity')
+    _activity_logger.setLevel(activity_level)
+    _activity_logger.propagate = False
+    
+    console_handler = ConsoleActivityHandler(level=activity_level)
+    console_handler.setFormatter(ActivityFormatter())
+    
+    _activity_logger.addHandler(console_handler)
+    
+    return _activity_logger
+
+
+def get_activity_logger():
+    """
+    Get the activity logger instance.
+    """
+    global _activity_logger
+    if _activity_logger is None:
+        _activity_logger = logging.getLogger('activity')
+    return _activity_logger

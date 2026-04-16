@@ -2,9 +2,54 @@
 import logging
 import logging.handlers
 import os
+import sys
 import time
 import glob
 from datetime import datetime
+
+
+class ConsoleActivityHandler(logging.Handler):
+    """
+    Handler that writes activity logs to stdout/stderr.
+    Used for real-time activity monitoring in terminal.
+    """
+    
+    def __init__(self, level=logging.INFO, stream=None):
+        super().__init__(level)
+        self.stream = stream or sys.stdout
+        
+        self.LEVEL_COLORS = {
+            'DEBUG': '\033[36m',     # Cyan
+            'INFO': '\033[32m',      # Green
+            'WARNING': '\033[33m',   # Yellow
+            'ERROR': '\033[31m',     # Red
+            'BROWSER': '\033[35m',   # Magenta
+            'SERVER': '\033[34m',    # Blue
+            'OIDC': '\033[96m',      # Light Cyan
+            'RESET': '\033[0m',      # Reset
+        }
+    
+    def emit(self, record):
+        try:
+            self.stream.write(self.format(record) + '\n')
+            self.stream.flush()
+        except Exception:
+            self.handleError(record)
+    
+    def format(self, record):
+        timestamp = datetime.now().strftime('%H:%M:%S')
+        
+        source = getattr(record, 'source', 'LOG')
+        color = self.LEVEL_COLORS.get(source.upper(), '')
+        reset = self.LEVEL_COLORS['RESET']
+        
+        message = record.getMessage()
+        
+        if hasattr(record, 'username') and record.username:
+            message = f"{record.username} {message}"
+        
+        return f"[{timestamp}] [{source}] {message}"
+
 
 class DailyRotatingFileHandler(logging.FileHandler):
     """

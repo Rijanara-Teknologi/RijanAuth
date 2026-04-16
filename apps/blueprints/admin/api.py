@@ -21,7 +21,7 @@ from apps.models.import_job import ImportJob
 from apps.services.user_service import UserService
 from apps.services.client_service import ClientService
 from apps.services.import_service import ImportService
-from apps.logging import log_action
+from apps.logging import log_action, log_activity
 from apps import db
 
 
@@ -51,6 +51,52 @@ def api_health():
         'version': '2.1.1',
         'service': 'RijanAuth'
     })
+
+
+@admin_bp.route('/api/log', methods=['POST'])
+def api_log_activity():
+    """
+    Receive client-side activity logs and output to console.
+    
+    Expected JSON payload:
+    {
+        "type": "page_load" | "button_click" | "ajax" | "form_submit",
+        "action": "Description of the action",
+        "details": {...}  // optional additional details
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return '', 204
+        
+        activity_type = data.get('type', 'unknown')
+        action = data.get('action', '')
+        details = data.get('details', {})
+        username = data.get('username', details.get('username', ''))
+        realm = data.get('realm', details.get('realm', ''))
+        
+        if activity_type == 'page_load':
+            log_activity(f"loaded {action}", source='BROWSER', username=username, realm=realm)
+        elif activity_type == 'button_click':
+            target = data.get('target', '')
+            page = data.get('page', '')
+            log_activity(f"clicked \"{action}\" @ {page or 'unknown'}", source='BROWSER', username=username, realm=realm, target=target)
+        elif activity_type == 'ajax':
+            method = data.get('method', 'POST')
+            url = data.get('url', '')
+            status = data.get('status', 0)
+            log_activity(f"AJAX {method} {url} -> {status}", source='BROWSER', username=username, realm=realm)
+        elif activity_type == 'form_submit':
+            form = data.get('form', '')
+            page = data.get('page', '')
+            log_activity(f"submitted form \"{action}\" @ {page or 'unknown'}", source='BROWSER', username=username, realm=realm)
+        else:
+            log_activity(action, source='BROWSER', username=username, realm=realm, activity_type=activity_type)
+        
+        return '', 204
+    except Exception as e:
+        return '', 204
 
 
 # =============================================================================

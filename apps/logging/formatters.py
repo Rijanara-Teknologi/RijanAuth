@@ -4,6 +4,33 @@ import json
 import os
 from datetime import datetime
 
+
+class ActivityFormatter(logging.Formatter):
+    """
+    Compact single-line formatter for activity logs.
+    Format: [HH:MM:SS] [SOURCE] message
+    """
+    
+    def __init__(self, source='LOG'):
+        super().__init__()
+        self.source = source
+    
+    def format(self, record):
+        timestamp = datetime.now().strftime('%H:%M:%S')
+        
+        source = getattr(record, 'source', self.source)
+        
+        parts = [f"[{timestamp}]", f"[{source}]"]
+        
+        if hasattr(record, 'username') and record.username:
+            parts.append(f"{record.username}")
+        
+        message = record.getMessage()
+        parts.append(message)
+        
+        return ' '.join(parts)
+
+
 class LaravelFormatter(logging.Formatter):
     """
     Formatter that mimics Laravel's log format:

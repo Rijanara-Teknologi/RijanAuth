@@ -146,6 +146,22 @@
 
     {% include 'includes/scripts.html' %}
 
+    <!-- Activity Logger -->
+    <script src="{{ config.ASSETS_ROOT }}/js/activity-logger.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            {% if current_user.is_authenticated %}
+            ActivityLogger.init({
+                userId: '{{ current_user.id }}',
+                username: '{{ current_user.username }}',
+                realm: '{{ current_realm_name or "master" }}',
+                enableConsole: true,
+                enableServer: true
+            });
+            {% endif %}
+        });
+    </script>
+
     <!-- Specific Page JS goes HERE  -->
     {% block javascripts %}{% endblock javascripts %}
 
