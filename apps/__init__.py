@@ -257,6 +257,12 @@ def configure_sentry(app):
     init_sentry(app)
 
 
+def register_error_handlers(app):
+    """Register generic Flask error handlers for the application."""
+    from apps.sentry import register_error_handlers as register_sentry_error_handlers
+    register_sentry_error_handlers(app)
+
+
 def configure_realm_middleware(app):
     """Configure realm context middleware"""
     from apps.middleware.realm import load_realm
@@ -287,6 +293,9 @@ def create_app(config):
     
     # Configure Sentry (auto-activates if SENTRY_DSN is set)
     configure_sentry(app)
+    
+    # Register generic error handlers
+    register_error_handlers(app)
     
     # Register extensions
     register_extensions(app)

@@ -61,13 +61,22 @@ def setup_logging(app):
     
     # Configure App Logger
     app.logger.setLevel(log_level)
+    app.logger.propagate = False
     
     # Remove default handlers to avoid duplication if running in production
-    # In Debug mode, Flask adds a StreamHandler. We might want to keep it or replace it.
     if not app.debug:
         del app.logger.handlers[:]
     
     app.logger.addHandler(handler)
+    
+    # Mirror logs to console in runtime so errors and info appear immediately
+    if config.get('enable_console', True):
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(log_level)
+        console_handler.setFormatter(formatter)
+        console_handler.addFilter(context_filter)
+        console_handler.addFilter(sensitive_filter)
+        app.logger.addHandler(console_handler)
     
     # Setup console activity logging if enabled
     if config.get('enable_activity_console', True):

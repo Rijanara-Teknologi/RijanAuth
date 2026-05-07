@@ -42,6 +42,7 @@ class Config(object):
         'sensitive_fields': ['password', 'token', 'secret', 'key', 'ssn', 'credit_card', 'authorization'],
         'mask_char': '*',
         'mask_length': 4,
+        'enable_console': True,
         # Activity Logging Configuration
         'enable_activity_console': True,
         'activity_log_level': 'INFO',

@@ -4,6 +4,32 @@ from functools import wraps
 from flask import current_app, request, g, has_request_context
 
 
+def _get_logger():
+    if has_request_context():
+        return current_app.logger
+    return logging.getLogger(__name__)
+
+
+def log_function_call(level=logging.DEBUG):
+    """
+    Decorator for logging function entry, exit, and exceptions.
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            logger = _get_logger()
+            logger.log(level, f"Entering {func.__qualname__}", extra={'function': func.__qualname__})
+            try:
+                result = func(*args, **kwargs)
+                logger.log(level, f"Exiting {func.__qualname__}", extra={'function': func.__qualname__})
+                return result
+            except Exception as exc:
+                logger.exception(f"Exception in {func.__qualname__}", extra={'function': func.__qualname__})
+                raise
+        return wrapper
+    return decorator
+
+
 def log_activity(action, source='SERVER', level=logging.INFO, **kwargs):
     """
     Log an activity to the console activity logger.

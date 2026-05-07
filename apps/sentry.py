@@ -5,7 +5,8 @@ Auto-activates when SENTRY_DSN is set in environment
 """
 
 import logging
-from flask import request, g, jsonify
+from flask import request, g, jsonify, current_app, Response
+from werkzeug.exceptions import HTTPException
 
 _sentry_initialized = False
 
@@ -66,9 +67,6 @@ def configure_sentry(app):
         
         _sentry_initialized = True
         app.logger.info(f"Sentry initialized: environment={environment}, release={release}")
-        
-        register_sentry_error_handlers(app)
-        
         return True
         
     except ImportError:
@@ -207,28 +205,39 @@ def capture_exception_with_context(exception, realm=None, user=None, extra=None)
         return None
 
 
-def register_sentry_error_handlers(app):
+def _render_internal_server_error():
+    if request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html:
+        return jsonify({'error': 'Internal server error'}), 500
+    return Response('Internal Server Error', status=500, mimetype='text/plain')
+
+
+def register_error_handlers(app):
     """
-    Register Flask error handlers that report to Sentry.
+    Register Flask error handlers that report to Sentry and keep web output generic.
     """
-    
+
     @app.errorhandler(404)
     def not_found_error(error):
         capture_404_error(error)
         return jsonify({'error': 'Resource not found'}), 404
-    
-    @app.errorhandler(500)
-    def internal_error(error):
-        capture_exception(error)
-        return jsonify({'error': 'Internal server error'}), 500
-    
+
     @app.errorhandler(403)
     def forbidden_error(error):
         return jsonify({'error': 'Access forbidden'}), 403
-    
+
     @app.errorhandler(401)
     def unauthorized_error(error):
         return jsonify({'error': 'Authentication required'}), 401
+
+    @app.errorhandler(Exception)
+    def handle_exception(error):
+        if isinstance(error, HTTPException):
+            if error.code in (401, 403, 404):
+                return error
+
+        current_app.logger.exception('Unhandled exception during request')
+        capture_exception(error)
+        return _render_internal_server_error()
 
 
 def capture_404_error(error):
