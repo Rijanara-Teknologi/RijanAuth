@@ -51,5 +51,8 @@ class ContextFilter(logging.Filter):
             record.context['ip'] = request.remote_addr
             record.context['method'] = request.method
             record.context['path'] = request.path
+            record.context['url'] = request.url
+            record.context['endpoint'] = request.endpoint
+            record.context['query_string'] = request.query_string.decode('utf-8', errors='ignore') if request.query_string else ''
             
         return True

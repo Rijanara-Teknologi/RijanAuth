@@ -22,13 +22,21 @@ class LoggingMiddleware:
         
         from flask import session
         
-        # Log request start (Debug level) with Session Info
-        current_app.logger.debug(f"Request started: {request.method} {request.path}", extra={
-             'session_id': session.get('_id', 'NEW_OR_NONE'),
-             'session_keys': list(session.keys()),
-             'remote_addr': request.remote_addr,
-             'user_agent': request.user_agent.string
-        })
+        request_context = {
+            'session_id': session.get('_id', 'NEW_OR_NONE'),
+            'session_keys': list(session.keys()),
+            'remote_addr': request.remote_addr,
+            'user_agent': request.user_agent.string,
+            'url': request.url,
+            'full_path': request.full_path,
+            'endpoint': request.endpoint,
+            'query_string': request.query_string.decode('utf-8', errors='ignore') if request.query_string else '',
+        }
+        
+        current_app.logger.info(
+            f"Request started: {request.method} {request.url}",
+            extra={'context': request_context}
+        )
 
     def after_request(self, response):
         if hasattr(g, 'start_time'):
@@ -43,18 +51,19 @@ class LoggingMiddleware:
             elif status_code >= 400:
                 log_level = 'warning'
                 
-            log_message = f"Request completed: {request.method} {request.path} {status_code}"
+            log_message = f"Request completed: {request.method} {request.url} {status_code}"
             
-            # Add performance context
             extra = {
                 'duration_ms': duration,
                 'status': status_code,
                 'method': request.method,
-                'path': request.path
+                'path': request.path,
+                'url': request.url,
+                'endpoint': request.endpoint,
+                'query_string': request.query_string.decode('utf-8', errors='ignore') if request.query_string else '',
             }
             
-            # Log via app logger
-            getattr(current_app.logger, log_level)(log_message, extra=extra)
+            getattr(current_app.logger, log_level)(log_message, extra={'context': extra})
             
             # Add Request ID header to response
             response.headers['X-Request-ID'] = g.request_id
