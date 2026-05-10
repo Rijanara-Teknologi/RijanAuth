@@ -1,5 +1,47 @@
 # Change Log
 
+## [2.8.1] 2026-04-16 - Self-Service Password Change
+
+### New Features
+
+- **Self-Service Password Change** - Users can now change their own password:
+
+#### API Endpoint
+- `POST /auth/change-password` - Change password via API (supports JSON and form data)
+  - Validates current password
+  - Enforces password complexity rules (8+ chars, uppercase, lowercase, number, special char)
+  - Rate limiting: 5 attempts per hour
+  - Logs out all other sessions after successful change
+  - Returns JSON response for API calls
+
+#### Account Management Page
+- `GET /auth/account` - Account settings page with 3 tabs:
+  - **Profile**: Update first name, last name, email
+  - **Password**: Change password with real-time validation
+  - **Sessions**: View active sessions, logout from all other devices
+
+#### Security Features
+- Password complexity validation (configurable rules)
+- Rate limiting with session-based tracking
+- Automatic logout of all other sessions after password change
+- Event logging for audit trail (UPDATE_PASSWORD, UPDATE_PASSWORD_ERROR)
+- CSRF protection via Flask-WTF
+
+#### UI Features
+- Real-time password strength indicator
+- Password requirements checklist
+- Session information (IP, device, last active)
+- Current session highlighting
+- Responsive design matching realm branding
+
+### Files Changed
+
+- `apps/blueprints/auth/routes.py` - Added `/change-password` and `/account` routes
+- `apps/templates/auth/account.html` - Account management page template
+- `apps/templates/includes/admin_navbar.html` - Added Account Settings link in dropdown
+
+---
+
 ## [2.8.0] 2026-04-16 - RijanAuth CLI Tool
 
 ### New Features

@@ -1,0 +1,284 @@
+{% extends "layouts/auth_base.html" %}
+
+{% block title %}Account Settings{% endblock %}
+
+{% block content %}
+<style>
+    .account-container {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+    .nav-tabs {
+        border-bottom: 2px solid #e9ecef;
+        margin-bottom: 20px;
+    }
+    .nav-tabs .nav-link {
+        border: none;
+        color: #6c757d;
+        padding: 10px 20px;
+        font-weight: 500;
+    }
+    .nav-tabs .nav-link.active {
+        color: #007bff;
+        border-bottom: 2px solid #007bff;
+        background: none;
+    }
+    .password-requirements {
+        font-size: 0.85rem;
+        color: #6c757d;
+        margin-top: 5px;
+    }
+    .password-requirements ul {
+        margin: 0;
+        padding-left: 20px;
+    }
+    .session-item {
+        border-left: 3px solid #28a745;
+        padding-left: 15px;
+        margin-bottom: 15px;
+    }
+    .session-item.current {
+        border-left-color: #007bff;
+    }
+    .session-item .device-info {
+        font-weight: 500;
+    }
+    .session-item .session-meta {
+        font-size: 0.85rem;
+        color: #6c757d;
+    }
+</style>
+
+<div class="account-container">
+    <h3 class="mb-4">Account Settings</h3>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <!-- User Info Header -->
+    <div class="card mb-4">
+        <div class="card-body d-flex align-items-center">
+            <div class="flex-grow-1">
+                <h5 class="mb-1">{{ user.first_name or '' }} {{ user.last_name or '' }}</h5>
+                <p class="mb-0 text-muted">@{{ user.username }}</p>
+                <p class="mb-0 text-muted">{{ user.email or 'No email set' }}</p>
+            </div>
+            <div class="text-end">
+                {% if user.enabled %}
+                    <span class="badge bg-success">Active</span>
+                {% else %}
+                    <span class="badge bg-danger">Disabled</span>
+                {% endif %}
+                <p class="mb-0 mt-1 text-muted" style="font-size: 0.8rem;">
+                    Realm: {{ realm.name if realm else 'master' }}
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs" id="accountTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="profile-tab" data-bs-toggle="tab" data-bs-target="#profile" type="button" role="tab">Profile</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="password-tab" data-bs-toggle="tab" data-bs-target="#password" type="button" role="tab">Password</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="sessions-tab" data-bs-toggle="tab" data-bs-target="#sessions" type="button" role="tab">Sessions</button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="accountTabsContent">
+        <!-- Profile Tab -->
+        <div class="tab-pane fade show active" id="profile" role="tabpanel">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Profile Information</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('auth_bp.account') }}">
+                        <input type="hidden" name="action" value="update_profile">
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Username</label>
+                            <input type="text" class="form-control" value="{{ user.username }}" disabled>
+                            <div class="form-text">Username cannot be changed</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Email</label>
+                            <input type="email" name="email" class="form-control" value="{{ user.email or '' }}">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">First Name</label>
+                            <input type="text" name="first_name" class="form-control" value="{{ user.first_name or '' }}">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Last Name</label>
+                            <input type="text" name="last_name" class="form-control" value="{{ user.last_name or '' }}">
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary">Update Profile</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Roles & Groups -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Roles & Groups</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Roles</h6>
+                            {% if roles %}
+                                <ul class="list-group list-group-flush">
+                                    {% for role in roles %}
+                                        <li class="list-group-item px-0">{{ role.name }}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% else %}
+                                <p class="text-muted">No roles assigned</p>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Groups</h6>
+                            {% if groups %}
+                                <ul class="list-group list-group-flush">
+                                    {% for group in groups %}
+                                        <li class="list-group-item px-0">{{ group.name }}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% else %}
+                                <p class="text-muted">No groups assigned</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Password Tab -->
+        <div class="tab-pane fade" id="password" role="tabpanel">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Change Password</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('auth_bp.change_password') }}" id="passwordForm">
+                        <div class="mb-3">
+                            <label class="form-label">Current Password</label>
+                            <input type="password" name="current_password" class="form-control" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">New Password</label>
+                            <input type="password" name="new_password" class="form-control" required id="newPassword">
+                            <div class="password-requirements">
+                                <ul>
+                                    <li id="req-length">At least 8 characters</li>
+                                    <li id="req-upper">At least one uppercase letter</li>
+                                    <li id="req-lower">At least one lowercase letter</li>
+                                    <li id="req-number">At least one number</li>
+                                    <li id="req-special">At least one special character (!@#$%^&*(),.?":{}|<>)</li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Confirm New Password</label>
+                            <input type="password" name="confirm_password" class="form-control" required id="confirmPassword">
+                            <div class="invalid-feedback">Passwords do not match</div>
+                        </div>
+                        
+                        <div class="alert alert-warning">
+                            <strong>Note:</strong> After changing your password, all other active sessions will be logged out for security.
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary">Change Password</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sessions Tab -->
+        <div class="tab-pane fade" id="sessions" role="tabpanel">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Active Sessions</h5>
+                    <form method="POST" action="{{ url_for('auth_bp.account') }}" class="m-0">
+                        <input type="hidden" name="action" value="logout_all">
+                        <button type="submit" class="btn btn-outline-danger btn-sm">Logout All Other Sessions</button>
+                    </form>
+                </div>
+                <div class="card-body">
+                    {% if active_sessions %}
+                        {% for session in active_sessions %}
+                            <div class="session-item {{ 'current' if loop.first }}">
+                                <div class="device-info">
+                                    {% if loop.first %}
+                                        <span class="badge bg-primary me-2">Current</span>
+                                    {% endif %}
+                                    {{ session.auth_method or 'Web Browser' }}
+                                </div>
+                                <div class="session-meta">
+                                    <p class="mb-1">
+                                        <strong>IP Address:</strong> {{ session.ip_address or 'Unknown' }}
+                                    </p>
+                                    <p class="mb-1">
+                                        <strong>Started:</strong> {{ session.started.strftime('%Y-%m-%d %H:%M:%S') if session.started else 'Unknown' }}
+                                    </p>
+                                    <p class="mb-0">
+                                        <strong>Last Active:</strong> {{ session.last_session_refresh.strftime('%Y-%m-%d %H:%M:%S') if session.last_session_refresh else 'Unknown' }}
+                                        {% if session.last_session_refresh %}
+                                            ({{ ((now - session.last_session_refresh).total_seconds() // 60) }} minutes ago)
+                                        {% endif %}
+                                    </p>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted">No active sessions found</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Password validation
+    document.getElementById('newPassword').addEventListener('input', function() {
+        const password = this.value;
+        
+        document.getElementById('req-length').style.color = password.length >= 8 ? 'green' : '';
+        document.getElementById('req-upper').style.color = /[A-Z]/.test(password) ? 'green' : '';
+        document.getElementById('req-lower').style.color = /[a-z]/.test(password) ? 'green' : '';
+        document.getElementById('req-number').style.color = /\d/.test(password) ? 'green' : '';
+        document.getElementById('req-special').style.color = /[!@#$%^&*(),.?":{}|<>]/.test(password) ? 'green' : '';
+    });
+    
+    // Password match validation
+    document.getElementById('passwordForm').addEventListener('submit', function(e) {
+        const newPassword = document.getElementById('newPassword').value;
+        const confirmPassword = document.getElementById('confirmPassword').value;
+        
+        if (newPassword !== confirmPassword) {
+            e.preventDefault();
+            document.getElementById('confirmPassword').classList.add('is-invalid');
+        }
+    });
+</script>
+{% endblock %}
