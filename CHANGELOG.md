@@ -1,5 +1,31 @@
 # Change Log
 
+## [2.8.2] 2026-04-16 - OIDC Logout Fix & prompt=login Support
+
+### Bug Fixes
+
+- **OIDC Logout Not Working Properly**:
+  - Logout endpoint now accepts `client_id` parameter for better session identification
+  - When specific session cannot be found, all active sessions for the user are invalidated
+  - Added comprehensive logging for logout operations
+  - Added `sessions_invalidated` count to logout response
+  - Fixed session matching logic for access tokens without `session_state` claim
+
+### New Features
+
+- **OIDC prompt Parameter Support**:
+  - `prompt=login` - Forces user to re-authenticate even if they have an active session
+  - `prompt=none` - Silent authentication, returns error if user not authenticated
+  - Support for multiple prompt values (space-separated)
+
+### Integration Changes (Go Backend)
+
+- Go backend now sends `client_id` in logout URL query parameter
+- Go backend captures and returns `id_token` and `refresh_token` from SSO
+- Go backend supports `X-ID-Token` header for passing `id_token_hint`
+
+---
+
 ## [2.8.1] 2026-04-16 - Self-Service Password Change
 
 ### New Features
